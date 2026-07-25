@@ -1,0 +1,29 @@
+{
+  "name": "clawmarket",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ClawMarket — gestão de validade e ofertas para supermercados (piloto Bengala Supermercado)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
+    "@zxing/browser": "^0.2.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.2",
+    "lucide-react": "^0.456.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "vite-plugin-pwa": "^1.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "vite": "^5.4.11"
+  }
+}
