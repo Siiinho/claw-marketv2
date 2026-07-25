@@ -1,0 +1,352 @@
+CLAWMARKET — SUPERMERCADO BENGALA
+INSTRUÇÕES EXATAS PARA CONTINUIDADE NO GOOGLE AI STUDIO
+
+======================================================================
+1. ASSUNTO DO APLICATIVO
+======================================================================
+
+Nome do produto: ClawMarket
+Cliente exclusivo: Supermercado Bengala
+Fase atual: piloto operacional da Loja 3
+
+O ClawMarket é um aplicativo de controle de produtos próximos ao
+vencimento. Ele identifica o produto pelo código de barras, registra sua
+validade, calcula a oferta e adiciona o item à fila de um jornal de
+“Ofertas Internas” do Supermercado Bengala.
+
+O objetivo principal é reduzir perdas por vencimento, facilitar o trabalho
+dos funcionários e transformar rapidamente produtos próximos da validade
+em ofertas visualmente profissionais.
+
+Este não é um gerador genérico para outros mercados. A identidade visual,
+a linguagem, os dados da loja, a logomarca, o jornal e o fluxo pertencem
+ao Supermercado Bengala.
+
+======================================================================
+2. ABORDAGEM OBRIGATÓRIA
+======================================================================
+
+O aplicativo deve ser tratado como uma ferramenta operacional simples.
+O usuário principal é um funcionário de supermercado que pode não ter
+experiência com tecnologia.
+
+O fluxo principal deve continuar sendo:
+
+1. Bipar ou digitar o código de barras.
+2. Reconhecer automaticamente o produto.
+3. Informar a data de validade e, quando necessário, lote e quantidade.
+4. Confirmar uma única vez.
+5. Registrar o lote.
+6. Calcular a condição da oferta.
+7. Adicionar automaticamente o produto à fila do jornal.
+8. Bipar o próximo produto.
+9. Revisar a fila.
+10. Gerar o jornal A4 ou um cartaz individual.
+
+Não adicionar etapas desnecessárias entre o código de barras e a
+confirmação. Não transformar o aplicativo em um painel complexo.
+
+======================================================================
+3. O QUE CADA ÁREA SIGNIFICA
+======================================================================
+
+INÍCIO
+Resumo operacional do dia: produtos próximos ao vencimento, produtos
+críticos, fila do jornal e atalhos para as tarefas principais.
+
+BIPAR / SCANNER
+Área de trabalho mais importante. Reconhece o código de barras, solicita
+a validade e confirma o produto diretamente na fila do jornal.
+
+PRODUTOS
+Catálogo dos produtos reconhecidos. Armazena código de barras, nome
+completo, setor, preço e imagem aprovada do produto.
+
+OFERTAS
+Permite criar ou ajustar ofertas. Todo produto confirmado como oferta
+também deve entrar na fila do jornal.
+
+JORNAL
+Monta o encarte “Ofertas Internas” em A4. O layout deve se adaptar à
+quantidade de produtos e usar frente e verso quando necessário.
+
+CARTAZES
+Gera cartaz individual quando há poucos produtos ou quando uma oferta
+precisa ser exibida na frente da mercadoria.
+
+RELATÓRIOS
+Apresenta perdas evitadas, produtos tratados, setores e resultados do
+programa de vencimentos.
+
+CONFIGURAÇÕES
+Dados controlados do piloto e ações administrativas protegidas.
+
+======================================================================
+4. REGRAS QUE NÃO PODEM SER QUEBRADAS
+======================================================================
+
+- Manter o aplicativo exclusivo para o Supermercado Bengala.
+- Usar sempre a logomarca oficial existente no projeto.
+- Exibir “Supermercado Bengala”, nunca “Exclusivo Bengala”.
+- Manter a expressão principal “Ofertas Internas”.
+- Manter o piloto configurado para a Loja 3.
+- Não preencher o aplicativo com produtos demonstrativos.
+- Não apagar o catálogo de mercadologia existente.
+- Não expor o arquivo .env ou qualquer chave privada.
+- Não alterar os códigos de barras dos produtos.
+- Não criar produtos duplicados para o mesmo código de barras.
+- Não adicionar o mesmo produto duas vezes à fila ao confirmar novamente.
+- Mostrar sempre o nome completo do produto, sem reticências “...”.
+- Uma validade vazia deve aparecer como “Sem validade”, nunca “vence hoje”.
+- Bloquear o PDF quando faltar validade, houver item vencido ou preço inválido.
+- Avisar quando faltar imagem, mas permitir a correção antes do PDF.
+- Reutilizar a imagem aprovada e armazenada do produto.
+- Não gerar novamente a imagem se a embalagem não mudou.
+- Preferir imagens frontais, nítidas, sem mãos, sem prateleiras e com fundo
+  branco ou transparente.
+- Preservar QR Code, endereço, telefone, WhatsApp, horários e demais dados
+  oficiais presentes no rodapé do jornal.
+- Preservar o funcionamento offline/PWA sempre que possível.
+
+======================================================================
+5. IDENTIDADE VISUAL
+======================================================================
+
+Direção visual:
+
+- Marca popular, acolhedora, objetiva e brasileira.
+- Vermelho Bengala como cor principal.
+- Amarelo para preço, atenção e oportunidade.
+- Azul-marinho para contraste, validade e informações operacionais.
+- Fundo claro para leitura e impressão.
+- Cantos arredondados, cartões limpos e botões grandes.
+- Hierarquia forte, mas sem excesso de elementos na tela.
+- Preços grandes e legíveis.
+- Produtos recortados e visualmente profissionais.
+- Não criar uma nova logomarca.
+- Não substituir a tipografia presente dentro da logomarca oficial.
+
+O jornal deve manter a linguagem visual popular dos encartes de
+supermercado, mas com organização, espaços consistentes e melhor
+legibilidade que o jornal antigo.
+
+======================================================================
+6. MELHORIAS PRIORITÁRIAS PARA SMARTPHONES
+======================================================================
+
+Execute as melhorias nesta ordem:
+
+1. Tratar smartphone como tela principal, começando em 360 px de largura.
+2. Manter navegação inferior fixa com no máximo quatro ações principais:
+   Início, Bipar, Produtos e Jornal.
+3. Garantir botões com área mínima de toque de 44 x 44 px.
+4. Manter o campo do código de barras em foco durante a operação.
+5. Abrir teclado numérico nos campos de código, quantidade e preço.
+6. Abrir seletor de data nativo no campo de validade.
+7. Após confirmar, destacar “Confirmado no jornal da Loja 3”.
+8. Oferecer “Bipar próximo”, “Ver jornal” e “Desfazer”.
+9. Usar vibração e som curto como retorno, quando o aparelho permitir.
+10. Evitar modais longos e formulários com muitos campos simultâneos.
+11. Mostrar carregamento, sucesso, erro e funcionamento offline em linguagem
+    simples.
+12. Manter conteúdo importante acima da navegação inferior.
+13. Não permitir rolagem horizontal.
+14. Testar nos tamanhos 360x800, 390x844 e 412x915.
+15. Preservar a impressão A4 separada do layout da tela do smartphone.
+16. Tornar o PWA instalável na tela inicial do Android.
+17. Preparar câmera traseira para leitura do código de barras em HTTPS.
+18. Manter compatibilidade com leitor físico que funciona como teclado.
+19. Garantir contraste, rótulos visíveis e navegação acessível.
+20. Não esconder nomes de produtos para caber na tela; ajustar linhas e fonte.
+
+======================================================================
+7. MELHORIAS FUNCIONAIS FUTURAS
+======================================================================
+
+Prioridade alta:
+
+- Conectar o Supabase para sincronização real entre aparelhos.
+- Implementar autenticação real e permissões por função.
+- Criar tabelas separadas para lojas, usuários, produtos, lotes, ofertas,
+  filas e jornais.
+- Ativar políticas RLS para impedir acesso entre lojas.
+- Salvar imagens aprovadas em armazenamento permanente.
+- Criar backup e histórico de alterações.
+- Registrar quem bipou, quem alterou preço e quem gerou o jornal.
+
+Prioridade média:
+
+- Importar novos produtos por planilha.
+- Permitir revisão administrativa de imagens e cadastros.
+- Criar alertas por setor e faixa de vencimento.
+- Permitir modelos fixos por setor: hortifruti, padaria, mercearia, bebidas,
+  frios, laticínios, congelados, limpeza e pet shop.
+- Criar frente e verso automaticamente conforme a quantidade de produtos.
+- Adicionar métricas de perdas evitadas e tempo economizado.
+
+Não implementar integração com inteligência artificial em toda confirmação.
+Os templates devem ser fixos e reutilizáveis. IA pode ajudar na criação ou
+revisão inicial de templates e imagens, mas a geração diária do jornal deve
+ser rápida, previsível e econômica.
+
+======================================================================
+8. PROMPT EXATO PARA O GOOGLE AI STUDIO
+======================================================================
+
+Copie do início ao fim o texto abaixo:
+
+--- INÍCIO DO PROMPT ---
+
+Analise integralmente este projeto React/Vite chamado ClawMarket antes de
+alterar qualquer arquivo.
+
+O ClawMarket é um SaaS exclusivo de gestão de produtos próximos ao
+vencimento para o Supermercado Bengala. A versão atual é o piloto da Loja 3.
+O fluxo operacional obrigatório é: bipar o código de barras, reconhecer o
+produto, informar validade, confirmar uma vez, registrar o lote, calcular
+a oferta, adicionar automaticamente à fila e gerar o jornal A4 de “Ofertas
+Internas” ou um cartaz individual.
+
+Sua tarefa é melhorar principalmente a experiência de smartphone sem
+descaracterizar a identidade Bengala e sem reescrever as regras já
+funcionais.
+
+Antes de editar:
+
+1. Leia README.md.
+2. Leia SECURITY.md.
+3. Leia docs/PILOTO-LOJA3.md.
+4. Leia docs/GOOGLE-AI-STUDIO.md.
+5. Leia docs/DIRECAO_VISUAL_BENGALA.md.
+6. Leia este arquivo INSTRUCOES-EXATAS-GOOGLE-AI-STUDIO.txt.
+7. Identifique o fluxo existente no Scanner.jsx, StoreContext.jsx,
+   Ofertas.jsx, Jornal.jsx e Layout.jsx.
+
+Requisitos obrigatórios:
+
+- Preserve o fluxo scanner → validade → confirmação → fila do jornal.
+- Preserve o catálogo e os códigos de barras.
+- Preserve a logomarca oficial e os templates existentes.
+- Preserve a configuração da Loja 3.
+- Não adicione produtos fictícios.
+- Não exponha variáveis do .env.
+- Não use reticências nos nomes dos produtos.
+- Não permita duplicação na fila.
+- Não trate validade vazia como vencimento no dia.
+- Mantenha a revisão obrigatória antes de gerar o PDF.
+- Mantenha o jornal A4 adaptável, inclusive frente e verso.
+- Mantenha a navegação mobile simples e objetiva.
+- Use botões grandes, textos claros e no máximo quatro ações principais na
+  barra inferior.
+- Não crie nova marca, nova logomarca ou um visual genérico.
+- Não remova PWA, funcionamento offline ou compatibilidade com leitor físico.
+
+Primeiro apresente uma auditoria curta com:
+
+1. O que já está correto.
+2. O que precisa melhorar.
+3. Os arquivos que serão alterados.
+4. Os riscos de regressão.
+
+Depois implemente apenas melhorias comprovadamente necessárias. Ao finalizar:
+
+1. Execute npm install.
+2. Execute npm run build.
+3. Corrija todos os erros de compilação.
+4. Teste as larguras 360, 390 e 412 px.
+5. Teste o fluxo completo do código de barras até o jornal.
+6. Confirme que nomes aparecem completos.
+7. Confirme que a fila não duplica produtos.
+8. Confirme que o PDF bloqueia itens inválidos.
+9. Liste exatamente todos os arquivos alterados.
+10. Não declare que algo funciona sem executar a validação correspondente.
+
+--- FIM DO PROMPT ---
+
+======================================================================
+9. COMANDOS EXATOS PARA INSTALAR E RODAR
+======================================================================
+
+Abra o terminal dentro da pasta do projeto e execute, nesta ordem:
+
+npm install
+npm run dev
+
+Depois abra o endereço informado pelo Vite no navegador.
+
+Para interromper o servidor:
+
+Ctrl + C
+
+Para validar a versão de produção:
+
+npm run build
+
+Para visualizar a versão compilada:
+
+npm run preview
+
+======================================================================
+10. COMANDOS EXATOS PARA GITHUB
+======================================================================
+
+Execute apenas depois de autenticar o GitHub CLI:
+
+gh auth login
+gh auth status
+
+O repositório deve ser privado. Nunca envie o arquivo .env.
+
+Para conferir antes de publicar:
+
+git status
+git log -1 --oneline
+
+Para publicar um projeto ainda sem repositório remoto:
+
+gh repo create clawmarket-bengala --private --source . --remote origin --push
+
+Para enviar alterações futuras:
+
+git status
+git add .
+git commit -m "Descreva de forma curta a melhoria realizada"
+git push
+
+======================================================================
+11. CONFIGURAÇÃO PARA PRODUÇÃO
+======================================================================
+
+Antes de usar dados reais em mais de um aparelho:
+
+1. Criar um projeto Supabase.
+2. Configurar VITE_SUPABASE_URL.
+3. Configurar VITE_SUPABASE_ANON_KEY.
+4. Criar as tabelas e políticas descritas em docs/FASE2-SUPABASE.md.
+5. Não colocar chaves administrativas no frontend.
+6. Configurar HTTPS para permitir câmera e PWA.
+7. Executar os testes do piloto com funcionários da Loja 3.
+8. Validar impressão A4 em impressora real.
+9. Validar o QR Code, telefone, WhatsApp, endereço e horários.
+10. Somente depois liberar para operação diária.
+
+======================================================================
+12. CRITÉRIOS DE APROVAÇÃO
+======================================================================
+
+A melhoria só está aprovada quando:
+
+- Um funcionário consegue usar sem treinamento técnico.
+- O produto é reconhecido pelo código de barras.
+- A validade é obrigatória antes da confirmação.
+- A confirmação adiciona o produto à fila uma única vez.
+- O nome completo aparece no jornal.
+- A imagem tem qualidade profissional.
+- O jornal se adapta à quantidade de itens.
+- A impressão A4 está legível.
+- O rodapé oficial está presente.
+- A navegação funciona em smartphone.
+- O build termina sem erro.
+- Nenhum segredo foi publicado.
+
+FIM DAS INSTRUÇÕES
