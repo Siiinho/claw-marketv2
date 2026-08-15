@@ -62,6 +62,23 @@ def obter_json(url: str, timeout: int = 8) -> dict[str, Any] | None:
         return None
 
 
+def obter_json_google(url: str, timeout: int = 10) -> tuple[dict[str, Any] | None, str]:
+    requisicao = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    try:
+        with urlopen(requisicao, timeout=timeout) as resposta:
+            return json.loads(resposta.read().decode("utf-8")), "ok"
+    except HTTPError as erro:
+        try:
+            corpo = json.loads(erro.read().decode("utf-8"))
+            mensagem = corpo.get("error", {}).get("message", "")
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+            mensagem = ""
+        detalhe = re.sub(r"AIza[0-9A-Za-z_-]+", "[chave-oculta]", mensagem)[:180]
+        return None, f"http-{erro.code}{f': {detalhe}' if detalhe else ''}"
+    except (URLError, TimeoutError, json.JSONDecodeError, OSError) as erro:
+        return None, f"indisponivel-{type(erro).__name__.lower()}"
+
+
 def imagem_frontal(produto: dict[str, Any]) -> str | None:
     selecionada = produto.get("selected_images", {}).get("front", {}).get("display", {})
     url = (
@@ -106,11 +123,11 @@ def buscar_imagem_catalogo(codigo: str) -> dict[str, Any] | None:
     return None
 
 
-def buscar_imagem_google(codigo: str, produto: dict[str, Any] | None) -> dict[str, Any] | None:
+def buscar_imagem_google(codigo: str, produto: dict[str, Any] | None) -> tuple[dict[str, Any] | None, str]:
     chave = os.environ.get("GOOGLE_CSE_API_KEY", "").strip()
     mecanismo = os.environ.get("GOOGLE_CSE_CX", "").strip()
     if not chave or not mecanismo:
-        return None
+        return None, "nao-configurado"
     nome = (produto or {}).get("nome", "")
     consultas = [
         " ".join(parte for parte in (codigo, nome, "embalagem produto fundo transparente") if parte),
@@ -122,6 +139,7 @@ def buscar_imagem_google(codigo: str, produto: dict[str, Any] | None) -> dict[st
         if len(termo) >= 4 and not termo.isdigit()
     ]
     candidatos: list[tuple[int, dict[str, Any]]] = []
+    diagnosticos: list[str] = []
 
     for indice_consulta, consulta in enumerate(dict.fromkeys(consultas)):
         if not consulta.strip():
@@ -138,7 +156,10 @@ def buscar_imagem_google(codigo: str, produto: dict[str, Any] | None) -> dict[st
             "hl": "pt-BR",
             "num": 10,
         })
-        resposta = obter_json(endpoint, timeout=10) or {}
+        resposta, diagnostico = obter_json_google(endpoint, timeout=10)
+        if diagnostico != "ok":
+            diagnosticos.append(diagnostico)
+        resposta = resposta or {}
         for item in resposta.get("items", []):
             url = item.get("link")
             metadados = item.get("image", {})
@@ -176,10 +197,14 @@ def buscar_imagem_google(codigo: str, produto: dict[str, Any] | None) -> dict[st
                 "largura": largura,
                 "altura": altura,
             }))
+        if candidatos:
+            break
 
     if candidatos:
-        return max(candidatos, key=lambda candidato: candidato[0])[1]
-    return None
+        return max(candidatos, key=lambda candidato: candidato[0])[1], "ok"
+    if diagnosticos:
+        return None, "; ".join(dict.fromkeys(diagnosticos))
+    return None, "sem-resultados-compativeis"
 
 
 def baixar_imagem(url: str) -> tuple[str | None, str | None]:
@@ -205,7 +230,8 @@ def resolver_produto(codigo: str) -> dict[str, Any]:
     produto = produto_bengala(codigo)
     # Quando o mecanismo Google está configurado, prioriza packshots grandes em
     # PNG transparente. Os catálogos exatos continuam como fallback confiável.
-    imagem = buscar_imagem_google(codigo, produto) or buscar_imagem_catalogo(codigo)
+    imagem_google, diagnostico_google = buscar_imagem_google(codigo, produto)
+    imagem = imagem_google or buscar_imagem_catalogo(codigo)
     if imagem:
         imagem_data_url, mime = baixar_imagem(imagem["url"])
         imagem["dataUrl"] = imagem_data_url
@@ -218,6 +244,7 @@ def resolver_produto(codigo: str) -> dict[str, Any]:
         "imagem": imagem,
         "fonteMercadologia": "Catálogo mercadológico configurado" if produto else None,
         "googleConfigurado": bool(os.environ.get("GOOGLE_CSE_API_KEY") and os.environ.get("GOOGLE_CSE_CX")),
+        "googleDiagnostico": diagnostico_google,
     }
 
 
