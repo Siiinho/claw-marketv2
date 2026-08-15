@@ -1,11 +1,14 @@
+import capaOficial from '../assets/jornal-oficial-capa.jpg'
+import contraOficial from '../assets/jornal-oficial-contra.jpg'
+
 export const LOJAS = [
   {
     id: 'loja3',
-    nome: 'Loja principal',
-    cidade: '',
-    endereco: '',
-    telefone: '',
-    whatsapp: '',
+    nome: 'Bengala Loja 3',
+    cidade: 'Parque Santa Madalena',
+    endereco: 'Rua Serra do Navio, nº 355',
+    telefone: '(11) 2719-7195',
+    whatsapp: '(11) 96607-2187',
   },
 ]
 
@@ -13,7 +16,7 @@ export const USUARIOS = [
   {
     id: 'u-carlos',
     nome: 'Carlos Mendes',
-    email: 'admin@exemplo.local',
+    email: 'carlos@bengala.com.br',
     senha: 'demo123',
     papel: 'admin',
     cargo: 'Administrador',
@@ -21,7 +24,7 @@ export const USUARIOS = [
   {
     id: 'u-ana',
     nome: 'Ana Paula Silva',
-    email: 'gerente@exemplo.local',
+    email: 'ana@bengala.com.br',
     senha: 'demo123',
     papel: 'gerente',
     cargo: 'Gerente',
@@ -29,7 +32,7 @@ export const USUARIOS = [
   {
     id: 'u-juliana',
     nome: 'Juliana Costa',
-    email: 'repositor@exemplo.local',
+    email: 'juliana@bengala.com.br',
     senha: 'demo123',
     papel: 'repositor',
     cargo: 'Repositora',
@@ -40,17 +43,12 @@ export const USUARIOS = [
 export const PRODUTOS_SEED = []
 
 export const CONFIG_SEED = {
-  nomeMercado: 'Meu Mercado',
-  slogan: 'Preço baixo. Desperdício zero.',
-  logoDataUrl: '',
-  corPrimaria: '#e4232e',
-  corSecundaria: '#082b4f',
-  corDestaque: '#ffc928',
+  nomeMercado: 'Bengala Supermercado',
   moeda: 'BRL',
   diasAlerta: 7,
   descontoPadrao: 30,
   sugestoesAuto: true,
-  jornalUrl: '',
+  jornalUrl: 'https://bengalasupermercado.com.br/jornal',
   // motor de precificação: faixas de desconto por dias até vencer
   regrasPreco: [
     { id: 'r1', diasMax: 2, desconto: 50 },
@@ -63,12 +61,12 @@ export const CONFIG_SEED = {
 export const OFERTAS_SEED = []
 export const JORNAIS_SEED = []
 export const JORNAL_OFICIAL_SEED = {
-  edicao: '',
-  titulo: 'Jornal de Ofertas',
-  capa: null,
-  contracapa: null,
-  pdf: '',
-  data: '',
-  ym: 0,
+  edicao: 'B · 25.06–01.07',
+  titulo: 'Jornal de Ofertas SEMANA B!',
+  capa: capaOficial,
+  contracapa: contraOficial,
+  pdf: 'https://bengalasupermercado.com.br/wp-content/uploads/2026/06/JORNAL-SEMANA-B-25.06-a-01.07.26.pdf',
+  data: '2026-06-25',
+  ym: 202606,
   historico: [],
 }

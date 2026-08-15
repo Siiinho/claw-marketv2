@@ -10,7 +10,6 @@ export default function Scanner() {
   const navigate = useNavigate()
   const {
     produtos,
-    config,
     salvarProduto,
     registrarLote,
     adicionarNaFila,
@@ -194,7 +193,7 @@ export default function Scanner() {
     toast(
       jaEstavaNaFila
         ? `${resultado.nome}: validade atualizada; o produto já estava na fila.`
-        : `${resultado.nome}: confirmado na fila do jornal de ${config.nomeMercado}.`
+        : `${resultado.nome}: confirmado na fila do jornal da Loja 3.`
     )
     setVeredito(v)
     setResultado(atualizado)
@@ -295,7 +294,7 @@ export default function Scanner() {
           </span>
           <div className="min-w-0 flex-1">
             <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-offer px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-navy">
-              <Icon name="Store" size={11} /> {config.nomeMercado}
+              <Icon name="Store" size={11} /> Piloto · Loja 3
             </div>
             <h2 className="font-bold">Escanear para o jornal</h2>
             <p className="text-sm text-cream/75">Bipe, confirme a validade e siga para o próximo. O resto é automático.</p>
@@ -430,7 +429,7 @@ export default function Scanner() {
                 </span>
                 <div className="flex-1">
                   <div className="text-base font-bold leading-tight">
-                    {veredito.jaEstavaNaFila ? 'Validade atualizada na fila!' : `Confirmado no jornal de ${config.nomeMercado}!`}
+                    {veredito.jaEstavaNaFila ? 'Validade atualizada na fila!' : 'Confirmado no jornal da Loja 3!'}
                   </div>
                   <div className="text-sm text-white/85">
                     {labelDias(veredito.dias)}

@@ -10,6 +10,7 @@ import { exportarPDFPaginas } from '../lib/exportar'
 import { imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
 
 const PRODUTOS_POR_PAGINA = 4
+const CORES_BENGALA = { primaria: '#e4232e', secundaria: '#082b4f', destaque: '#ffc928' }
 const assetPublico = (caminho) => `${import.meta.env.BASE_URL || '/'}${String(caminho).replace(/^\/+/, '')}`
 const CABECALHO_INTERNO = assetPublico('templates/cabecalho-ofertas-internas-bengala-v2.png')
 const RODAPE_OFICIAL = assetPublico('templates/rodape-oficial-bengala.png')
@@ -80,7 +81,7 @@ export default function Jornal() {
   const [tipo, setTipo] = useState('geral') // setor | geral | sazonal
   const [setorSel, setSetorSel] = useState('frios')
   const [temaSel, setTemaSel] = useState('diaB')
-  const [titulo, setTitulo] = useState(() => `Jornal de Ofertas - ${config.nomeMercado}`)
+  const [titulo, setTitulo] = useState('Jornal de Ofertas - Bengala Supermercado')
   const [excluidos, setExcluidos] = useState(() => new Set())
   const [exportando, setExportando] = useState(false)
   const [pdfPronto, setPdfPronto] = useState(null)
@@ -179,7 +180,7 @@ export default function Jornal() {
     setExportando(true)
     setPdfPronto(null)
     try {
-      const arquivo = await exportarPDFPaginas(pageRefs.current.slice(0, paginasJornal.length), `jornal-${slugArquivo(config.nomeMercado)}-${tipo}`)
+      const arquivo = await exportarPDFPaginas(pageRefs.current.slice(0, paginasJornal.length), `jornal-bengala-${tipo}`)
       setPdfPronto(arquivo)
       toast(`PDF pronto em ${paginasJornal.length} ${paginasJornal.length === 1 ? 'página' : 'páginas'} A4!`)
     } catch (e) {
@@ -276,17 +277,17 @@ export default function Jornal() {
               {tipo === 'geral' && (
                 <div>
                   <p className="mb-1.5 text-xs font-medium text-ink-soft">Produtos de vários setores no mesmo jornal</p>
-                  <div className="overflow-hidden rounded-xl border border-navy/10" style={{ background: config.corSecundaria }}>
+                  <div className="overflow-hidden rounded-xl border border-navy/10" style={{ background: CORES_BENGALA.secundaria }}>
                     <div className="flex items-center justify-between px-3 py-2 text-white">
                       <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Prévia do modelo</span>
-                      <span className="rounded-full px-2 py-0.5 text-[9px] font-extrabold" style={{ background: config.corDestaque, color: config.corSecundaria }}>A4 proporcional</span>
+                      <span className="rounded-full px-2 py-0.5 text-[9px] font-extrabold" style={{ background: CORES_BENGALA.destaque, color: CORES_BENGALA.secundaria }}>A4 proporcional</span>
                     </div>
                     <div className="flex h-40 items-center gap-3 bg-white p-4">
                       <Logo h={54} chip />
                       <div>
-                        <div className="display-bengala text-2xl uppercase leading-none" style={{ color: config.corSecundaria }}>Ofertas internas</div>
-                        <div className="mt-1 text-xs font-bold" style={{ color: config.corPrimaria }}>{config.nomeMercado}</div>
-                        <div className="mt-3 h-2 w-36 rounded-full" style={{ background: config.corDestaque }} />
+                        <div className="display-bengala text-2xl uppercase leading-none" style={{ color: CORES_BENGALA.secundaria }}>Ofertas internas</div>
+                        <div className="mt-1 text-xs font-bold" style={{ color: CORES_BENGALA.primaria }}>Bengala Supermercado</div>
+                        <div className="mt-3 h-2 w-36 rounded-full" style={{ background: CORES_BENGALA.destaque }} />
                       </div>
                     </div>
                   </div>
@@ -304,7 +305,7 @@ export default function Jornal() {
                       </button>
                     ))}
                   </div>
-                  <div className="mt-2.5 overflow-hidden rounded-xl border border-navy/10" style={{ background: config.corSecundaria }}>
+                  <div className="mt-2.5 overflow-hidden rounded-xl border border-navy/10" style={{ background: CORES_BENGALA.secundaria }}>
                     <div className="flex items-center justify-between px-3 py-2 text-white">
                       <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Prévia do modelo</span>
                       <span className="rounded-full bg-offer px-2 py-0.5 text-[9px] font-extrabold text-navy">
@@ -314,8 +315,8 @@ export default function Jornal() {
                     <div className="flex h-40 items-center justify-center bg-white p-4 text-center">
                       <div>
                         <Logo h={48} chip />
-                        <div className="display-bengala mt-2 text-xl uppercase" style={{ color: config.corSecundaria }}>{setorById(setorSel).nome}</div>
-                        <div className="mx-auto mt-2 h-2 w-28 rounded-full" style={{ background: config.corPrimaria }} />
+                        <div className="display-bengala mt-2 text-xl uppercase" style={{ color: CORES_BENGALA.secundaria }}>{setorById(setorSel).nome}</div>
+                        <div className="mx-auto mt-2 h-2 w-28 rounded-full" style={{ background: CORES_BENGALA.primaria }} />
                       </div>
                     </div>
                   </div>
@@ -665,16 +666,12 @@ function OfertaMenorModelo({ produto, preco, indice, cores }) {
 }
 
 const PaginaJornalModeloAprovado = forwardRef(function PaginaJornalModeloAprovado(
-  { itens, precoJornal, validadeDe, validadeAte, numero, total, config },
+  { itens, precoJornal, validadeDe, validadeAte, numero, total },
   ref
 ) {
   const hero = itens[0]
   const menores = itens.slice(1, 4)
-  const cores = {
-    primaria: config.corPrimaria || '#e4232e',
-    secundaria: config.corSecundaria || '#082b4f',
-    destaque: config.corDestaque || '#ffc928',
-  }
+  const cores = CORES_BENGALA
   return (
     <div
       ref={ref}
@@ -690,7 +687,7 @@ const PaginaJornalModeloAprovado = forwardRef(function PaginaJornalModeloAprovad
           <Logo h={52} chip />
           <div className="max-w-[205px]">
             <div className="display-bengala text-[28px] uppercase leading-[.86]">OFERTAS<br /><span style={{ color: cores.destaque }}>INTERNAS</span></div>
-            <div className="mt-2 truncate text-[8px] font-bold uppercase tracking-[.14em] opacity-90">{config.nomeMercado}</div>
+            <div className="mt-2 truncate text-[8px] font-bold uppercase tracking-[.14em] opacity-90">Bengala Supermercado</div>
           </div>
         </div>
         <div className="absolute right-[18px] top-[18px] w-[115px] rounded-lg border border-white/25 bg-black/15 px-3 py-2 text-center">
@@ -706,8 +703,8 @@ const PaginaJornalModeloAprovado = forwardRef(function PaginaJornalModeloAprovad
         <div className="flex items-center gap-3">
           <Logo h={35} />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[9px] font-black uppercase" style={{ color: cores.secundaria }}>{config.nomeMercado}</div>
-            <div className="mt-0.5 truncate text-[7px] font-bold" style={{ color: cores.primaria }}>{config.slogan || 'Preço baixo. Desperdício zero.'}</div>
+            <div className="truncate text-[9px] font-black uppercase" style={{ color: cores.secundaria }}>Bengala Supermercado</div>
+            <div className="mt-0.5 truncate text-[7px] font-bold" style={{ color: cores.primaria }}>Ofertas internas · Loja 3</div>
           </div>
           <div className="rounded px-2 py-1 text-[7px] font-black text-white" style={{ background: cores.secundaria }}>Página {numero}/{total}</div>
         </div>

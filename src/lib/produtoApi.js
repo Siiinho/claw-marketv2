@@ -406,7 +406,7 @@ function respostaImagemSalva(registro) {
     imagemLargura: registro.imagemLargura || null,
     imagemAltura: registro.imagemAltura || null,
     imagemAprovada: Boolean(registro.imagemAprovada),
-    correspondencia: 'codigo-exato',
+    correspondencia: registro.correspondencia || 'codigo-exato',
     imagemAltaResolucao: registro.imagemAltaResolucao,
     imagemIlustrativa: false,
     imagemCachePermanente: true,
@@ -579,6 +579,66 @@ export async function buscarProdutoAutomatizado(codigo, produtoBase = null) {
     // O app continua operacional fora da Vercel usando os catálogos do cliente.
     return null
   }
+}
+
+export function urlBuscaGoogleImagens(produto = {}) {
+  const codigo = String(produto.codigoBarras || '').replace(/\D/g, '')
+  const consulta = [codigo, produto.nome, produto.marca, 'embalagem produto png fundo transparente']
+    .filter(Boolean)
+    .join(' ')
+  const url = new URL('https://www.google.com/search')
+  url.searchParams.set('tbm', 'isch')
+  url.searchParams.set('safe', 'active')
+  url.searchParams.set('hl', 'pt-BR')
+  url.searchParams.set('gl', 'br')
+  url.searchParams.set('tbs', 'ic:trans,isz:l')
+  url.searchParams.set('q', consulta)
+  return url.toString()
+}
+
+export async function prepararImagemGoogleConfirmada(produto, imagemUrl) {
+  const codigo = String(produto?.codigoBarras || '').replace(/\D/g, '')
+  let url
+  try {
+    url = new URL(String(imagemUrl || '').trim())
+  } catch (_) {
+    throw new Error('Cole um endereço válido da imagem.')
+  }
+  if (!codigo || url.protocol !== 'https:') throw new Error('Informe o código e uma imagem HTTPS válida.')
+
+  const resposta = await fetch(`/api/produto?codigo=${encodeURIComponent(codigo)}&imagemUrl=${encodeURIComponent(url.toString())}`, {
+    headers: { Accept: 'application/json' },
+  })
+  const dados = await resposta.json().catch(() => ({}))
+  if (!resposta.ok || !dados?.imagem?.dataUrl) {
+    throw new Error(dados?.error || 'Não foi possível baixar essa imagem.')
+  }
+  const imagem = await imagemParaDataURL(dados.imagem.dataUrl)
+  if (!String(imagem).startsWith('data:image/png')) {
+    throw new Error('A imagem é pequena, borrada ou não permite remover o fundo.')
+  }
+  const registro = {
+    codigoBarras: codigo,
+    imagem,
+    marca: produto.marca || '',
+    setor: produto.setor || '',
+    origem: 'google-imagens-confirmado',
+    origemNome: 'Google Imagens (seleção confirmada)',
+    imagemOriginal: url.toString(),
+    imagemFonteUrl: url.toString(),
+    imagemPaginaUrl: urlBuscaGoogleImagens(produto),
+    imagemLargura: null,
+    imagemAltura: null,
+    imagemAprovada: true,
+    correspondencia: 'confirmado-manualmente',
+    imagemAltaResolucao: true,
+    imagemIlustrativa: false,
+    tratamento: TRATAMENTO_PACKSHOT,
+    salvoEm: new Date().toISOString(),
+    verificadoEm: new Date().toISOString(),
+  }
+  await gravarImagemSalva(registro)
+  return respostaImagemSalva(registro)
 }
 
 export async function buscarImagemProduto(produtoOuCodigo, opcoes = {}) {

@@ -11,7 +11,7 @@ const DESTAQUES = [
 ]
 
 export default function Login() {
-  const { login, registrar, loginComoVisitante, toast, config } = useStore()
+  const { login, registrar, loginComoVisitante, toast } = useStore()
   const navigate = useNavigate()
   const [modo, setModo] = useState('entrar') // entrar | criar
   const [identificador, setIdentificador] = useState('')
@@ -60,7 +60,7 @@ export default function Login() {
           <Logo h={52} chip />
           <div>
             <div className="text-xl font-bold">ClawMarket</div>
-            <div className="text-xs tracking-wide text-coral">{config.nomeMercado}</div>
+            <div className="text-xs tracking-wide text-coral">por Bengala Supermercado</div>
           </div>
         </div>
 
@@ -85,7 +85,7 @@ export default function Login() {
             ))}
           </div>
         </div>
-        <div className="relative z-10 text-xs text-cream/50">© {config.nomeMercado} · tecnologia ClawMarket</div>
+        <div className="relative z-10 text-xs text-cream/50">© Bengala Supermercado · piloto ClawMarket</div>
       </div>
 
       {/* lado direito */}

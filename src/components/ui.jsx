@@ -2,6 +2,7 @@ import * as Lucide from 'lucide-react'
 import { useEffect } from 'react'
 import { useStore } from '../store/StoreContext'
 import { partesPreco, statusValidade, labelDias, setorById } from '../lib/utils'
+import logoBengala from '../assets/logo.png'
 
 // ---- ícone dinâmico (lucide) — traço 1.75 p/ um visual mais fino e elegante ----
 export function Icon({ name, strokeWidth = 1.75, ...props }) {
@@ -10,21 +11,8 @@ export function Icon({ name, strokeWidth = 1.75, ...props }) {
 }
 
 export function Logo({ h = 36, chip = false, className = '' }) {
-  const { config } = useStore()
-  const nome = config?.nomeMercado || 'Meu Mercado'
-  const sigla = nome.split(/\s+/).filter(Boolean).slice(0, 2).map((parte) => parte[0]).join('').toUpperCase() || 'MM'
-  const marca = config?.logoDataUrl ? (
-    <img src={config.logoDataUrl} alt={`Logotipo ${nome}`} style={{ height: h, maxWidth: h * 2.8 }} className={`block w-auto object-contain ${className}`} />
-  ) : (
-    <span
-      aria-label={nome}
-      className={`inline-flex items-center justify-center rounded-lg font-black ${className}`}
-      style={{ width: h, height: h, background: config?.corPrimaria || '#e4232e', color: '#fff', fontSize: h * 0.36 }}
-    >
-      {sigla}
-    </span>
-  )
-  return chip ? <span className="inline-flex items-center justify-center rounded-xl bg-white p-1">{marca}</span> : marca
+  const img = <img src={logoBengala} alt="Bengala Supermercado" style={{ height: h }} className={`block w-auto object-contain ${className}`} />
+  return chip ? <span className="inline-flex items-center justify-center rounded-xl bg-white p-1">{img}</span> : img
 }
 
 // ---- preço estilo varejo ----

@@ -8,16 +8,18 @@ fallback opcional e exige GOOGLE_CSE_API_KEY e GOOGLE_CSE_CX na Vercel.
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import os
 import re
+import socket
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 
 CATALOGO = Path(__file__).resolve().parents[1] / "src" / "data" / "catalogoMercadologiaBengala.json"
@@ -77,6 +79,30 @@ def obter_json_google(url: str, timeout: int = 10) -> tuple[dict[str, Any] | Non
         return None, f"http-{erro.code}{f': {detalhe}' if detalhe else ''}"
     except (URLError, TimeoutError, json.JSONDecodeError, OSError) as erro:
         return None, f"indisponivel-{type(erro).__name__.lower()}"
+
+
+def validar_url_imagem_publica(url: str) -> bool:
+    """Impede que a função de imagens seja usada para acessar a rede interna."""
+    try:
+        analisada = urlparse(url)
+        if analisada.scheme != "https" or not analisada.hostname or analisada.username or analisada.password:
+            return False
+        porta = analisada.port or 443
+        enderecos = socket.getaddrinfo(analisada.hostname, porta, type=socket.SOCK_STREAM)
+        for endereco in enderecos:
+            ip = ipaddress.ip_address(endereco[4][0])
+            if not ip.is_global:
+                return False
+        return True
+    except (ValueError, OSError, socket.gaierror):
+        return False
+
+
+class RedirecionamentoImagemSeguro(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not validar_url_imagem_publica(newurl):
+            raise HTTPError(newurl, 403, "Redirecionamento de imagem não permitido", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def imagem_frontal(produto: dict[str, Any]) -> str | None:
@@ -208,9 +234,11 @@ def buscar_imagem_google(codigo: str, produto: dict[str, Any] | None) -> tuple[d
 
 
 def baixar_imagem(url: str) -> tuple[str | None, str | None]:
+    if not validar_url_imagem_publica(url):
+        return None, None
     requisicao = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "image/avif,image/webp,image/png,image/jpeg"})
     try:
-        with urlopen(requisicao, timeout=12) as resposta:
+        with build_opener(RedirecionamentoImagemSeguro()).open(requisicao, timeout=12) as resposta:
             tipo = resposta.headers.get_content_type()
             if tipo not in {"image/jpeg", "image/png", "image/webp", "image/avif"}:
                 return None, None
@@ -267,6 +295,26 @@ class handler(BaseHTTPRequestHandler):
         if not 4 <= len(codigo) <= 14:
             self._cabecalhos(400)
             self.wfile.write(json.dumps({"error": "Informe um código de barras válido."}).encode("utf-8"))
+            return
+        imagem_url = (parametros.get("imagemUrl") or [""])[0].strip()
+        if imagem_url:
+            imagem_data_url, mime = baixar_imagem(imagem_url)
+            if not imagem_data_url:
+                self._cabecalhos(422)
+                self.wfile.write(json.dumps({"error": "A imagem não pôde ser baixada com segurança."}, ensure_ascii=False).encode("utf-8"))
+                return
+            self._cabecalhos(200)
+            self.wfile.write(json.dumps({
+                "codigoBarras": codigo,
+                "imagem": {
+                    "dataUrl": imagem_data_url,
+                    "mime": mime,
+                    "url": imagem_url,
+                    "origem": "google-imagens-confirmado",
+                    "origemNome": "Google Imagens (seleção confirmada)",
+                    "correspondencia": "confirmado-manualmente",
+                },
+            }, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
             return
         try:
             resultado = resolver_produto(codigo)

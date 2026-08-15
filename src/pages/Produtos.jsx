@@ -3,7 +3,12 @@ import { useOutletContext } from 'react-router-dom'
 import { useStore, podeEditar } from '../store/StoreContext'
 import { Icon, PrecoVarejo, StatusBadge, ProdutoThumb, EmptyState, Botao, Modal, Campo, inputCls, Pill } from '../components/ui'
 import { SETORES, setorById, statusValidade, formatBRL, arquivoParaDataURL, dataISOmaisDias } from '../lib/utils'
-import { buscarImagemProduto, buscarProdutoCatalogo } from '../lib/produtoApi'
+import {
+  buscarImagemProduto,
+  buscarProdutoCatalogo,
+  prepararImagemGoogleConfirmada,
+  urlBuscaGoogleImagens,
+} from '../lib/produtoApi'
 import { importarPlanilha } from '../lib/importarCatalogo'
 
 const vazio = {
@@ -110,6 +115,37 @@ export default function Produtos() {
       imagemSalvaEm: foto.imagemSalvaEm,
     }))
     toast('Nova embalagem conferida e gravada!')
+  }
+
+  const prepararUrlImagem = async () => {
+    if (!form.codigoBarras) return toast('Informe primeiro o código de barras.', 'erro')
+    if (!/^https:\/\//i.test(String(form.imagem || ''))) return toast('Cole o endereço HTTPS da imagem escolhida.', 'erro')
+    setBuscandoCatalogo(true)
+    try {
+      const foto = await prepararImagemGoogleConfirmada(form, form.imagem)
+      setForm((f) => ({
+        ...f,
+        imagem: foto.imagem,
+        imagemOrigem: foto.origem,
+        imagemOrigemNome: foto.origemNome,
+        imagemOriginal: foto.imagemOriginal,
+        imagemFonteUrl: foto.imagemFonteUrl,
+        imagemPaginaUrl: foto.imagemPaginaUrl,
+        imagemAprovada: true,
+        imagemCorrespondencia: foto.correspondencia,
+        imagemAltaResolucao: true,
+        imagemIlustrativa: false,
+        imagemCachePermanente: true,
+        imagemTratada: true,
+        imagemTratamento: foto.imagemTratamento,
+        imagemSalvaEm: foto.imagemSalvaEm,
+      }))
+      toast('Imagem nítida preparada, sem fundo e vinculada ao código!')
+    } catch (erro) {
+      toast(erro?.message || 'Não foi possível preparar essa imagem.', 'erro')
+    } finally {
+      setBuscandoCatalogo(false)
+    }
   }
 
   const lista = useMemo(() => {
@@ -326,7 +362,31 @@ export default function Produtos() {
                   )}
                   {form.imagem && <button type="button" onClick={() => setForm({ ...form, imagem: null })} className="rounded-lg px-2 py-1.5 text-sm text-critical hover:bg-critical/10">Remover</button>}
                 </div>
-                <input className={inputCls} placeholder="ou cole uma URL de imagem" value={form.imagem && !String(form.imagem).startsWith('data:') ? form.imagem : ''} onChange={(e) => setForm({ ...form, imagem: e.target.value || null })} />
+                <input className={inputCls} placeholder="cole aqui o endereço da imagem escolhida" value={form.imagem && !String(form.imagem).startsWith('data:') ? form.imagem : ''} onChange={(e) => setForm({ ...form, imagem: e.target.value || null })} />
+                <div className="flex flex-wrap gap-2">
+                  {form.codigoBarras && (
+                    <a
+                      href={urlBuscaGoogleImagens(form)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-info/25 bg-info/5 px-3 py-1.5 text-xs font-bold text-info hover:bg-info/10"
+                    >
+                      <Icon name="Search" size={13} /> Google Imagens: grandes e sem fundo
+                    </a>
+                  )}
+                  {/^https:\/\//i.test(String(form.imagem || '')) && (
+                    <button
+                      type="button"
+                      onClick={prepararUrlImagem}
+                      disabled={buscandoCatalogo}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-bengala px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+                    >
+                      <Icon name={buscandoCatalogo ? 'LoaderCircle' : 'WandSparkles'} size={13} className={buscandoCatalogo ? 'animate-spin' : ''} />
+                      Preparar imagem para o jornal
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] leading-relaxed text-ink-soft">Confirme na página do Google se a embalagem, o peso e a marca correspondem ao código. O sistema rejeita imagens pequenas ou cujo fundo não possa ser removido.</p>
                 {(form.imagemPaginaUrl || form.imagemFonteUrl) && (
                   <a
                     href={form.imagemPaginaUrl || form.imagemFonteUrl}
