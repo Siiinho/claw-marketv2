@@ -155,10 +155,11 @@ def buscar_imagem_google(codigo: str, produto: dict[str, Any] | None) -> tuple[d
     if not chave or not mecanismo:
         return None, "nao-configurado"
     nome = (produto or {}).get("nome", "")
+    marca = (produto or {}).get("marca", "")
+    gramagem = (produto or {}).get("gramagem", "")
     consultas = [
-        " ".join(parte for parte in (codigo, nome, "embalagem produto fundo transparente") if parte),
-        " ".join(parte for parte in (f'"{nome}"' if nome else "", "produto packshot png") if parte),
-        " ".join(parte for parte in (nome, "embalagem produto") if parte),
+        " ".join(parte for parte in (nome, marca, gramagem) if parte),
+        " ".join(parte for parte in (f'"{nome}"' if nome else "", marca, gramagem) if parte),
     ]
     termos_nome = [
         termo.lower() for termo in re.findall(r"[\wÀ-ÿ]+", nome)
@@ -175,7 +176,6 @@ def buscar_imagem_google(codigo: str, produto: dict[str, Any] | None) -> tuple[d
             "cx": mecanismo,
             "q": consulta,
             "searchType": "image",
-            "imgColorType": "trans",
             "imgSize": "large",
             "safe": "active",
             "gl": "br",
@@ -196,16 +196,14 @@ def buscar_imagem_google(codigo: str, produto: dict[str, Any] | None) -> tuple[d
                 continue
             texto = " ".join((item.get("title", ""), url, contexto or "")).lower()
             termos_encontrados = sum(1 for termo in termos_nome if termo in texto)
-            codigo_encontrado = codigo in texto
-            # Sem código na página, exigimos pelo menos dois termos comerciais
-            # (ou o único termo disponível) para não vincular outro produto.
+            # A foto é localizada pelo título comercial: nome, marca e gramagem.
+            # Código interno, EAN e SKU não entram na consulta nem na pontuação.
             minimo_termos = min(2, len(termos_nome))
-            if not codigo_encontrado and termos_encontrados < minimo_termos:
+            if termos_encontrados < minimo_termos:
                 continue
             formato = str(item.get("fileFormat") or "").lower()
             pontuacao = (
-                (120 if codigo_encontrado else 0)
-                + termos_encontrados * 18
+                termos_encontrados * 18
                 + (25 if "png" in formato or url.lower().split("?")[0].endswith(".png") else 0)
                 + min(max(largura, altura) // 100, 30)
                 - indice_consulta * 4
@@ -215,7 +213,7 @@ def buscar_imagem_google(codigo: str, produto: dict[str, Any] | None) -> tuple[d
                 "paginaUrl": contexto,
                 "origem": "google-custom-search",
                 "origemNome": "Google Imagens",
-                "correspondencia": "codigo-exato" if codigo_encontrado else "busca-por-codigo-e-nome",
+                "correspondencia": "nome-marca-gramagem",
                 "nomeCatalogo": item.get("title", ""),
                 "marca": "",
                 "fundoTransparente": True,
@@ -292,12 +290,13 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parametros = parse_qs(urlparse(self.path).query)
         codigo = somente_digitos((parametros.get("codigo") or [""])[0])
-        if not 4 <= len(codigo) <= 14:
-            self._cabecalhos(400)
-            self.wfile.write(json.dumps({"error": "Informe um código de barras válido."}).encode("utf-8"))
-            return
         imagem_url = (parametros.get("imagemUrl") or [""])[0].strip()
+        nome = (parametros.get("nome") or [""])[0].strip()
         if imagem_url:
+            if not nome and not codigo:
+                self._cabecalhos(400)
+                self.wfile.write(json.dumps({"error": "Informe o nome do produto."}, ensure_ascii=False).encode("utf-8"))
+                return
             imagem_data_url, mime = baixar_imagem(imagem_url)
             if not imagem_data_url:
                 self._cabecalhos(422)
@@ -305,7 +304,8 @@ class handler(BaseHTTPRequestHandler):
                 return
             self._cabecalhos(200)
             self.wfile.write(json.dumps({
-                "codigoBarras": codigo,
+                "codigoBarras": codigo or None,
+                "nome": nome or None,
                 "imagem": {
                     "dataUrl": imagem_data_url,
                     "mime": mime,
@@ -315,6 +315,10 @@ class handler(BaseHTTPRequestHandler):
                     "correspondencia": "confirmado-manualmente",
                 },
             }, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+            return
+        if not 4 <= len(codigo) <= 14:
+            self._cabecalhos(400)
+            self.wfile.write(json.dumps({"error": "Informe um código de barras válido."}).encode("utf-8"))
             return
         try:
             resultado = resolver_produto(codigo)

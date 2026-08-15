@@ -11,8 +11,8 @@ export default function Scanner() {
   const {
     produtos,
     salvarProduto,
+    salvarProdutoNaFila,
     registrarLote,
-    adicionarNaFila,
     removerDaFila,
     criarOferta,
     excluirOferta,
@@ -166,7 +166,7 @@ export default function Scanner() {
       origemFila,
     }
 
-    salvarProduto(atualizado)
+    salvarProdutoNaFila(atualizado, origemFila)
     registrarLote({
       produtoId: resultado.id,
       loja: 'loja3',
@@ -174,8 +174,6 @@ export default function Scanner() {
       codigoLote: codigoLote.trim(),
       quantidade,
     })
-    adicionarNaFila(resultado.id, origemFila)
-
     if (regra && !ofertaExistente) {
       criarOferta(resultado.id, `Regra de validade · −${regra.desconto}%`, regra.desconto, validadeLote)
     }

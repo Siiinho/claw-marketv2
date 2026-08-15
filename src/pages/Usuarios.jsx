@@ -1,16 +1,15 @@
 import { useStore, NAV, PERMISSOES } from '../store/StoreContext'
-import { USUARIOS } from '../data/seed'
 import { Icon } from '../components/ui'
 
 const COR_PAPEL = { admin: { c: '#2e6fb0', bg: '#e6f1fb', l: 'Admin' }, gerente: { c: '#2e9e6b', bg: '#e2f3ea', l: 'Gerente' }, repositor: { c: '#8a4fa0', bg: '#f0e8f5', l: 'Repositor' } }
 
 export default function Usuarios() {
-  const { usuario } = useStore()
+  const { usuario, contas } = useStore()
 
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {USUARIOS.map((u) => {
+        {contas.map((u) => {
           const cp = COR_PAPEL[u.papel]
           const perms = PERMISSOES[u.papel].length
           return (
@@ -22,9 +21,9 @@ export default function Usuarios() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-bold text-ink">{u.nome}</span>
-                    {usuario.email === u.email && <span className="rounded-full bg-bengala/15 px-2 py-0.5 text-[10px] font-bold text-bengala">VOCÊ</span>}
+                    {usuario.id === u.id && <span className="rounded-full bg-bengala/15 px-2 py-0.5 text-[10px] font-bold text-bengala">VOCÊ</span>}
                   </div>
-                  <div className="truncate text-xs text-ink-soft">{u.email}</div>
+                  <div className="truncate text-xs text-ink-soft">Nome de usuário</div>
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between">

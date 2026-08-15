@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  USUARIOS,
   LOJAS,
   PRODUTOS_SEED,
   OFERTAS_SEED,
@@ -15,6 +14,10 @@ const KEY = 'clawmarket:v1'
 const LIMPEZA_CATALOGO_KEY = 'clawmarket:catalogo-limpo:2026-07-24'
 const PILOTO_LOJA_ID = 'loja3'
 const PILOTO_LOJA_KEY = 'clawmarket:piloto-loja3:2026-07-25'
+const SESSION_AUTH_KEY = 'clawmarket:sessao-autenticada'
+const SESSION_USER_KEY = 'clawmarket:usuario-id'
+const CONTAS_KEY = 'clawmarket:contas:v2'
+const DADOS_USUARIO_PREFIX = 'clawmarket:dados:v2:'
 const StoreContext = createContext(null)
 
 // ===== Permissões por papel =====
@@ -67,28 +70,70 @@ function carregar() {
   return null
 }
 
+function carregarContas(legado) {
+  try {
+    const salvas = JSON.parse(localStorage.getItem(CONTAS_KEY) || '[]')
+    if (Array.isArray(salvas) && salvas.length) return salvas
+  } catch (_) {}
+  const migradas = Array.isArray(legado?.usuariosLocais) ? legado.usuariosLocais : []
+  if (migradas.length) localStorage.setItem(CONTAS_KEY, JSON.stringify(migradas))
+  return migradas
+}
+
+function carregarDadosUsuario(usuarioId, legado = null) {
+  if (!usuarioId) return null
+  try {
+    const salvo = JSON.parse(localStorage.getItem(`${DADOS_USUARIO_PREFIX}${usuarioId}`) || 'null')
+    if (salvo) return salvo
+  } catch (_) {}
+  if (legado?.usuario?.id === usuarioId) return legado
+  return null
+}
+
+const dadosVazios = () => ({
+  produtos: PRODUTOS_SEED,
+  ofertas: OFERTAS_SEED,
+  jornais: JORNAIS_SEED,
+  lotes: [],
+  auditoria: [],
+  config: CONFIG_SEED,
+  jornalOficial: JORNAL_OFICIAL_SEED,
+  lojaAtiva: PILOTO_LOJA_ID,
+})
+
 export function StoreProvider({ children }) {
-  const salvo = carregar()
-  const [usuario, setUsuario] = useState(salvo?.usuario ?? null)
+  const legado = carregar()
+  const [contas, setContas] = useState(() => carregarContas(legado))
+  const [usuario, setUsuario] = useState(() =>
+    sessionStorage.getItem(SESSION_AUTH_KEY) === '1'
+      ? (() => {
+          const conta = carregarContas(legado).find((item) => item.id === sessionStorage.getItem(SESSION_USER_KEY))
+          if (!conta) return null
+          const { senha: _, ...publica } = conta
+          return publica
+        })()
+      : null
+  )
+  const dadosSessao = usuario ? (carregarDadosUsuario(usuario.id, legado) || dadosVazios()) : dadosVazios()
   // garante que todo produto tenha loja (migra instalações anteriores ao multi-filial)
   const [produtos, setProdutos] = useState(() =>
-    (salvo?.produtos ?? PRODUTOS_SEED).map((p, i) => (p.loja ? p : { ...p, loja: LOJAS[i % LOJAS.length].id }))
+    (dadosSessao.produtos ?? PRODUTOS_SEED).map((p, i) => (p.loja ? p : { ...p, loja: LOJAS[i % LOJAS.length].id }))
   )
   const [lojaAtiva, setLojaAtiva] = useState(() => {
     if (localStorage.getItem(PILOTO_LOJA_KEY) !== '1') {
       localStorage.setItem(PILOTO_LOJA_KEY, '1')
       return PILOTO_LOJA_ID
     }
-    return salvo?.lojaAtiva ?? PILOTO_LOJA_ID
+    return dadosSessao.lojaAtiva ?? PILOTO_LOJA_ID
   })
-  const [usuariosLocais, setUsuariosLocais] = useState(salvo?.usuariosLocais ?? [])
-  const [ofertas, setOfertas] = useState(salvo?.ofertas ?? OFERTAS_SEED)
-  const [jornais, setJornais] = useState(salvo?.jornais ?? JORNAIS_SEED)
-  const [lotes, setLotes] = useState(salvo?.lotes ?? [])
+  const [ofertas, setOfertas] = useState(dadosSessao.ofertas ?? OFERTAS_SEED)
+  const [jornais, setJornais] = useState(dadosSessao.jornais ?? JORNAIS_SEED)
+  const [lotes, setLotes] = useState(dadosSessao.lotes ?? [])
+  const [auditoria, setAuditoria] = useState(dadosSessao.auditoria ?? [])
   // mescla os padrões por baixo do salvo (backfill de chaves novas, ex.: regrasPreco)
-  const [config, setConfig] = useState({ ...CONFIG_SEED, ...(salvo?.config || {}), nomeMercado: CONFIG_SEED.nomeMercado })
+  const [config, setConfig] = useState({ ...CONFIG_SEED, ...(dadosSessao.config || {}), nomeMercado: CONFIG_SEED.nomeMercado })
   const [jornalOficial, setJornalOficial] = useState(() => {
-    const sj = salvo?.jornalOficial
+    const sj = dadosSessao.jornalOficial
     // migra instalações antigas: capa de 2023 (Outubro Rosa) ou sem o campo `ym`
     // → volta ao seed atual (junho), preciso e com baseline de versão
     if (!sj || !sj.ym || (typeof sj.capa === 'string' && sj.capa.includes('capa-14'))) return JORNAL_OFICIAL_SEED
@@ -105,20 +150,25 @@ export function StoreProvider({ children }) {
       }
     })
     return () => { ativo = false }
-  }, [])
+  }, [usuario?.id])
 
-  // persiste tudo (menos toasts)
   useEffect(() => {
+    localStorage.setItem(CONTAS_KEY, JSON.stringify(contas))
+  }, [contas])
+
+  // Persiste todo o trabalho no espaço isolado da conta autenticada.
+  useEffect(() => {
+    if (!usuario?.id) return
     const produtosLeves = produtos.map((p) =>
       p.imagemCachePermanente && String(p.imagem || '').startsWith('data:')
         ? { ...p, imagem: null }
         : p
     )
-    const dump = { usuario, produtos: produtosLeves, ofertas, jornais, lotes, config, jornalOficial, lojaAtiva, usuariosLocais }
+    const dump = { produtos: produtosLeves, ofertas, jornais, lotes, auditoria, config, jornalOficial, lojaAtiva }
     try {
-      localStorage.setItem(KEY, JSON.stringify(dump))
+      localStorage.setItem(`${DADOS_USUARIO_PREFIX}${usuario.id}`, JSON.stringify(dump))
     } catch (_) {}
-  }, [usuario, produtos, ofertas, jornais, lotes, config, jornalOficial, lojaAtiva, usuariosLocais])
+  }, [usuario?.id, produtos, ofertas, jornais, lotes, auditoria, config, jornalOficial, lojaAtiva])
 
   // ===== toasts =====
   const toast = useCallback((msg, tipo = 'sucesso') => {
@@ -128,19 +178,32 @@ export function StoreProvider({ children }) {
   }, [])
 
   // ===== auth =====
-  // login por nome OU e-mail (aceita contas demo e contas criadas localmente)
+  const aplicarDadosDaConta = useCallback((dados) => {
+    const base = { ...dadosVazios(), ...(dados || {}) }
+    setProdutos((base.produtos || []).map((p, i) => (p.loja ? p : { ...p, loja: LOJAS[i % LOJAS.length].id })))
+    setOfertas(base.ofertas || [])
+    setJornais(base.jornais || [])
+    setLotes(base.lotes || [])
+    setAuditoria(base.auditoria || [])
+    setConfig({ ...CONFIG_SEED, ...(base.config || {}), nomeMercado: CONFIG_SEED.nomeMercado })
+    setJornalOficial(base.jornalOficial || JORNAL_OFICIAL_SEED)
+    setLojaAtiva(base.lojaAtiva || PILOTO_LOJA_ID)
+  }, [])
+
+  // Login exclusivamente por nome de usuário e senha.
   const login = useCallback(
     (identificador, senha) => {
       const id = (identificador || '').toLowerCase().trim()
-      const u = [...USUARIOS, ...usuariosLocais].find(
-        (x) => (x.email && x.email.toLowerCase() === id) || (x.nome && x.nome.toLowerCase() === id)
-      )
+      const u = contas.find((x) => x.nome?.toLowerCase() === id)
       if (!u || u.senha !== senha) return false
       const { senha: _, ...pub } = u
+      sessionStorage.setItem(SESSION_AUTH_KEY, '1')
+      sessionStorage.setItem(SESSION_USER_KEY, u.id)
+      aplicarDadosDaConta(carregarDadosUsuario(u.id) || dadosVazios())
       setUsuario(pub)
       return true
     },
-    [usuariosLocais]
+    [contas, aplicarDadosDaConta]
   )
 
   // cadastro simplificado: nome, função (papel) e senha
@@ -148,22 +211,40 @@ export function StoreProvider({ children }) {
     ({ nome, papel, senha }) => {
       const nomeT = (nome || '').trim()
       if (!nomeT || !senha) return { ok: false, erro: 'Informe nome e senha.' }
-      if ([...USUARIOS, ...usuariosLocais].some((x) => x.nome?.toLowerCase() === nomeT.toLowerCase()))
+      if (contas.some((x) => x.nome?.toLowerCase() === nomeT.toLowerCase()))
         return { ok: false, erro: 'Já existe um usuário com esse nome.' }
-      const novo = { id: uid(), nome: nomeT, papel: papel || 'repositor', cargo: CARGOS[papel] || 'Repositor', senha, email: '' }
-      setUsuariosLocais((l) => [...l, novo])
+      const novo = { id: uid(), nome: nomeT, papel: papel || 'repositor', cargo: CARGOS[papel] || 'Repositor', senha }
+      setContas((lista) => [...lista, novo])
+      localStorage.setItem(CONTAS_KEY, JSON.stringify([...contas, novo]))
       const { senha: _, ...pub } = novo
+      sessionStorage.setItem(SESSION_AUTH_KEY, '1')
+      sessionStorage.setItem(SESSION_USER_KEY, novo.id)
+      aplicarDadosDaConta(dadosVazios())
       setUsuario(pub)
       return { ok: true }
     },
-    [usuariosLocais]
+    [contas, aplicarDadosDaConta]
   )
 
-  const loginComoVisitante = useCallback(() => {
-    setUsuario({ id: 'visitante', nome: 'Visitante', cargo: 'Visitante', papel: 'repositor', email: '' })
-  }, [])
+  const logout = useCallback(() => {
+    sessionStorage.removeItem(SESSION_AUTH_KEY)
+    sessionStorage.removeItem(SESSION_USER_KEY)
+    setUsuario(null)
+    aplicarDadosDaConta(dadosVazios())
+  }, [aplicarDadosDaConta])
 
-  const logout = useCallback(() => setUsuario(null), [])
+  const registrarAcao = useCallback((tipo, entidade, entidadeId, detalhe = '') => {
+    setAuditoria((lista) => [{
+      id: uid(),
+      usuarioId: usuario?.id,
+      usuarioNome: usuario?.nome,
+      tipo,
+      entidade,
+      entidadeId: entidadeId || null,
+      detalhe,
+      criadoEm: new Date().toISOString(),
+    }, ...lista].slice(0, 1000))
+  }, [usuario?.id, usuario?.nome])
 
   // ===== produtos =====
   const salvarProduto = useCallback(
@@ -173,17 +254,26 @@ export function StoreProvider({ children }) {
           return list.map((p) => (p.id === prod.id ? { ...p, ...prod } : p))
         }
         const loja = prod.loja || (lojaAtiva !== 'todas' ? lojaAtiva : LOJAS[0].id)
-        return [{ ...prod, id: prod.id || uid(), loja, naFila: false, origemFila: null }, ...list]
+        return [{
+          ...prod,
+          id: prod.id || uid(),
+          loja,
+          naFila: Boolean(prod.naFila),
+          origemFila: prod.naFila ? (prod.origemFila || 'manual') : null,
+          adicionadoFilaEm: prod.naFila ? (prod.adicionadoFilaEm || new Date().toISOString()) : null,
+        }, ...list]
       })
+      registrarAcao(prod.id ? 'editar' : 'criar', 'produto', prod.id, prod.nome || '')
     },
-    [lojaAtiva]
+    [lojaAtiva, registrarAcao]
   )
 
   const excluirProduto = useCallback((id) => {
     setProdutos((list) => list.filter((p) => p.id !== id))
     setOfertas((list) => list.filter((o) => o.produtoId !== id))
     setLotes((list) => list.filter((l) => l.produtoId !== id))
-  }, [])
+    registrarAcao('excluir', 'produto', id)
+  }, [registrarAcao])
 
   const registrarLote = useCallback((dados) => {
     const agora = new Date().toISOString()
@@ -213,7 +303,8 @@ export function StoreProvider({ children }) {
         ...list,
       ]
     })
-  }, [])
+    registrarAcao('escanear', 'lote', dados.produtoId, `${dados.quantidade || 1} un. · validade ${dados.validade || 'não informada'}`)
+  }, [registrarAcao])
 
   // ===== fila do jornal =====
   const toggleFila = useCallback((id, origem = 'manual') => {
@@ -224,22 +315,61 @@ export function StoreProvider({ children }) {
           : p
       )
     )
-  }, [])
+    registrarAcao('alternar-fila', 'produto', id, origem)
+  }, [registrarAcao])
 
   // Usado no fluxo de bipagem: confirmar duas vezes nunca remove o produto da fila.
   const adicionarNaFila = useCallback((id, origem = 'scanner') => {
     setProdutos((list) =>
       list.map((p) =>
         p.id === id
-          ? { ...p, naFila: true, origemFila: origem || p.origemFila || 'scanner' }
+          ? {
+              ...p,
+              naFila: true,
+              origemFila: origem || p.origemFila || 'scanner',
+              adicionadoFilaEm: p.adicionadoFilaEm || new Date().toISOString(),
+            }
           : p
       )
     )
-  }, [])
+    registrarAcao('adicionar-fila', 'produto', id, origem)
+  }, [registrarAcao])
+
+  // Salva e coloca na fila na mesma atualização. Isso evita que uma gravação
+  // atrasada do cadastro sobrescreva `naFila: true` logo depois da bipagem.
+  const salvarProdutoNaFila = useCallback((prod, origem = 'scanner') => {
+    const id = prod.id || uid()
+    const agora = new Date().toISOString()
+    setProdutos((list) => {
+      const existente = list.find((p) => p.id === id)
+      if (existente) {
+        return list.map((p) => p.id === id ? {
+          ...p,
+          ...prod,
+          id,
+          naFila: true,
+          origemFila: origem || p.origemFila || 'scanner',
+          adicionadoFilaEm: p.adicionadoFilaEm || agora,
+        } : p)
+      }
+      const loja = prod.loja || (lojaAtiva !== 'todas' ? lojaAtiva : LOJAS[0].id)
+      return [{
+        ...prod,
+        id,
+        loja,
+        naFila: true,
+        origemFila: origem || 'scanner',
+        adicionadoFilaEm: agora,
+      }, ...list]
+    })
+    registrarAcao('adicionar-fila', 'produto', id, origem)
+    return id
+  }, [lojaAtiva, registrarAcao])
 
   const removerDaFila = useCallback((id) => {
-    setProdutos((list) => list.map((p) => (p.id === id ? { ...p, naFila: false, origemFila: null } : p)))
-  }, [])
+    setProdutos((list) => list.map((p) => (p.id === id ? { ...p, naFila: false, origemFila: null, adicionadoFilaEm: null } : p)))
+    registrarAcao('remover-fila', 'produto', id)
+  }, [registrarAcao])
 
   // ===== ofertas =====
   const criarOferta = useCallback((produtoId, titulo, desconto, validade) => {
@@ -247,27 +377,37 @@ export function StoreProvider({ children }) {
       { id: uid(), produtoId, titulo, desconto, validade, ativa: true },
       ...list.filter((o) => o.produtoId !== produtoId),
     ])
-  }, [])
+    registrarAcao('salvar', 'oferta', produtoId, `${titulo || 'Oferta'} · ${desconto}%`)
+  }, [registrarAcao])
 
   const toggleOferta = useCallback((id) => {
     setOfertas((list) => list.map((o) => (o.id === id ? { ...o, ativa: !o.ativa } : o)))
-  }, [])
+    registrarAcao('alternar', 'oferta', id)
+  }, [registrarAcao])
 
   const excluirOferta = useCallback((id) => {
     setOfertas((list) => list.filter((o) => o.id !== id))
-  }, [])
+    registrarAcao('excluir', 'oferta', id)
+  }, [registrarAcao])
 
   // ===== jornais gerados =====
   const salvarJornal = useCallback((jornal) => {
-    setJornais((list) => [{ ...jornal, id: uid(), criadoEm: new Date().toISOString() }, ...list])
-  }, [])
+    const salvo = { ...jornal, id: uid(), criadoEm: new Date().toISOString() }
+    setJornais((list) => [salvo, ...list])
+    registrarAcao('salvar', 'jornal', salvo.id, salvo.titulo || '')
+    return salvo
+  }, [registrarAcao])
 
   const excluirJornal = useCallback((id) => {
     setJornais((list) => list.filter((j) => j.id !== id))
-  }, [])
+    registrarAcao('excluir', 'jornal', id)
+  }, [registrarAcao])
 
   // ===== config / jornal oficial =====
-  const salvarConfig = useCallback((c) => setConfig((prev) => ({ ...prev, ...c })), [])
+  const salvarConfig = useCallback((c) => {
+    setConfig((prev) => ({ ...prev, ...c }))
+    registrarAcao('editar', 'configuracao', usuario?.id)
+  }, [registrarAcao, usuario?.id])
 
   const atualizarJornalOficial = useCallback((dados) => {
     setJornalOficial((prev) => {
@@ -280,15 +420,16 @@ export function StoreProvider({ children }) {
   }, [])
 
   const resetar = useCallback(() => {
-    localStorage.removeItem(KEY)
+    if (usuario?.id) localStorage.removeItem(`${DADOS_USUARIO_PREFIX}${usuario.id}`)
     setProdutos(PRODUTOS_SEED)
     setOfertas(OFERTAS_SEED)
     setJornais(JORNAIS_SEED)
     setLotes([])
+    setAuditoria([])
     setConfig(CONFIG_SEED)
     setJornalOficial(JORNAL_OFICIAL_SEED)
     toast('Aplicativo restaurado sem produtos cadastrados.')
-  }, [toast])
+  }, [toast, usuario?.id])
 
   // ===== derivados úteis =====
   const ofertaDoProduto = useCallback(
@@ -314,6 +455,8 @@ export function StoreProvider({ children }) {
     ofertas,
     jornais,
     lotes,
+    auditoria,
+    contas: contas.map(({ senha: _, ...conta }) => conta),
     config,
     jornalOficial,
     fila,
@@ -321,13 +464,13 @@ export function StoreProvider({ children }) {
     toast,
     login,
     registrar,
-    loginComoVisitante,
     logout,
     salvarProduto,
     excluirProduto,
     registrarLote,
     toggleFila,
     adicionarNaFila,
+    salvarProdutoNaFila,
     removerDaFila,
     criarOferta,
     toggleOferta,

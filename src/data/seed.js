@@ -12,32 +12,7 @@ export const LOJAS = [
   },
 ]
 
-export const USUARIOS = [
-  {
-    id: 'u-carlos',
-    nome: 'Carlos Mendes',
-    email: 'carlos@bengala.com.br',
-    senha: 'demo123',
-    papel: 'admin',
-    cargo: 'Administrador',
-  },
-  {
-    id: 'u-ana',
-    nome: 'Ana Paula Silva',
-    email: 'ana@bengala.com.br',
-    senha: 'demo123',
-    papel: 'gerente',
-    cargo: 'Gerente',
-  },
-  {
-    id: 'u-juliana',
-    nome: 'Juliana Costa',
-    email: 'juliana@bengala.com.br',
-    senha: 'demo123',
-    papel: 'repositor',
-    cargo: 'Repositora',
-  },
-]
+export const USUARIOS = []
 
 // O aplicativo começa vazio. Os produtos entram somente por cadastro ou leitura do código de barras.
 export const PRODUTOS_SEED = []

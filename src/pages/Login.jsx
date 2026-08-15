@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
-import { USUARIOS } from '../data/seed'
 import { Icon, Botao, Logo } from '../components/ui'
 
 const DESTAQUES = [
@@ -11,7 +10,7 @@ const DESTAQUES = [
 ]
 
 export default function Login() {
-  const { login, registrar, loginComoVisitante, toast } = useStore()
+  const { login, registrar, toast } = useStore()
   const navigate = useNavigate()
   const [modo, setModo] = useState('entrar') // entrar | criar
   const [identificador, setIdentificador] = useState('')
@@ -27,7 +26,7 @@ export default function Login() {
     if (login(identificador, senha)) {
       toast(`Bem-vindo, ${identificador.split('@')[0]}!`)
       navigate('/')
-    } else setErro('Nome/e-mail ou senha incorretos.')
+    } else setErro('Nome de usuário ou senha incorretos.')
   }
 
   const criar = (e) => {
@@ -38,15 +37,6 @@ export default function Login() {
       navigate('/')
     } else setErro(r.erro)
   }
-
-  const entrarDemo = (u) => {
-    if (login(u.nome, 'demo123')) {
-      toast(`Bem-vindo, ${u.nome.split(' ')[0]}!`)
-      navigate('/')
-    }
-  }
-
-  const corPapel = { admin: '#2e6fb0', gerente: '#2e9e6b', repositor: '#8a4fa0' }
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -106,55 +96,39 @@ export default function Login() {
           {modo === 'entrar' ? (
             <form onSubmit={entrar} className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium">Nome ou e-mail</label>
-                <input value={identificador} onChange={(e) => setIdentificador(e.target.value)} placeholder="Seu nome" className={CLS} />
+                <label htmlFor="login-usuario" className="mb-1 block text-sm font-medium">Nome de usuário</label>
+                <input id="login-usuario" value={identificador} onChange={(e) => setIdentificador(e.target.value)} placeholder="Seu nome de usuário" autoComplete="username" className={CLS} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Senha</label>
-                <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••" className={CLS} />
+                <label htmlFor="login-senha" className="mb-1 block text-sm font-medium">Senha</label>
+                <input id="login-senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••" autoComplete="current-password" className={CLS} />
               </div>
               {erro && <p className="text-sm text-critical">{erro}</p>}
               <Botao type="submit" className="w-full py-2.5">Entrar</Botao>
-              <button type="button" onClick={() => { loginComoVisitante(); navigate('/') }} className="w-full text-center text-sm text-info hover:underline">
-                Explorar como visitante
-              </button>
             </form>
           ) : (
             <form onSubmit={criar} className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium">Nome</label>
-                <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Seu nome completo" className={CLS} />
+                <label htmlFor="criar-usuario" className="mb-1 block text-sm font-medium">Nome de usuário</label>
+                <input id="criar-usuario" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Crie seu nome de usuário" autoComplete="username" className={CLS} />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Função</label>
-                <select value={papel} onChange={(e) => setPapel(e.target.value)} className={CLS}>
+                <label htmlFor="criar-funcao" className="mb-1 block text-sm font-medium">Função</label>
+                <select id="criar-funcao" value={papel} onChange={(e) => setPapel(e.target.value)} className={CLS}>
                   <option value="admin">Administrador — acesso total</option>
                   <option value="gerente">Gerente — ofertas, jornal e fila</option>
                   <option value="repositor">Repositor — chão de loja</option>
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Senha</label>
-                <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••" className={CLS} />
+                <label htmlFor="criar-senha" className="mb-1 block text-sm font-medium">Senha</label>
+                <input id="criar-senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••" autoComplete="new-password" className={CLS} />
               </div>
               {erro && <p className="text-sm text-critical">{erro}</p>}
               <Botao type="submit" className="w-full py-2.5">Criar conta e entrar</Botao>
             </form>
           )}
-
-          <div className="mt-8 rounded-xl border border-ink-soft/15 bg-white p-4">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">Contas demo (clique para entrar)</p>
-            <div className="space-y-1.5">
-              {USUARIOS.map((u) => (
-                <button key={u.id} onClick={() => entrarDemo(u)} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-cream-200">
-                  <span className="h-2 w-2 rounded-full" style={{ background: corPapel[u.papel] }} />
-                  <span className="font-medium">{u.nome}</span>
-                  <span className="text-ink-soft">· {u.cargo}</span>
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-ink-soft">Senha das demo: <code className="rounded bg-cream-200 px-1">demo123</code></p>
-          </div>
+          <p className="mt-6 text-center text-xs text-ink-soft">Cada conta mantém seus próprios produtos, bipagens, ofertas e jornais.</p>
         </div>
       </div>
     </div>

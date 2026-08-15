@@ -208,3 +208,72 @@ export async function exportarPDFPaginas(elementos, nome = 'jornal') {
   }
   return oferecerArquivo(pdf.output('blob'), `${nome}.pdf`)
 }
+
+export function abrirJanelaPrevisualizacao(titulo = 'Pré-visualização do jornal') {
+  const janela = window.open('', '_blank')
+  if (!janela) throw new Error('O navegador bloqueou a pré-visualização. Permita pop-ups para este site.')
+  janela.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${String(titulo).replace(/[<>&"]/g, '')}</title></head><body style="font-family:Arial,sans-serif;padding:32px;text-align:center">Preparando pré-visualização…</body></html>`)
+  janela.document.close()
+  return janela
+}
+
+// Abre páginas já renderizadas em uma aba limpa e aciona a impressão nativa.
+// O navegador oferece tamanho do papel, margens, escala e "Salvar como PDF".
+export async function previsualizarImpressaoPaginas(elementos, titulo = 'Jornal de ofertas', janelaExistente = null) {
+  const paginas = elementos.filter(Boolean)
+  if (!paginas.length) throw new Error('Nenhuma página pronta para visualizar.')
+  const janela = janelaExistente || abrirJanelaPrevisualizacao(titulo)
+  const imagens = []
+
+  try {
+    for (const pagina of paginas) {
+      const canvas = await captura(pagina)
+      try {
+        imagens.push(canvas.toDataURL('image/png'))
+      } finally {
+        canvas.width = 1
+        canvas.height = 1
+      }
+    }
+
+    const tituloSeguro = String(titulo).replace(/[<>&"]/g, '')
+    janela.document.open()
+    janela.document.write(`<!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>${tituloSeguro}</title>
+          <style>
+            @page { size: A4 portrait; margin: 0; }
+            * { box-sizing: border-box; }
+            html, body { margin: 0; background: #e8eaed; font-family: Arial, sans-serif; }
+            .toolbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px; color: #fff; background: #082b4f; box-shadow: 0 2px 10px #0003; }
+            .toolbar button { cursor: pointer; border: 0; border-radius: 8px; padding: 10px 16px; color: #fff; background: #e4232e; font-weight: 700; }
+            .paginas { display: grid; gap: 20px; justify-content: center; padding: 24px; }
+            .pagina { display: block; width: 210mm; height: 297mm; object-fit: contain; background: #fff; box-shadow: 0 8px 28px #0003; }
+            @media print {
+              html, body { background: #fff; }
+              .toolbar { display: none !important; }
+              .paginas { display: block; padding: 0; }
+              .pagina { width: 210mm; height: 297mm; box-shadow: none; break-after: page; page-break-after: always; }
+              .pagina:last-child { break-after: auto; page-break-after: auto; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="toolbar"><strong>${tituloSeguro}</strong><button type="button" onclick="window.print()">Imprimir / Salvar como PDF</button></div>
+          <main class="paginas">${imagens.map((src, indice) => `<img class="pagina" src="${src}" alt="Página ${indice + 1}">`).join('')}</main>
+          <script>
+            Promise.all(Array.from(document.images).map((img) => img.complete ? Promise.resolve() : new Promise((ok) => { img.onload = img.onerror = ok })))
+              .then(() => setTimeout(() => { window.focus(); window.print(); }, 250));
+          <\/script>
+        </body>
+      </html>`)
+    janela.document.close()
+    return janela
+  } catch (erro) {
+    try { janela.close() } catch (_) {}
+    throw erro
+  }
+}

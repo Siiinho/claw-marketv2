@@ -28,6 +28,7 @@ const BANCO_IMAGENS = 'clawmarket-imagens-produtos'
 const LOJA_IMAGENS = 'imagens'
 const REVALIDAR_EMBALAGEM_MS = 30 * 24 * 60 * 60 * 1000
 const TRATAMENTO_PACKSHOT = 'packshot-estudio-v8-transparente-hd'
+const TRATAMENTO_MANUAL = 'imagem-manual-livre-v1'
 const MINIMO_MAIOR_LADO_FONTE = 700
 let promessaBancoImagens
 const IMAGENS_LOCAIS = import.meta.glob([
@@ -277,7 +278,7 @@ function recortarProdutoDaFoto(canvas) {
 }
 
 // Baixa a fotografia e transforma em packshot de estúdio, pronto para o jornal.
-async function imagemParaDataURL(url) {
+async function imagemParaDataURL(url, { fundoBranco = true } = {}) {
   let imagemAberta
   try {
     const r = await fetchComTimeout(url, {}, 15000)
@@ -347,6 +348,13 @@ async function imagemParaDataURL(url) {
       if (pixelsFinais[i] < 245) transparentes += 1
     }
     if (transparentes / (lado * lado) < 0.04) return null
+    if (fundoBranco) {
+      ctx.save()
+      ctx.globalCompositeOperation = 'destination-over'
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, lado, lado)
+      ctx.restore()
+    }
     return canvas.toDataURL('image/png')
   } catch (_) {
     return null
@@ -406,11 +414,12 @@ function respostaImagemSalva(registro) {
     imagemLargura: registro.imagemLargura || null,
     imagemAltura: registro.imagemAltura || null,
     imagemAprovada: Boolean(registro.imagemAprovada),
+    imagemManual: Boolean(registro.imagemManual),
     correspondencia: registro.correspondencia || 'codigo-exato',
     imagemAltaResolucao: registro.imagemAltaResolucao,
     imagemIlustrativa: false,
     imagemCachePermanente: true,
-    imagemTratada: registro.tratamento === TRATAMENTO_PACKSHOT,
+    imagemTratada: registro.tratamento === TRATAMENTO_PACKSHOT || registro.tratamento === TRATAMENTO_MANUAL,
     imagemTratamento: registro.tratamento,
     imagemSalvaEm: registro.salvoEm,
   }
@@ -460,7 +469,7 @@ async function consultarCatalogoExato(codigo, setor = '', opcoes = {}) {
         nome: nome || `Produto ${c}`,
         marca: (p.brands || p.brand_owner || '').split(',')[0].trim(),
         setor: inferirSetor(textoSetor),
-        imagem: imagemOriginal && opcoes.baixarImagem !== false ? await imagemParaDataURL(imagemOriginal) : null,
+        imagem: imagemOriginal && opcoes.baixarImagem !== false ? await imagemParaDataURL(imagemOriginal, { fundoBranco: true }) : null,
         imagemOriginal,
         imagemFonteUrl: imagemOriginal,
         imagemPaginaUrl: `https://${catalogo.dominio}/product/${encodeURIComponent(c)}`,
@@ -498,7 +507,7 @@ function imagemLocalPorCodigo(codigo) {
 // Retorna somente fotografia associada ao código exato.
 // Primeiro usa os arquivos locais e depois quatro bancos públicos especializados.
 async function prepararImagemLocal(codigo, dados, local, aprovada = null) {
-  const imagem = await imagemParaDataURL(local)
+  const imagem = await imagemParaDataURL(local, { fundoBranco: true })
   const maiorLado = Math.max(aprovada?.largura || 0, aprovada?.altura || 0)
   const registro = {
     codigoBarras: codigo,
@@ -541,7 +550,7 @@ export async function buscarProdutoAutomatizado(codigo, produtoBase = null) {
     let foto = null
 
     if (fonte?.dataUrl) {
-      const imagem = await imagemParaDataURL(fonte.dataUrl)
+      const imagem = await imagemParaDataURL(fonte.dataUrl, { fundoBranco: true })
       if (String(imagem).startsWith('data:')) {
         const registro = {
           codigoBarras: c,
@@ -582,8 +591,7 @@ export async function buscarProdutoAutomatizado(codigo, produtoBase = null) {
 }
 
 export function urlBuscaGoogleImagens(produto = {}) {
-  const codigo = String(produto.codigoBarras || '').replace(/\D/g, '')
-  const consulta = [codigo, produto.nome, produto.marca, 'embalagem produto png fundo transparente']
+  const consulta = [produto.nome, produto.marca, produto.gramagem]
     .filter(Boolean)
     .join(' ')
   const url = new URL('https://www.google.com/search')
@@ -591,35 +599,31 @@ export function urlBuscaGoogleImagens(produto = {}) {
   url.searchParams.set('safe', 'active')
   url.searchParams.set('hl', 'pt-BR')
   url.searchParams.set('gl', 'br')
-  url.searchParams.set('tbs', 'ic:trans,isz:l')
+  url.searchParams.set('tbs', 'isz:l')
   url.searchParams.set('q', consulta)
   return url.toString()
 }
 
 export async function prepararImagemGoogleConfirmada(produto, imagemUrl) {
-  const codigo = String(produto?.codigoBarras || '').replace(/\D/g, '')
+  const chave = String(produto?.codigoBarras || produto?.id || produto?.nome || '').trim()
   let url
   try {
     url = new URL(String(imagemUrl || '').trim())
   } catch (_) {
     throw new Error('Cole um endereço válido da imagem.')
   }
-  if (!codigo || url.protocol !== 'https:') throw new Error('Informe o código e uma imagem HTTPS válida.')
+  if (!chave || url.protocol !== 'https:') throw new Error('Informe o nome do produto e uma imagem HTTPS válida.')
 
-  const resposta = await fetch(`/api/produto?codigo=${encodeURIComponent(codigo)}&imagemUrl=${encodeURIComponent(url.toString())}`, {
+  const resposta = await fetch(`/api/produto?nome=${encodeURIComponent(produto.nome || chave)}&imagemUrl=${encodeURIComponent(url.toString())}`, {
     headers: { Accept: 'application/json' },
   })
   const dados = await resposta.json().catch(() => ({}))
   if (!resposta.ok || !dados?.imagem?.dataUrl) {
     throw new Error(dados?.error || 'Não foi possível baixar essa imagem.')
   }
-  const imagem = await imagemParaDataURL(dados.imagem.dataUrl)
-  if (!String(imagem).startsWith('data:image/png')) {
-    throw new Error('A imagem é pequena, borrada ou não permite remover o fundo.')
-  }
   const registro = {
-    codigoBarras: codigo,
-    imagem,
+    codigoBarras: chave,
+    imagem: dados.imagem.dataUrl,
     marca: produto.marca || '',
     setor: produto.setor || '',
     origem: 'google-imagens-confirmado',
@@ -630,10 +634,11 @@ export async function prepararImagemGoogleConfirmada(produto, imagemUrl) {
     imagemLargura: null,
     imagemAltura: null,
     imagemAprovada: true,
+    imagemManual: true,
     correspondencia: 'confirmado-manualmente',
-    imagemAltaResolucao: true,
+    imagemAltaResolucao: null,
     imagemIlustrativa: false,
-    tratamento: TRATAMENTO_PACKSHOT,
+    tratamento: TRATAMENTO_MANUAL,
     salvoEm: new Date().toISOString(),
     verificadoEm: new Date().toISOString(),
   }
@@ -684,7 +689,7 @@ export async function buscarImagemProduto(produtoOuCodigo, opcoes = {}) {
     return respostaImagemSalva(confirmado)
   }
 
-  const imagem = await imagemParaDataURL(catalogo.imagemOriginal)
+  const imagem = await imagemParaDataURL(catalogo.imagemOriginal, { fundoBranco: true })
   if (!imagem) return respostaImagemSalva(salva)
   const permanente = String(imagem).startsWith('data:')
   const registro = {
@@ -716,6 +721,7 @@ export async function buscarImagemProduto(produtoOuCodigo, opcoes = {}) {
 
 export function imagemProdutoPrecisaTratamento(produto) {
   if (!produto?.imagem) return false
+  if (produto.imagemManual || produto.imagemTratamento === TRATAMENTO_MANUAL) return false
   const chave = String(produto.codigoBarras || produto.id || '').replace(/\s/g, '')
   const aprovada = imagensAprovadas[chave]
   if (aprovada && produto.imagemFonteUrl !== aprovada.imagemFonteUrl) return true
@@ -746,7 +752,7 @@ export async function prepararProdutoParaJornal(produto) {
     local ||
     (String(produto.imagemOriginal || '').startsWith('http') ? produto.imagemOriginal : null) ||
     produto.imagem
-  const imagem = await imagemParaDataURL(fonteOriginal)
+  const imagem = await imagemParaDataURL(fonteOriginal, { fundoBranco: true })
   if (!String(imagem).startsWith('data:')) return produto
   const registro = {
     codigoBarras: chave,

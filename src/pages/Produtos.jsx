@@ -12,7 +12,7 @@ import {
 import { importarPlanilha } from '../lib/importarCatalogo'
 
 const vazio = {
-  nome: '', marca: '', setor: 'mercearia', estoque: 0, validade: '',
+  nome: '', marca: '', gramagem: '', setor: 'mercearia', estoque: 0, validade: '',
   precoNormal: '', precoPromo: '', codigoBarras: '', imagem: null,
 }
 
@@ -118,7 +118,7 @@ export default function Produtos() {
   }
 
   const prepararUrlImagem = async () => {
-    if (!form.codigoBarras) return toast('Informe primeiro o código de barras.', 'erro')
+    if (!form.nome) return toast('Informe primeiro o nome do produto.', 'erro')
     if (!/^https:\/\//i.test(String(form.imagem || ''))) return toast('Cole o endereço HTTPS da imagem escolhida.', 'erro')
     setBuscandoCatalogo(true)
     try {
@@ -132,15 +132,16 @@ export default function Produtos() {
         imagemFonteUrl: foto.imagemFonteUrl,
         imagemPaginaUrl: foto.imagemPaginaUrl,
         imagemAprovada: true,
+        imagemManual: true,
         imagemCorrespondencia: foto.correspondencia,
-        imagemAltaResolucao: true,
+        imagemAltaResolucao: null,
         imagemIlustrativa: false,
         imagemCachePermanente: true,
         imagemTratada: true,
         imagemTratamento: foto.imagemTratamento,
         imagemSalvaEm: foto.imagemSalvaEm,
       }))
-      toast('Imagem nítida preparada, sem fundo e vinculada ao código!')
+      toast('Imagem manual adicionada ao produto!')
     } catch (erro) {
       toast(erro?.message || 'Não foi possível preparar essa imagem.', 'erro')
     } finally {
@@ -189,7 +190,17 @@ export default function Produtos() {
     if (!file) return
     try {
       const dataUrl = await arquivoParaDataURL(file)
-      setForm((f) => ({ ...f, imagem: dataUrl }))
+      setForm((f) => ({
+        ...f,
+        imagem: dataUrl,
+        imagemManual: true,
+        imagemAprovada: true,
+        imagemTratada: true,
+        imagemTratamento: 'imagem-manual-livre-v1',
+        imagemAltaResolucao: null,
+        imagemOrigem: 'upload-manual',
+        imagemOrigemNome: 'Imagem adicionada manualmente',
+      }))
     } catch {
       toast('Não foi possível ler a imagem.', 'erro')
     }
@@ -348,7 +359,7 @@ export default function Produtos() {
                     <Icon name="Upload" size={14} className="mr-1 inline" /> Enviar foto
                     <input type="file" accept="image/*" className="hidden" onChange={aoEnviarFoto} />
                   </label>
-                  {form.codigoBarras && (
+                  {form.nome && (
                     <button
                       type="button"
                       onClick={atualizarEmbalagem}
@@ -371,7 +382,7 @@ export default function Produtos() {
                       rel="noreferrer"
                       className="inline-flex items-center gap-1.5 rounded-lg border border-info/25 bg-info/5 px-3 py-1.5 text-xs font-bold text-info hover:bg-info/10"
                     >
-                      <Icon name="Search" size={13} /> Google Imagens: grandes e sem fundo
+                      <Icon name="Search" size={13} /> Buscar pelo nome no Google Imagens
                     </a>
                   )}
                   {/^https:\/\//i.test(String(form.imagem || '')) && (
@@ -386,7 +397,7 @@ export default function Produtos() {
                     </button>
                   )}
                 </div>
-                <p className="text-[11px] leading-relaxed text-ink-soft">Confirme na página do Google se a embalagem, o peso e a marca correspondem ao código. O sistema rejeita imagens pequenas ou cujo fundo não possa ser removido.</p>
+                <p className="text-[11px] leading-relaxed text-ink-soft">A pesquisa usa somente nome, marca e gramagem. Confira visualmente a embalagem; imagens adicionadas manualmente são aceitas como estiverem.</p>
                 {(form.imagemPaginaUrl || form.imagemFonteUrl) && (
                   <a
                     href={form.imagemPaginaUrl || form.imagemFonteUrl}
@@ -401,11 +412,12 @@ export default function Produtos() {
             </div>
             <div className="col-span-2"><Campo label="Nome" obrigatorio><input className={inputCls} value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></Campo></div>
             <Campo label="Marca"><input className={inputCls} value={form.marca} onChange={(e) => setForm({ ...form, marca: e.target.value })} /></Campo>
-            <Campo label="Setor" obrigatorio>
+            <Campo label="Gramagem"><input className={inputCls} value={form.gramagem || ''} onChange={(e) => setForm({ ...form, gramagem: e.target.value })} placeholder="Ex.: 350 g" /></Campo>
+            <div className="col-span-2"><Campo label="Setor" obrigatorio>
               <select className={inputCls} value={form.setor} onChange={(e) => setForm({ ...form, setor: e.target.value })}>
                 {SETORES.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
               </select>
-            </Campo>
+            </Campo></div>
             <div className="col-span-2">
               <Campo label="Loja" obrigatorio>
                 <select className={inputCls} value={form.loja || lojas[0].id} onChange={(e) => setForm({ ...form, loja: e.target.value })}>

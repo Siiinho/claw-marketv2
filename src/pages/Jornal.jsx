@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, forwardRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
-import { Icon, ProdutoThumb, EmptyState, Botao, PrecoVarejo, Campo, inputCls, Pill, Logo, SeloDesconto } from '../components/ui'
+import { Icon, ProdutoThumb, EmptyState, Botao, PrecoVarejo, Campo, inputCls, Pill, Logo, SeloDesconto, Modal } from '../components/ui'
+import ScannerJornal from '../components/ScannerJornal'
 import {
   SETORES, setorById, statusValidade, diasParaVencer, formatBRL, formatData,
   percentDesc, dataISOmaisDias, diaSemana, labelDias,
 } from '../lib/utils'
-import { exportarPDFPaginas } from '../lib/exportar'
+import { abrirJanelaPrevisualizacao, previsualizarImpressaoPaginas } from '../lib/exportar'
 import { imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
 
 const PRODUTOS_POR_PAGINA = 4
@@ -74,7 +75,7 @@ const TEMPLATE_SETOR = {
 export default function Jornal() {
   const navigate = useNavigate()
   const store = useStore()
-  const { produtos, fila, config, jornais, jornalOficial, ofertaDoProduto, salvarProduto, salvarJornal, excluirJornal, removerDaFila, atualizarJornalOficial, toast } = store
+  const { fila, config, jornais, jornalOficial, ofertaDoProduto, salvarProduto, salvarJornal, excluirJornal, removerDaFila, atualizarJornalOficial, toast } = store
   const [aba, setAba] = useState('gerar')
 
   // ---- config de geração ----
@@ -87,8 +88,11 @@ export default function Jornal() {
   const [pdfPronto, setPdfPronto] = useState(null)
   const [mostrarRevisao, setMostrarRevisao] = useState(false)
   const pageRefs = useRef([])
+  const historicoRefs = useRef([])
   const revisaoRef = useRef(null)
   const ref = useRef(null)
+  const [historicoParaAbrir, setHistoricoParaAbrir] = useState(null)
+  const [produtoEditandoGerador, setProdutoEditandoGerador] = useState(null)
 
   const tema = TEMAS[temaSel]
 
@@ -107,9 +111,21 @@ export default function Jornal() {
     return () => { ativo = false }
   }, [fila, salvarProduto])
 
-  useEffect(() => () => {
-    if (pdfPronto?.url) URL.revokeObjectURL(pdfPronto.url)
-  }, [pdfPronto])
+  useEffect(() => {
+    if (!historicoParaAbrir) return
+    let ativo = true
+    const timer = requestAnimationFrame(async () => {
+      try {
+        const paginas = historicoRefs.current.slice(0, paginar(historicoParaAbrir.jornal.produtos || []).length)
+        await previsualizarImpressaoPaginas(paginas, historicoParaAbrir.jornal.titulo, historicoParaAbrir.janela)
+      } catch (erro) {
+        if (ativo) toast(erro?.message || 'Não foi possível abrir o jornal salvo.', 'erro')
+      } finally {
+        if (ativo) setHistoricoParaAbrir(null)
+      }
+    })
+    return () => { ativo = false; cancelAnimationFrame(timer) }
+  }, [historicoParaAbrir, toast])
 
   // ---- preço para o jornal ----
   const precoJornal = (p) => {
@@ -152,14 +168,15 @@ export default function Jornal() {
       .filter((codigo, indice, lista) => codigo && lista.indexOf(codigo) !== indice)
   )
   const problemasPDF = [
-    ...itensJornal.filter((p) => !p.validade).map((p) => ({ nivel: 'erro', texto: `${p.nome}: informe a validade.` })),
-    ...itensJornal.filter((p) => p.validade && diasParaVencer(p.validade) < 0).map((p) => ({ nivel: 'erro', texto: `${p.nome}: produto vencido não pode ser publicado.` })),
+    ...itensJornal.filter((p) => !p.nome?.trim()).map(() => ({ nivel: 'erro', texto: 'Existe um produto sem nome.' })),
     ...itensJornal.filter((p) => !(Number(p.precoNormal) > 0)).map((p) => ({ nivel: 'erro', texto: `${p.nome}: informe um preço válido.` })),
-    ...itensJornal.filter((p) => !p.imagem).map((p) => ({ nivel: 'erro', texto: `${p.nome}: imagem ainda não localizada.` })),
-    ...itensJornal.filter((p) => p.imagem && !imagemCompativelComPDF(p.imagem)).map((p) => ({ nivel: 'erro', texto: `${p.nome}: salve a imagem no aplicativo antes de gerar o PDF.` })),
-    ...itensJornal.filter((p) => p.imagem && imagemProdutoPrecisaTratamento(p)).map((p) => ({ nivel: 'erro', texto: `${p.nome}: aguarde a versão nítida com fundo transparente.` })),
-    ...itensJornal.filter((p) => p.imagem && p.imagemAltaResolucao === false).map((p) => ({ nivel: 'erro', texto: `${p.nome}: a imagem disponível tem resolução insuficiente para impressão.` })),
-    ...[...codigosRepetidos].map((codigo) => ({ nivel: 'erro', texto: `Código ${codigo} aparece mais de uma vez no jornal.` })),
+    ...itensJornal.filter((p) => !p.validade).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: validade não informada.` })),
+    ...itensJornal.filter((p) => p.validade && diasParaVencer(p.validade) < 0).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: a validade informada já passou.` })),
+    ...itensJornal.filter((p) => !p.imagem).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: será publicado sem imagem.` })),
+    ...itensJornal.filter((p) => p.imagem && !imagemCompativelComPDF(p.imagem)).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: a imagem pode não aparecer na impressão.` })),
+    ...itensJornal.filter((p) => p.imagem && imagemProdutoPrecisaTratamento(p)).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: imagem ainda não foi padronizada; a exportação está liberada.` })),
+    ...itensJornal.filter((p) => p.imagem && p.imagemAltaResolucao === false).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: imagem com resolução baixa; a exportação está liberada.` })),
+    ...[...codigosRepetidos].map((codigo) => ({ nivel: 'aviso', texto: `Código ${codigo} aparece mais de uma vez no jornal.` })),
   ]
   const bloqueiosPDF = problemasPDF.filter((p) => p.nivel === 'erro')
 
@@ -168,6 +185,22 @@ export default function Jornal() {
     setTitulo('Jornal de Ofertas — DIA B')
     toast('Modelo Dia B aplicado.')
   }
+
+  const criarSnapshot = () => ({
+    titulo,
+    tipo,
+    tema: tipo === 'sazonal' ? temaSel : null,
+    setor: tipo === 'setor' ? setorSel : null,
+    validadeDe,
+    validadeAte,
+    totalItens: itensJornal.length,
+    totalPaginas: paginasJornal.length,
+    produtos: itensJornal.map((produto) => ({
+      ...produto,
+      precoJornalCalculado: precoJornal(produto),
+      descontoJornalCalculado: descJornal(produto),
+    })),
+  })
 
   const exportar = async () => {
     setMostrarRevisao(true)
@@ -179,10 +212,13 @@ export default function Jornal() {
     }
     setExportando(true)
     setPdfPronto(null)
+    let janela
     try {
-      const arquivo = await exportarPDFPaginas(pageRefs.current.slice(0, paginasJornal.length), `jornal-bengala-${tipo}`)
-      setPdfPronto(arquivo)
-      toast(`PDF pronto em ${paginasJornal.length} ${paginasJornal.length === 1 ? 'página' : 'páginas'} A4!`)
+      janela = abrirJanelaPrevisualizacao(titulo)
+      salvarJornal(criarSnapshot())
+      await previsualizarImpressaoPaginas(pageRefs.current.slice(0, paginasJornal.length), titulo, janela)
+      setPdfPronto({ titulo, paginas: paginasJornal.length })
+      toast('Pré-visualização aberta. Use Imprimir ou Salvar como PDF.')
     } catch (e) {
       console.error('Erro ao exportar o jornal:', e)
       toast(e?.message || 'Não foi possível exportar o PDF. Recarregue a página e tente novamente.', 'erro')
@@ -191,23 +227,45 @@ export default function Jornal() {
     }
   }
 
-  const compartilharPDF = async () => {
-    if (!pdfPronto?.blob) return
-    try {
-      const arquivo = new File([pdfPronto.blob], pdfPronto.nome, { type: 'application/pdf' })
-      if (!navigator.canShare?.({ files: [arquivo] })) {
-        toast('Neste aparelho, use Abrir/baixar PDF.')
-        return
-      }
-      await navigator.share({ files: [arquivo], title: titulo })
-    } catch (erro) {
-      if (erro?.name !== 'AbortError') toast('Não foi possível compartilhar. Use Abrir/baixar PDF.', 'erro')
-    }
+  const salvar = () => {
+    if (!itensJornal.length) return toast('Adicione ao menos um produto ao jornal.', 'erro')
+    salvarJornal(criarSnapshot())
+    toast('Jornal salvo no histórico!')
   }
 
-  const salvar = () => {
-    salvarJornal({ titulo, tipo, tema: tipo === 'sazonal' ? temaSel : null, setor: tipo === 'setor' ? setorSel : null, validadeDe, validadeAte, totalItens: itensJornal.length, totalPaginas: paginasJornal.length })
-    toast('Jornal salvo no histórico!')
+  const abrirJornalSalvo = (jornal) => {
+    const janela = abrirJanelaPrevisualizacao(jornal.titulo)
+    setHistoricoParaAbrir({ jornal, janela })
+  }
+
+  const salvarProdutoGerador = () => {
+    if (!produtoEditandoGerador?.nome?.trim()) return toast('Informe o nome do produto.', 'erro')
+    if (!(Number(produtoEditandoGerador.precoNormal) > 0)) return toast('Informe um preço válido.', 'erro')
+    salvarProduto({
+      ...produtoEditandoGerador,
+      estoque: Math.max(0, Number(produtoEditandoGerador.estoque) || 0),
+      precoNormal: Number(produtoEditandoGerador.precoNormal),
+      precoPromo: produtoEditandoGerador.precoPromo ? Number(produtoEditandoGerador.precoPromo) : null,
+      naFila: true,
+    })
+    setProdutoEditandoGerador(null)
+    toast('Produto atualizado no jornal!')
+  }
+
+  const trocarImagemProdutoGerador = (arquivo) => {
+    if (!arquivo) return
+    const leitor = new FileReader()
+    leitor.onload = () => setProdutoEditandoGerador((produto) => ({
+      ...produto,
+      imagem: String(leitor.result || ''),
+      imagemManual: true,
+      imagemTratada: true,
+      imagemTratamento: 'imagem-manual-livre-v1',
+      imagemAltaResolucao: null,
+      imagemOrigem: 'upload-manual',
+    }))
+    leitor.onerror = () => toast('Não foi possível ler a imagem.', 'erro')
+    leitor.readAsDataURL(arquivo)
   }
 
   const Tab = ({ id, icone, children, badge }) => (
@@ -229,7 +287,7 @@ export default function Jornal() {
             <h2 className="text-xl font-bold text-ink">Monte o jornal em 3 passos</h2>
             <p className="mt-0.5 text-sm text-ink-soft">Escolha o modelo, bipe os produtos e baixe o jornal pronto.</p>
           </div>
-          <Botao onClick={() => navigate('/scanner')} className="shrink-0">
+          <Botao onClick={() => document.getElementById('scanner-jornal')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="shrink-0">
             <Icon name="ScanLine" size={17} /> Começar a escanear
           </Botao>
         </div>
@@ -251,9 +309,12 @@ export default function Jornal() {
         </div>
       </div>
 
+      <ScannerJornal />
+
       <div className="flex gap-1 border-b border-ink-soft/10">
         <Tab id="gerar" icone="LayoutTemplate">Montar jornal</Tab>
         <Tab id="fila" icone="ListChecks" badge={fila.length}>Produtos escaneados</Tab>
+        <Tab id="historico" icone="History" badge={jornais.length}>Histórico</Tab>
         <Tab id="oficial" icone="Globe">Modelo oficial</Tab>
       </div>
 
@@ -352,7 +413,7 @@ export default function Jornal() {
             <div className="card-bengala p-3">
               <div className="mb-2 flex items-center justify-between gap-2 px-1">
                 <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">2. Produtos do jornal ({ativos.length})</p>
-                <button onClick={() => navigate('/scanner')} className="flex items-center gap-1 text-xs font-bold text-bengala hover:underline">
+                <button onClick={() => document.getElementById('scanner-jornal')?.scrollIntoView({ behavior: 'smooth' })} className="flex items-center gap-1 text-xs font-bold text-bengala hover:underline">
                   <Icon name="ScanLine" size={13} /> Escanear
                 </button>
               </div>
@@ -361,12 +422,13 @@ export default function Jornal() {
               ) : (
                 <div className="max-h-64 space-y-1 overflow-y-auto">
                   {fila.map((p) => (
-                    <label key={p.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-cream-200">
+                    <div key={p.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-cream-200">
                       <input type="checkbox" checked={incluir(p.id)} onChange={() => toggleIncluir(p.id)} className="h-4 w-4 accent-bengala" />
                       <ProdutoThumb produto={p} size={28} />
                       <span className="min-w-0 flex-1 whitespace-normal break-words text-sm leading-snug text-ink">{p.nome}</span>
                       {p.origemFila === 'vencimento' && <Pill cor="#d9641f" bg="#f47b361a">interna</Pill>}
-                    </label>
+                      <button onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="rounded p-1 text-info hover:bg-info/10"><Icon name="Pencil" size={14} /></button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -391,12 +453,12 @@ export default function Jornal() {
             )}
 
             {itensJornal.length > 0 && (
-              <div ref={revisaoRef} className={`scroll-mt-4 rounded-xl border p-3 text-sm ${bloqueiosPDF.length ? 'border-critical/30 bg-critical/5' : 'border-success/30 bg-success/5'}`}>
+              <div ref={revisaoRef} className={`scroll-mt-4 rounded-xl border p-3 text-sm ${bloqueiosPDF.length ? 'border-critical/30 bg-critical/5' : problemasPDF.length ? 'border-warning/30 bg-warning/5' : 'border-success/30 bg-success/5'}`}>
                 <button onClick={() => setMostrarRevisao((v) => !v)} className="flex w-full items-center gap-2 text-left font-bold text-ink">
-                  <Icon name={bloqueiosPDF.length ? 'TriangleAlert' : 'BadgeCheck'} size={17} className={bloqueiosPDF.length ? 'text-critical' : 'text-success'} />
+                  <Icon name={bloqueiosPDF.length ? 'TriangleAlert' : problemasPDF.length ? 'Info' : 'BadgeCheck'} size={17} className={bloqueiosPDF.length ? 'text-critical' : problemasPDF.length ? 'text-warning' : 'text-success'} />
                   <span className="flex-1">Revisão antes do PDF</span>
                   <span className="text-xs font-medium text-ink-soft">
-                    {problemasPDF.length ? `${problemasPDF.length} ${problemasPDF.length === 1 ? 'item' : 'itens'} para conferir` : 'Tudo pronto'}
+                    {bloqueiosPDF.length ? `${bloqueiosPDF.length} bloqueio(s)` : problemasPDF.length ? `${problemasPDF.length} aviso(s), impressão liberada` : 'Tudo pronto'}
                   </span>
                   <Icon name={mostrarRevisao ? 'ChevronUp' : 'ChevronDown'} size={15} />
                 </button>
@@ -419,32 +481,21 @@ export default function Jornal() {
 
             <div className="flex gap-2">
               <Botao variante="contorno" className="flex-1" onClick={salvar}><Icon name="Save" size={16} /> Salvar</Botao>
-              <Botao className="flex-1" onClick={exportar} disabled={exportando || !itensJornal.length}><Icon name="FileDown" size={16} /> {exportando ? 'Gerando...' : 'Gerar PDF'}</Botao>
+              <Botao className="flex-1" onClick={exportar} disabled={exportando || !itensJornal.length}><Icon name="Printer" size={16} /> {exportando ? 'Preparando...' : 'Pré-visualizar / imprimir'}</Botao>
             </div>
             {pdfPronto && (
               <div className="rounded-xl border border-success/30 bg-success/5 p-3">
                 <div className="flex items-start gap-2 text-sm text-success">
                   <Icon name="BadgeCheck" size={18} className="mt-0.5 shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <div className="font-bold">PDF gerado com sucesso</div>
-                    <div className="mt-0.5 text-xs text-ink-soft">Se o download não abriu sozinho, use o botão abaixo.</div>
+                    <div className="font-bold">Pré-visualização aberta</div>
+                    <div className="mt-0.5 text-xs text-ink-soft">O navegador permite escolher papel, escala, impressora ou Salvar como PDF.</div>
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <a
-                    href={pdfPronto.url}
-                    download={pdfPronto.nome}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-success px-3 py-2 text-sm font-bold text-white"
-                  >
-                    <Icon name="FileDown" size={16} /> Abrir/baixar PDF
-                  </a>
-                  {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
-                    <button onClick={compartilharPDF} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-success/30 bg-white px-3 py-2 text-sm font-bold text-success">
-                      <Icon name="Share2" size={16} /> Compartilhar
-                    </button>
-                  )}
+                  <button onClick={exportar} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-success px-3 py-2 text-sm font-bold text-white">
+                    <Icon name="Printer" size={16} /> Abrir novamente
+                  </button>
                 </div>
               </div>
             )}
@@ -556,27 +607,85 @@ export default function Jornal() {
       )}
 
       {/* ============ FILA ============ */}
-      {aba === 'fila' && <FilaView fila={fila} vencimento={fila.filter((p) => p.origemFila === 'vencimento')} remover={removerDaFila} toast={toast} />}
+      {aba === 'fila' && <FilaView fila={fila} vencimento={fila.filter((p) => p.origemFila === 'vencimento')} remover={removerDaFila} salvarProduto={salvarProduto} toast={toast} />}
+
+      {aba === 'historico' && (
+        <div className="card-bengala p-4">
+          <h3 className="mb-1 font-bold text-ink">Jornais gerados</h3>
+          <p className="mb-3 text-xs text-ink-soft">Cada item guarda os produtos, preços e imagens usados naquele momento.</p>
+          {jornais.length === 0 ? (
+            <EmptyState icon="History" titulo="Nenhum jornal salvo" descricao="Ao pré-visualizar ou salvar um jornal, ele aparecerá aqui." />
+          ) : (
+            <div className="space-y-2">
+              {jornais.map((jornal) => (
+                <div key={jornal.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-ink-soft/10 bg-white p-3">
+                  <button onClick={() => abrirJornalSalvo(jornal)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-bengala/10 text-bengala"><Icon name="Newspaper" size={19} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold text-ink">{jornal.titulo}</span>
+                      <span className="block text-xs text-ink-soft">{jornal.totalItens} produtos · {jornal.totalPaginas || 1} pág. · {new Date(jornal.criadoEm).toLocaleString('pt-BR')}</span>
+                    </span>
+                  </button>
+                  <button onClick={() => abrirJornalSalvo(jornal)} className="inline-flex items-center gap-1 rounded-lg bg-bengala px-3 py-2 text-xs font-bold text-white"><Icon name="Eye" size={14} /> Visualizar</button>
+                  <button onClick={() => excluirJornal(jornal.id)} aria-label={`Excluir ${jornal.titulo}`} className="rounded-lg p-2 text-critical hover:bg-critical/10"><Icon name="Trash2" size={15} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ============ OFICIAL ============ */}
       {aba === 'oficial' && <OficialView jornal={jornalOficial} atualizar={atualizarJornalOficial} url={config.jornalUrl} toast={toast} />}
 
-      {/* histórico de jornais gerados */}
-      {aba === 'gerar' && jornais.length > 0 && (
-        <div className="card-bengala p-4">
-          <h3 className="mb-2 font-bold text-ink">Jornais salvos</h3>
-          <div className="space-y-1">
-            {jornais.map((j) => (
-              <div key={j.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-cream-200">
-                <Icon name="Newspaper" size={15} className="text-ink-soft" />
-                <span className="flex-1 text-sm text-ink">{j.titulo}</span>
-                <span className="text-xs text-ink-soft">{j.totalItens} itens · {j.totalPaginas || 1} pág. · {formatData(j.validadeDe)}</span>
-                <button onClick={() => excluirJornal(j.id)} className="rounded p-1 text-critical hover:bg-critical/10"><Icon name="Trash2" size={14} /></button>
-              </div>
-            ))}
-          </div>
+      {historicoParaAbrir ? (
+        <div className="pointer-events-none fixed left-[-12000px] top-0 opacity-0" aria-hidden="true">
+          {paginar(historicoParaAbrir.jornal.produtos || []).map((itens, indice) => (
+            <PaginaModelo
+              key={`${historicoParaAbrir.jornal.id}-${indice}`}
+              ref={(elemento) => { historicoRefs.current[indice] = elemento }}
+              itens={itens}
+              precoJornal={(produto) => produto.precoJornalCalculado ?? produto.precoPromo ?? produto.precoNormal}
+              descJornal={(produto) => produto.descontoJornalCalculado ?? 0}
+              validadeDe={historicoParaAbrir.jornal.validadeDe}
+              validadeAte={historicoParaAbrir.jornal.validadeAte}
+              numero={indice + 1}
+              total={paginar(historicoParaAbrir.jornal.produtos || []).length}
+            />
+          ))}
         </div>
-      )}
+      ) : null}
+
+      <Modal
+        open={Boolean(produtoEditandoGerador)}
+        onClose={() => setProdutoEditandoGerador(null)}
+        titulo="Editar produto do jornal"
+        footer={<><Botao variante="contorno" onClick={() => setProdutoEditandoGerador(null)}>Cancelar</Botao><Botao onClick={salvarProdutoGerador}>Salvar correção</Botao></>}
+      >
+        {produtoEditandoGerador ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2 flex items-center gap-3">
+              <ProdutoThumb produto={produtoEditandoGerador} size={58} />
+              <label className="cursor-pointer rounded-lg border border-ink-soft/20 bg-white px-3 py-2 text-sm font-bold text-ink">
+                <Icon name="ImagePlus" size={14} className="mr-1 inline" /> Trocar imagem
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(evento) => trocarImagemProdutoGerador(evento.target.files?.[0])}
+                />
+              </label>
+            </div>
+            <div className="col-span-2"><Campo label="Nome"><input className={inputCls} value={produtoEditandoGerador.nome || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, nome: e.target.value }))} /></Campo></div>
+            <Campo label="Marca"><input className={inputCls} value={produtoEditandoGerador.marca || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, marca: e.target.value }))} /></Campo>
+            <Campo label="Gramagem"><input className={inputCls} value={produtoEditandoGerador.gramagem || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, gramagem: e.target.value }))} /></Campo>
+            <Campo label="Validade"><input type="date" className={inputCls} value={produtoEditandoGerador.validade || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, validade: e.target.value }))} /></Campo>
+            <Campo label="Quantidade"><input type="number" min="0" className={inputCls} value={produtoEditandoGerador.estoque ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, estoque: e.target.value }))} /></Campo>
+            <Campo label="Preço normal"><input type="number" min="0.01" step="0.01" className={inputCls} value={produtoEditandoGerador.precoNormal ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, precoNormal: e.target.value }))} /></Campo>
+            <Campo label="Preço promocional"><input type="number" min="0.01" step="0.01" className={inputCls} value={produtoEditandoGerador.precoPromo ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, precoPromo: e.target.value }))} /></Campo>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   )
 }
@@ -1084,11 +1193,41 @@ function BandaTema({ temaId }) {
 }
 
 // ---- sub-aba fila ----
-function FilaView({ fila, vencimento, remover, toast }) {
+function FilaView({ fila, vencimento, remover, salvarProduto, toast }) {
+  const [editando, setEditando] = useState(null)
   if (fila.length === 0) {
     return <EmptyState icon="ListChecks" titulo="Fila vazia" descricao="Em Produtos ou Ofertas, use o botão de jornal para adicionar produtos aqui." />
   }
   const grupos = SETORES.map((s) => ({ setor: s, itens: fila.filter((p) => p.setor === s.id) })).filter((g) => g.itens.length)
+  const salvarEdicao = () => {
+    if (!editando?.nome?.trim()) return toast('Informe o nome do produto.', 'erro')
+    if (!(Number(editando.precoNormal) > 0)) return toast('Informe um preço válido.', 'erro')
+    salvarProduto({
+      ...editando,
+      estoque: Math.max(0, Number(editando.estoque) || 0),
+      precoNormal: Number(editando.precoNormal),
+      precoPromo: editando.precoPromo ? Number(editando.precoPromo) : null,
+      naFila: true,
+    })
+    setEditando(null)
+    toast('Produto corrigido na fila do jornal!')
+  }
+
+  const trocarImagem = (arquivo) => {
+    if (!arquivo) return
+    const leitor = new FileReader()
+    leitor.onload = () => setEditando((produto) => ({
+      ...produto,
+      imagem: String(leitor.result || ''),
+      imagemManual: true,
+      imagemTratada: true,
+      imagemTratamento: 'imagem-manual-livre-v1',
+      imagemAltaResolucao: null,
+      imagemOrigem: 'upload-manual',
+    }))
+    leitor.onerror = () => toast('Não foi possível ler a imagem.', 'erro')
+    leitor.readAsDataURL(arquivo)
+  }
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -1118,12 +1257,38 @@ function FilaView({ fila, vencimento, remover, toast }) {
                       ? <Pill cor="#2e6fb0" bg="#e6f1fb">Oferta confirmada</Pill>
                     : <Pill>Manual</Pill>}
                 <span className="text-sm font-medium">{formatBRL(p.precoPromo || p.precoNormal)}</span>
+                <button onClick={() => setEditando({ ...p })} aria-label={`Editar ${p.nome}`} className="rounded p-1.5 text-info hover:bg-info/10"><Icon name="Pencil" size={15} /></button>
                 <button onClick={() => { remover(p.id); toast('Removido da fila.', 'info') }} className="rounded p-1 text-critical hover:bg-critical/10"><Icon name="X" size={15} /></button>
               </div>
             ))}
           </div>
         </div>
       ))}
+      <Modal
+        open={Boolean(editando)}
+        onClose={() => setEditando(null)}
+        titulo="Editar produto da fila"
+        footer={<><Botao variante="contorno" onClick={() => setEditando(null)}>Cancelar</Botao><Botao onClick={salvarEdicao}>Salvar correção</Botao></>}
+      >
+        {editando ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2 flex items-center gap-3">
+              <ProdutoThumb produto={editando} size={58} />
+              <label className="cursor-pointer rounded-lg border border-ink-soft/20 bg-white px-3 py-2 text-sm font-bold text-ink">
+                <Icon name="ImagePlus" size={14} className="mr-1 inline" /> Trocar imagem
+                <input type="file" accept="image/*" className="sr-only" onChange={(evento) => trocarImagem(evento.target.files?.[0])} />
+              </label>
+            </div>
+            <div className="col-span-2"><Campo label="Nome"><input className={inputCls} value={editando.nome || ''} onChange={(e) => setEditando((p) => ({ ...p, nome: e.target.value }))} /></Campo></div>
+            <Campo label="Marca"><input className={inputCls} value={editando.marca || ''} onChange={(e) => setEditando((p) => ({ ...p, marca: e.target.value }))} /></Campo>
+            <Campo label="Gramagem"><input className={inputCls} value={editando.gramagem || ''} onChange={(e) => setEditando((p) => ({ ...p, gramagem: e.target.value }))} /></Campo>
+            <Campo label="Validade"><input type="date" className={inputCls} value={editando.validade || ''} onChange={(e) => setEditando((p) => ({ ...p, validade: e.target.value }))} /></Campo>
+            <Campo label="Quantidade"><input type="number" min="0" className={inputCls} value={editando.estoque ?? ''} onChange={(e) => setEditando((p) => ({ ...p, estoque: e.target.value }))} /></Campo>
+            <Campo label="Preço normal"><input type="number" min="0.01" step="0.01" className={inputCls} value={editando.precoNormal ?? ''} onChange={(e) => setEditando((p) => ({ ...p, precoNormal: e.target.value }))} /></Campo>
+            <Campo label="Preço promocional"><input type="number" min="0.01" step="0.01" className={inputCls} value={editando.precoPromo ?? ''} onChange={(e) => setEditando((p) => ({ ...p, precoPromo: e.target.value }))} /></Campo>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   )
 }
