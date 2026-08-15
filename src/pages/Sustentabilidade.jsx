@@ -78,7 +78,7 @@ export default function Sustentabilidade() {
   const exportar = async () => {
     setExportando(true)
     try {
-      await exportarPDF(ref.current, 'relatorio-esg-bengala')
+      await exportarPDF(ref.current, 'relatorio-esg')
       toast('Relatório ESG exportado em PDF!')
     } catch (_) {
       toast('Erro ao exportar o relatório.', 'erro')

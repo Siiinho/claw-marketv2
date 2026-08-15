@@ -17,6 +17,13 @@ const PILOTO_LOJA_ID = 'loja3'
 const PILOTO_LOJA_KEY = 'clawmarket:piloto-loja3:2026-07-25'
 const StoreContext = createContext(null)
 
+function escurecerHex(cor, fator = 0.82) {
+  const valor = String(cor || '').replace('#', '')
+  if (!/^[0-9a-f]{6}$/i.test(valor)) return '#99151d'
+  const canais = [0, 2, 4].map((inicio) => Math.min(255, Math.round(parseInt(valor.slice(inicio, inicio + 2), 16) * fator)))
+  return `#${canais.map((canal) => canal.toString(16).padStart(2, '0')).join('')}`
+}
+
 // ===== Permissões por papel =====
 export const NAV = [
   { key: 'dashboard', label: 'Início', path: '/', icone: 'Home' },
@@ -95,6 +102,24 @@ export function StoreProvider({ children }) {
     return sj
   })
   const [toasts, setToasts] = useState([])
+
+  // A identidade visual é configuração de cada cliente. As classes existentes
+  // usam estas variáveis, portanto toda a interface e os materiais acompanham a marca.
+  useEffect(() => {
+    const raiz = document.documentElement
+    const primaria = config.corPrimaria || CONFIG_SEED.corPrimaria
+    const secundaria = config.corSecundaria || CONFIG_SEED.corSecundaria
+    const destaque = config.corDestaque || CONFIG_SEED.corDestaque
+    raiz.style.setProperty('--color-bengala', primaria)
+    raiz.style.setProperty('--color-bengala-dark', escurecerHex(primaria))
+    raiz.style.setProperty('--color-coral', primaria)
+    raiz.style.setProperty('--color-coral-dark', escurecerHex(primaria))
+    raiz.style.setProperty('--color-brick', secundaria)
+    raiz.style.setProperty('--color-brick-light', escurecerHex(secundaria, 1.18))
+    raiz.style.setProperty('--color-navy', secundaria)
+    raiz.style.setProperty('--color-navy-light', escurecerHex(secundaria, 1.18))
+    raiz.style.setProperty('--color-offer', destaque)
+  }, [config.corPrimaria, config.corSecundaria, config.corDestaque])
 
   // Restaura do banco permanente as fotos sem duplicá-las no localStorage.
   useEffect(() => {

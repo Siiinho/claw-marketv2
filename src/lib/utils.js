@@ -15,10 +15,24 @@ export const SETORES = [
 export const setorById = (id) => SETORES.find((s) => s.id === id) || SETORES[0]
 
 // ---- datas ----
+// O piloto opera em São Paulo. Usar a data civil da loja evita que um
+// coletor configurado em UTC considere um produto que vence hoje como vencido.
+const FUSO_LOJA = 'America/Sao_Paulo'
+
+const partesHojeNaLoja = () => {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: FUSO_LOJA,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const valor = (tipo) => Number(partes.find((parte) => parte.type === tipo)?.value)
+  return { ano: valor('year'), mes: valor('month'), dia: valor('day') }
+}
+
 export const hoje = () => {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d
+  const { ano, mes, dia } = partesHojeNaLoja()
+  return new Date(ano, mes - 1, dia)
 }
 
 export const parseData = (iso) => {
@@ -30,14 +44,17 @@ export const parseData = (iso) => {
 export const diasParaVencer = (iso) => {
   const data = parseData(iso)
   if (!data) return null
-  const ms = data - hoje()
+  const { ano, mes, dia } = partesHojeNaLoja()
+  const alvo = Date.UTC(data.getFullYear(), data.getMonth(), data.getDate())
+  const atual = Date.UTC(ano, mes - 1, dia)
+  const ms = alvo - atual
   return Math.round(ms / 86400000)
 }
 
 export const dataISOmaisDias = (dias) => {
-  const d = hoje()
-  d.setDate(d.getDate() + dias)
-  return d.toISOString().slice(0, 10)
+  const { ano, mes, dia } = partesHojeNaLoja()
+  const d = new Date(Date.UTC(ano, mes - 1, dia + dias))
+  return [d.getUTCFullYear(), String(d.getUTCMonth() + 1).padStart(2, '0'), String(d.getUTCDate()).padStart(2, '0')].join('-')
 }
 
 export const formatData = (iso) =>

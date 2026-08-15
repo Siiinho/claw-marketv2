@@ -1,6 +1,8 @@
 // Integração de catálogo de produtos do mercado brasileiro (por código de barras / GTIN-EAN).
 // Fonte: Open Food Facts (grátis, sem chave, muitos produtos BR, permite uso no frontend).
 // Simula o efeito de "puxar do PDV": digita/escaneia o código e o produto vem preenchido.
+import imagensAprovadas from '../data/imagensProdutosAprovadas.json'
+
 const CATALOGOS_PUBLICOS = [
   { id: 'open-food-facts', dominio: 'world.openfoodfacts.org', nome: 'Open Food Facts' },
   { id: 'open-beauty-facts', dominio: 'world.openbeautyfacts.org', nome: 'Open Beauty Facts' },
@@ -25,7 +27,8 @@ const CACHE_CATALOGO = new Map()
 const BANCO_IMAGENS = 'clawmarket-imagens-produtos'
 const LOJA_IMAGENS = 'imagens'
 const REVALIDAR_EMBALAGEM_MS = 30 * 24 * 60 * 60 * 1000
-const TRATAMENTO_PACKSHOT = 'packshot-estudio-v5'
+const TRATAMENTO_PACKSHOT = 'packshot-estudio-v8-transparente-hd'
+const MINIMO_MAIOR_LADO_FONTE = 700
 let promessaBancoImagens
 const IMAGENS_LOCAIS = import.meta.glob([
   '../assets/produtos/*.jpg',
@@ -37,6 +40,44 @@ const IMAGENS_LOCAIS = import.meta.glob([
   query: '?url',
   import: 'default',
 })
+
+async function fetchComTimeout(url, opcoes = {}, tempo = 10000) {
+  if (typeof AbortController === 'undefined') return fetch(url, opcoes)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), tempo)
+  try {
+    return await fetch(url, { ...opcoes, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function abrirImagemDoBlob(blob) {
+  if (typeof createImageBitmap === 'function') {
+    const bitmap = await createImageBitmap(blob)
+    return {
+      fonte: bitmap,
+      largura: bitmap.width,
+      altura: bitmap.height,
+      liberar: () => bitmap.close?.(),
+    }
+  }
+
+  const urlLocal = URL.createObjectURL(blob)
+  const img = new Image()
+  img.decoding = 'async'
+  await new Promise((resolve, reject) => {
+    img.onload = resolve
+    img.onerror = () => reject(new Error('Formato de imagem não suportado neste aparelho.'))
+    img.src = urlLocal
+  })
+  return {
+    fonte: img,
+    largura: img.naturalWidth,
+    altura: img.naturalHeight,
+    liberar: () => URL.revokeObjectURL(urlLocal),
+  }
+}
 
 // heurística: mapeia o produto para um dos 9 setores do app
 const SETOR_REGRAS = [
@@ -237,23 +278,28 @@ function recortarProdutoDaFoto(canvas) {
 
 // Baixa a fotografia e transforma em packshot de estúdio, pronto para o jornal.
 async function imagemParaDataURL(url) {
+  let imagemAberta
   try {
-    const r = await fetch(url)
-    if (!r.ok) return url
+    const r = await fetchComTimeout(url, {}, 15000)
+    if (!r.ok) return null
     const blob = await r.blob()
-    const bitmap = await createImageBitmap(blob)
-    const max = 1400
-    const escala = Math.min(1, max / Math.max(bitmap.width, bitmap.height))
-    const largura = Math.max(1, Math.round(bitmap.width * escala))
-    const altura = Math.max(1, Math.round(bitmap.height * escala))
+    imagemAberta = await abrirImagemDoBlob(blob)
+    const { fonte, largura: larguraFonte, altura: alturaFonte } = imagemAberta
+    if (Math.max(larguraFonte, alturaFonte) < MINIMO_MAIOR_LADO_FONTE) return null
+    // A nitidez vem da fonte original. Imagens pequenas não são ampliadas
+    // agressivamente, pois isso só aumenta o desfoque na impressão.
+    const maximoPackshot = 1800
+    const maiorLado = Math.max(larguraFonte, alturaFonte)
+    const escala = Math.min(1, maximoPackshot / Math.max(1, maiorLado))
+    const largura = Math.max(1, Math.round(larguraFonte * escala))
+    const altura = Math.max(1, Math.round(alturaFonte * escala))
     const origem = document.createElement('canvas')
     origem.width = largura
     origem.height = altura
     const origemCtx = origem.getContext('2d')
     origemCtx.imageSmoothingEnabled = true
     origemCtx.imageSmoothingQuality = 'high'
-    origemCtx.drawImage(bitmap, 0, 0, largura, altura)
-    bitmap.close?.()
+    origemCtx.drawImage(fonte, 0, 0, largura, altura)
 
     const recorte = recortarProdutoDaFoto(origem)
     const lado = 1000
@@ -263,11 +309,14 @@ async function imagemParaDataURL(url) {
     const ctx = canvas.getContext('2d')
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, lado, lado)
+    ctx.clearRect(0, 0, lado, lado)
 
     const limiteProduto = lado * 0.82
-    const escalaProduto = Math.min(limiteProduto / recorte.largura, limiteProduto / recorte.altura)
+    const escalaProduto = Math.min(
+      limiteProduto / recorte.largura,
+      limiteProduto / recorte.altura,
+      1.15
+    )
     const destinoW = Math.max(1, Math.round(recorte.largura * escalaProduto))
     const destinoH = Math.max(1, Math.round(recorte.altura * escalaProduto))
     const destinoX = Math.round((lado - destinoW) / 2)
@@ -288,9 +337,21 @@ async function imagemParaDataURL(url) {
       recorte.x, recorte.y, recorte.largura, recorte.altura,
       destinoX, destinoY, destinoW, destinoH
     )
-    return canvas.toDataURL('image/jpeg', 0.92)
+
+    // Uma embalagem pronta para encarte precisa conservar área transparente.
+    // Se a remoção automática não separou o fundo, rejeitamos a foto em vez de
+    // publicar um quadrado branco ou uma imagem de baixa qualidade no jornal.
+    const pixelsFinais = ctx.getImageData(0, 0, lado, lado).data
+    let transparentes = 0
+    for (let i = 3; i < pixelsFinais.length; i += 4) {
+      if (pixelsFinais[i] < 245) transparentes += 1
+    }
+    if (transparentes / (lado * lado) < 0.04) return null
+    return canvas.toDataURL('image/png')
   } catch (_) {
-    return url
+    return null
+  } finally {
+    imagemAberta?.liberar?.()
   }
 }
 
@@ -340,6 +401,11 @@ function respostaImagemSalva(registro) {
     origem: registro.origem,
     origemNome: registro.origemNome,
     imagemOriginal: registro.imagemOriginal,
+    imagemFonteUrl: registro.imagemFonteUrl || registro.imagemOriginal,
+    imagemPaginaUrl: registro.imagemPaginaUrl || null,
+    imagemLargura: registro.imagemLargura || null,
+    imagemAltura: registro.imagemAltura || null,
+    imagemAprovada: Boolean(registro.imagemAprovada),
     correspondencia: 'codigo-exato',
     imagemAltaResolucao: registro.imagemAltaResolucao,
     imagemIlustrativa: false,
@@ -376,7 +442,7 @@ async function consultarCatalogoExato(codigo, setor = '', opcoes = {}) {
       const endpoint =
         `https://${catalogo.dominio}/api/v2/product/${encodeURIComponent(c)}.json` +
         `?fields=${encodeURIComponent(CAMPOS_CATALOGO)}&lc=pt&cc=br`
-      const r = await fetch(endpoint, { signal: AbortSignal.timeout(8000) })
+      const r = await fetchComTimeout(endpoint, {}, 8000)
       if (!r.ok) continue
       const j = await r.json()
       if (j.status !== 1 || !j.product) continue
@@ -396,6 +462,8 @@ async function consultarCatalogoExato(codigo, setor = '', opcoes = {}) {
         setor: inferirSetor(textoSetor),
         imagem: imagemOriginal && opcoes.baixarImagem !== false ? await imagemParaDataURL(imagemOriginal) : null,
         imagemOriginal,
+        imagemFonteUrl: imagemOriginal,
+        imagemPaginaUrl: `https://${catalogo.dominio}/product/${encodeURIComponent(c)}`,
         imagemAltaResolucao: Boolean(imagemOriginal),
         imagemIlustrativa: false,
         correspondencia: 'codigo-exato',
@@ -429,12 +497,97 @@ function imagemLocalPorCodigo(codigo) {
 
 // Retorna somente fotografia associada ao código exato.
 // Primeiro usa os arquivos locais e depois quatro bancos públicos especializados.
+async function prepararImagemLocal(codigo, dados, local, aprovada = null) {
+  const imagem = await imagemParaDataURL(local)
+  const maiorLado = Math.max(aprovada?.largura || 0, aprovada?.altura || 0)
+  const registro = {
+    codigoBarras: codigo,
+    imagem,
+    marca: dados.marca || '',
+    setor: dados.setor || '',
+    origem: aprovada ? 'catalogo-local-aprovado' : 'catalogo-local-legado',
+    origemNome: aprovada?.origemNome || 'Catálogo local configurado',
+    imagemOriginal: `catalogo-local:${codigo}`,
+    imagemFonteUrl: aprovada?.imagemFonteUrl || null,
+    imagemPaginaUrl: aprovada?.imagemPaginaUrl || null,
+    imagemLargura: aprovada?.largura || null,
+    imagemAltura: aprovada?.altura || null,
+    imagemAprovada: Boolean(aprovada),
+    correspondencia: 'codigo-exato',
+    imagemAltaResolucao: maiorLado >= 1000,
+    imagemIlustrativa: false,
+    tratamento: TRATAMENTO_PACKSHOT,
+    salvoEm: new Date().toISOString(),
+    verificadoEm: new Date().toISOString(),
+  }
+  if (String(imagem).startsWith('data:')) await gravarImagemSalva(registro)
+  return respostaImagemSalva(registro)
+}
+
+// Consulta a função Python em produção. Ela mantém a mercadologia configurada como
+// fonte de verdade e usa a busca de imagens apenas para completar a embalagem.
+export async function buscarProdutoAutomatizado(codigo, produtoBase = null) {
+  const c = String(codigo || '').replace(/\D/g, '').trim()
+  if (!c || typeof fetch !== 'function' || globalThis.location?.protocol === 'file:') return null
+
+  try {
+    const resposta = await fetch(`/api/produto?codigo=${encodeURIComponent(c)}`, {
+      headers: { Accept: 'application/json' },
+    })
+    if (!resposta.ok && resposta.status !== 404) return null
+    const dados = await resposta.json()
+    const produto = dados?.produto || produtoBase
+    const fonte = dados?.imagem
+    let foto = null
+
+    if (fonte?.dataUrl) {
+      const imagem = await imagemParaDataURL(fonte.dataUrl)
+      if (String(imagem).startsWith('data:')) {
+        const registro = {
+          codigoBarras: c,
+          imagem,
+          marca: fonte.marca || produto?.marca || '',
+          setor: produto?.setor || '',
+          origem: fonte.origem || 'automacao-python',
+          origemNome: fonte.origemNome || 'Automação de produtos',
+          imagemOriginal: fonte.url,
+          imagemFonteUrl: fonte.url,
+          imagemPaginaUrl: fonte.paginaUrl || null,
+          imagemLargura: null,
+          imagemAltura: null,
+          imagemAprovada: fonte.correspondencia === 'codigo-exato',
+          correspondencia: fonte.correspondencia || 'busca-por-codigo-e-nome',
+          imagemAltaResolucao: true,
+          imagemIlustrativa: fonte.correspondencia !== 'codigo-exato',
+          tratamento: TRATAMENTO_PACKSHOT,
+          salvoEm: new Date().toISOString(),
+          verificadoEm: new Date().toISOString(),
+        }
+        await gravarImagemSalva(registro)
+        foto = respostaImagemSalva(registro)
+      }
+    }
+
+    return {
+      encontrado: Boolean(dados?.encontrado),
+      produto,
+      foto,
+      googleConfigurado: Boolean(dados?.googleConfigurado),
+      fonteMercadologia: dados?.fonteMercadologia || null,
+    }
+  } catch (_) {
+    // O app continua operacional fora da Vercel usando os catálogos do cliente.
+    return null
+  }
+}
+
 export async function buscarImagemProduto(produtoOuCodigo, opcoes = {}) {
   const dados = typeof produtoOuCodigo === 'object' ? produtoOuCodigo : { codigoBarras: produtoOuCodigo }
   const c = String(dados.codigoBarras || '').replace(/\D/g, '').trim()
   if (!c) return null
 
   const salva = await lerImagemSalva(c)
+  const aprovada = imagensAprovadas[c] || null
   const agora = Date.now()
   const cacheAtual =
     salva &&
@@ -444,47 +597,26 @@ export async function buscarImagemProduto(produtoOuCodigo, opcoes = {}) {
   if (salva && cacheAtual && !opcoes.forcarAtualizacao) return respostaImagemSalva(salva)
 
   const local = imagemLocalPorCodigo(c)
-  if (local && !opcoes.forcarAtualizacao) {
-    const imagem = await imagemParaDataURL(local)
-    const registroLocal = {
-      codigoBarras: c,
-      imagem,
-      marca: dados.marca || '',
-      setor: dados.setor || '',
-      origem: 'catalogo-local',
-      origemNome: 'Catálogo local Bengala',
-      imagemOriginal: `catalogo-local:${c}`,
-      correspondencia: 'codigo-exato',
-      imagemAltaResolucao: true,
-      imagemIlustrativa: false,
-      tratamento: TRATAMENTO_PACKSHOT,
-      salvoEm: new Date().toISOString(),
-      verificadoEm: new Date().toISOString(),
-    }
-    if (String(imagem).startsWith('data:')) await gravarImagemSalva(registroLocal)
-    return respostaImagemSalva(registroLocal)
+  if (local && aprovada && !opcoes.forcarAtualizacao) {
+    const preparada = await prepararImagemLocal(c, dados, local, aprovada)
+    if (preparada) return preparada
   }
 
-  if (salva && salva.tratamento !== TRATAMENTO_PACKSHOT && !opcoes.forcarAtualizacao) {
-    const imagemTratada = await imagemParaDataURL(salva.imagem)
-    const atualizada = {
-      ...salva,
-      imagem: imagemTratada,
-      tratamento: TRATAMENTO_PACKSHOT,
-      salvoEm: new Date().toISOString(),
-      verificadoEm: new Date().toISOString(),
-    }
-    if (String(imagemTratada).startsWith('data:')) await gravarImagemSalva(atualizada)
-    return respostaImagemSalva(atualizada)
+  if (!opcoes.ignorarBackend) {
+    const automatizado = await buscarProdutoAutomatizado(c, dados)
+    if (automatizado?.foto) return automatizado.foto
   }
 
-  // Consulta apenas os metadados primeiro. A URL contém a revisão da embalagem.
   const catalogo = await buscarProdutoCatalogo(c, {
     setor: dados.setor,
     baixarImagem: false,
     ignorarCache: true,
   })
-  if (!catalogo?.imagemOriginal) return respostaImagemSalva(salva)
+
+  if (!catalogo?.imagemOriginal) {
+    if (local) return prepararImagemLocal(c, dados, local, aprovada)
+    return respostaImagemSalva(salva)
+  }
 
   if (salva && salva.imagemOriginal === catalogo.imagemOriginal && !opcoes.forcarAtualizacao) {
     const confirmado = { ...salva, verificadoEm: new Date().toISOString() }
@@ -492,8 +624,6 @@ export async function buscarImagemProduto(produtoOuCodigo, opcoes = {}) {
     return respostaImagemSalva(confirmado)
   }
 
-  // Só baixa e prepara outra imagem quando a revisão pública da embalagem mudou
-  // ou quando o gerente confirma manualmente a troca.
   const imagem = await imagemParaDataURL(catalogo.imagemOriginal)
   if (!imagem) return respostaImagemSalva(salva)
   const permanente = String(imagem).startsWith('data:')
@@ -505,6 +635,11 @@ export async function buscarImagemProduto(produtoOuCodigo, opcoes = {}) {
     origem: catalogo.origem,
     origemNome: catalogo.origemNome,
     imagemOriginal: catalogo.imagemOriginal,
+    imagemFonteUrl: catalogo.imagemFonteUrl || catalogo.imagemOriginal,
+    imagemPaginaUrl: catalogo.imagemPaginaUrl || null,
+    imagemLargura: null,
+    imagemAltura: null,
+    imagemAprovada: false,
     correspondencia: catalogo.correspondencia,
     imagemAltaResolucao: catalogo.imagemAltaResolucao,
     imagemIlustrativa: false,
@@ -520,20 +655,33 @@ export async function buscarImagemProduto(produtoOuCodigo, opcoes = {}) {
 }
 
 export function imagemProdutoPrecisaTratamento(produto) {
-  return Boolean(produto?.imagem && produto.imagemTratamento !== TRATAMENTO_PACKSHOT)
+  if (!produto?.imagem) return false
+  const chave = String(produto.codigoBarras || produto.id || '').replace(/\s/g, '')
+  const aprovada = imagensAprovadas[chave]
+  if (aprovada && produto.imagemFonteUrl !== aprovada.imagemFonteUrl) return true
+  return produto.imagemTratamento !== TRATAMENTO_PACKSHOT
 }
 
 export async function prepararProdutoParaJornal(produto) {
-  if (!imagemProdutoPrecisaTratamento(produto)) return produto
   const chave = String(produto.codigoBarras || produto.id || '').replace(/\s/g, '')
   if (!chave) return produto
+  if (!imagemProdutoPrecisaTratamento(produto)) return produto
+
+  const local = imagemLocalPorCodigo(chave)
+  const aprovada = imagensAprovadas[chave] || null
+  if (local && aprovada) {
+    const preparada = await prepararImagemLocal(chave, produto, local, aprovada)
+    if (preparada) return { ...produto, ...preparada }
+  }
 
   const salva = await lerImagemSalva(chave)
   if (salva?.tratamento === TRATAMENTO_PACKSHOT) {
     return { ...produto, ...respostaImagemSalva(salva) }
   }
 
-  const local = imagemLocalPorCodigo(chave)
+  const automatizado = await buscarProdutoAutomatizado(chave, produto)
+  if (automatizado?.foto) return { ...produto, ...automatizado.foto }
+
   const fonteOriginal =
     local ||
     (String(produto.imagemOriginal || '').startsWith('http') ? produto.imagemOriginal : null) ||
@@ -548,6 +696,11 @@ export async function prepararProdutoParaJornal(produto) {
     origem: produto.imagemOrigem || 'imagem-do-produto',
     origemNome: produto.imagemOrigemNome || 'Imagem cadastrada',
     imagemOriginal: produto.imagemOriginal || `cadastro:${chave}`,
+    imagemFonteUrl: produto.imagemFonteUrl || produto.imagemOriginal || null,
+    imagemPaginaUrl: produto.imagemPaginaUrl || null,
+    imagemLargura: produto.imagemLargura || null,
+    imagemAltura: produto.imagemAltura || null,
+    imagemAprovada: Boolean(produto.imagemAprovada),
     correspondencia: produto.imagemCorrespondencia || 'codigo-exato',
     imagemAltaResolucao: true,
     imagemIlustrativa: false,

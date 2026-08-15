@@ -6,19 +6,26 @@ import { setorById, formatBRL, percentDesc, formatData, dataISOmaisDias } from '
 import { exportarPNG } from '../lib/exportar'
 
 const MODELOS = [
-  { id: 'oficial', nome: 'Bengala Oficial', fundo: '#141414', faixa: '#000000', destaque: '#ffd23f', texto: '#ffffff', borda: '#d4a94e' },
-  { id: 'classico', nome: 'Bengala Clássico', fundo: '#7a241b', faixa: '#e23a2e', destaque: '#f47b36', texto: '#fbf6ee', borda: 'transparent' },
+  { id: 'marca', nome: 'Cores da marca', fundo: '#082b4f', faixa: '#e4232e', destaque: '#ffc928', texto: '#ffffff', borda: 'transparent' },
+  { id: 'classico', nome: 'Clássico', fundo: '#7a241b', faixa: '#e23a2e', destaque: '#f47b36', texto: '#fbf6ee', borda: 'transparent' },
   { id: 'vermelho', nome: 'Vermelho Vivo', fundo: '#e23a2e', faixa: '#c42e23', destaque: '#ffd23f', texto: '#ffffff', borda: 'transparent' },
   { id: 'minimal', nome: 'Minimalista', fundo: '#ffffff', faixa: '#f3ead9', destaque: '#e23a2e', texto: '#2a1a16', borda: '#e6ddcd' },
 ]
 
 export default function Cartazes() {
   const navigate = useNavigate()
-  const { produtos, fila, ofertaDoProduto, toast } = useStore()
+  const { produtos, fila, ofertaDoProduto, toast, config } = useStore()
   const ref = useRef(null)
   const [modo, setModo] = useState('unico') // unico | placa
-  const [modelo, setModelo] = useState(MODELOS[0])
+  const [modeloId, setModeloId] = useState('marca')
   const [exportando, setExportando] = useState(false)
+  const modelos = useMemo(() => MODELOS.map((modelo) => modelo.id === 'marca' ? {
+    ...modelo,
+    fundo: config.corSecundaria || modelo.fundo,
+    faixa: config.corPrimaria || modelo.faixa,
+    destaque: config.corDestaque || modelo.destaque,
+  } : modelo), [config.corPrimaria, config.corSecundaria, config.corDestaque])
+  const modelo = modelos.find((item) => item.id === modeloId) || modelos[0]
 
   const elegiveis = useMemo(
     () => produtos.filter((p) => p.precoPromo || ofertaDoProduto(p.id) || p.naFila),
@@ -43,7 +50,7 @@ export default function Cartazes() {
   const salvar = async () => {
     setExportando(true)
     try {
-      await exportarPNG(ref.current, modo === 'placa' ? 'placa-ofertas-bengala' : `cartaz-${produto?.nome?.slice(0, 20) || 'bengala'}`)
+      await exportarPNG(ref.current, modo === 'placa' ? 'placa-ofertas' : `cartaz-${produto?.nome?.slice(0, 20) || 'produto'}`)
       toast(modo === 'placa' ? 'Placa de ofertas exportada!' : 'Cartaz exportado em PNG!')
     } catch (e) {
       toast('Erro ao exportar.', 'erro')
@@ -120,8 +127,8 @@ export default function Cartazes() {
         <div className="card-bengala p-3">
           <p className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-ink-soft">Modelo</p>
           <div className="stagger grid grid-cols-2 gap-2">
-            {MODELOS.map((m) => (
-              <button key={m.id} onClick={() => setModelo(m)} className={`rounded-lg border-2 p-2 text-left ${modelo.id === m.id ? 'border-bengala' : 'border-transparent hover:border-ink-soft/20'}`}>
+            {modelos.map((m) => (
+              <button key={m.id} onClick={() => setModeloId(m.id)} className={`rounded-lg border-2 p-2 text-left ${modelo.id === m.id ? 'border-bengala' : 'border-transparent hover:border-ink-soft/20'}`}>
                 <div className="mb-1 flex gap-1">
                   <span className="h-4 w-4 rounded" style={{ background: m.fundo, border: '1px solid #0002' }} />
                   <span className="h-4 w-4 rounded" style={{ background: m.faixa, border: '1px solid #0002' }} />
@@ -143,7 +150,7 @@ export default function Cartazes() {
         {modo === 'unico' && produto && (
           <div ref={ref} className="h-fit w-full max-w-sm overflow-hidden rounded-2xl" style={{ background: modelo.fundo, color: modelo.texto, border: `1.5px solid ${modelo.borda}` }}>
             <div className="px-5 py-3 text-center" style={{ background: modelo.faixa, borderBottom: oficial ? '1px solid #d4a94e' : 'none' }}>
-              <div className="text-lg font-bold" style={{ color: minimal ? '#7a241b' : oficial ? '#ffd23f' : modelo.texto }}>Bengala Supermercado</div>
+              <div className="flex items-center justify-center gap-2 text-lg font-bold" style={{ color: minimal ? '#7a241b' : modelo.destaque || modelo.texto }}><Logo h={30} chip /> {config.nomeMercado}</div>
               <div className="text-xs font-bold italic tracking-wide" style={{ color: minimal ? '#6b5a54' : oficial ? '#ff4436' : modelo.texto, opacity: oficial ? 1 : 0.85 }}>SUPER OFERTA!</div>
             </div>
 

@@ -72,6 +72,13 @@ export default function Produtos() {
       marca: res.marca || f.marca,
       setor: res.setor || f.setor,
       imagem: res.imagem || f.imagem,
+      imagemOrigem: res.origem || null,
+      imagemOrigemNome: res.origemNome || null,
+      imagemOriginal: res.imagemOriginal || null,
+      imagemFonteUrl: res.imagemFonteUrl || null,
+      imagemPaginaUrl: res.imagemPaginaUrl || null,
+      imagemCorrespondencia: res.correspondencia || null,
+      imagemAltaResolucao: Boolean(res.imagemAltaResolucao),
       codigoBarras: res.codigoBarras,
     }))
     toast('Produto importado do catálogo!')
@@ -89,10 +96,17 @@ export default function Produtos() {
       imagemOrigem: foto.origem,
       imagemOrigemNome: foto.origemNome,
       imagemOriginal: foto.imagemOriginal,
+      imagemFonteUrl: foto.imagemFonteUrl,
+      imagemPaginaUrl: foto.imagemPaginaUrl,
+      imagemLargura: foto.imagemLargura,
+      imagemAltura: foto.imagemAltura,
+      imagemAprovada: Boolean(foto.imagemAprovada),
       imagemCorrespondencia: foto.correspondencia,
       imagemAltaResolucao: Boolean(foto.imagemAltaResolucao),
       imagemIlustrativa: false,
       imagemCachePermanente: Boolean(foto.imagemCachePermanente),
+      imagemTratada: Boolean(foto.imagemTratada),
+      imagemTratamento: foto.imagemTratamento || null,
       imagemSalvaEm: foto.imagemSalvaEm,
     }))
     toast('Nova embalagem conferida e gravada!')
@@ -313,6 +327,16 @@ export default function Produtos() {
                   {form.imagem && <button type="button" onClick={() => setForm({ ...form, imagem: null })} className="rounded-lg px-2 py-1.5 text-sm text-critical hover:bg-critical/10">Remover</button>}
                 </div>
                 <input className={inputCls} placeholder="ou cole uma URL de imagem" value={form.imagem && !String(form.imagem).startsWith('data:') ? form.imagem : ''} onChange={(e) => setForm({ ...form, imagem: e.target.value || null })} />
+                {(form.imagemPaginaUrl || form.imagemFonteUrl) && (
+                  <a
+                    href={form.imagemPaginaUrl || form.imagemFonteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-info underline underline-offset-2"
+                  >
+                    <Icon name="ExternalLink" size={12} /> Ver origem da imagem
+                  </a>
+                )}
               </div>
             </div>
             <div className="col-span-2"><Campo label="Nome" obrigatorio><input className={inputCls} value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></Campo></div>

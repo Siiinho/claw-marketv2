@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ===== Design System Bengala (cores derivadas da logo) ===== */
+/* ===== Design System de marca configurável ===== */
 @theme {
   --color-cream: #fff8ed;
   --color-cream-200: #f7ecd8;
@@ -68,7 +68,7 @@
   /* foco visível consistente para teclado */
   button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px var(--color-cream), 0 0 0 4px rgba(226, 58, 46, 0.45);
+    box-shadow: 0 0 0 2px var(--color-cream), 0 0 0 4px color-mix(in srgb, var(--color-bengala) 45%, transparent);
   }
 
   ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -90,7 +90,7 @@
   }
   .card-int:hover {
     transform: translateY(-3px);
-    box-shadow: 0 2px 8px rgba(228, 35, 46, 0.12), 0 16px 34px rgba(8, 43, 79, 0.13);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--color-bengala) 12%, transparent), 0 16px 34px color-mix(in srgb, var(--color-navy) 13%, transparent);
   }
   /* chip de ícone que "brinca" no hover do card */
   .chip { transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -100,18 +100,18 @@
   .accent { position: relative; padding-left: 13px; }
   .accent::before {
     content: ""; position: absolute; left: 0; top: 3px; bottom: 3px; width: 4px;
-    border-radius: 999px; background: linear-gradient(180deg, #e4232e, #ffc928);
+    border-radius: 999px; background: linear-gradient(180deg, var(--color-bengala), var(--color-offer));
   }
 
-  /* expressão promocional controlada, inspirada no painel semântico Bengala */
+  /* expressão promocional controlada pela identidade do estabelecimento */
   .promo-surface {
     position: relative;
     isolation: isolate;
     overflow: hidden;
     color: #fff;
     background:
-      radial-gradient(circle at 88% 18%, rgba(255, 201, 40, 0.34) 0 3px, transparent 4px),
-      linear-gradient(118deg, #082b4f 0 48%, #123f6b 48% 60%, #e4232e 60% 100%);
+      radial-gradient(circle at 88% 18%, color-mix(in srgb, var(--color-offer) 34%, transparent) 0 3px, transparent 4px),
+      linear-gradient(118deg, var(--color-navy) 0 48%, var(--color-navy-light) 48% 60%, var(--color-bengala) 60% 100%);
     box-shadow: 0 16px 36px rgba(8, 43, 79, 0.18);
   }
   .promo-surface::after {
@@ -130,8 +130,8 @@
     align-items: center;
     gap: 0.4rem;
     border-radius: 999px;
-    background: #ffc928;
-    color: #082b4f;
+    background: var(--color-offer);
+    color: var(--color-navy);
     padding: 0.28rem 0.65rem;
     font-size: 0.68rem;
     font-weight: 800;
@@ -147,10 +147,10 @@
     display: inline-flex;
     align-items: center;
     border-radius: 0.55rem 0.55rem 0.55rem 0.15rem;
-    background: #ffc928;
-    color: #082b4f;
+    background: var(--color-offer);
+    color: var(--color-navy);
     font-weight: 800;
-    box-shadow: 3px 3px 0 rgba(228, 35, 46, 0.88);
+    box-shadow: 3px 3px 0 color-mix(in srgb, var(--color-bengala) 88%, transparent);
   }
   /* preço estilo varejo: R$ pequeno + reais grande + centavos sobrescrito */
   .preco-varejo { line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; }

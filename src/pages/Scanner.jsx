@@ -4,7 +4,7 @@ import { useStore } from '../store/StoreContext'
 import { Icon, StatusBadge, ProdutoThumb, Botao, PrecoVarejo, inputCls } from '../components/ui'
 import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, precoComRegra, labelDias } from '../lib/utils'
 import { buscarProdutoBengala } from '../lib/catalogoBengala'
-import { buscarImagemProduto, imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
+import { buscarImagemProduto, buscarProdutoAutomatizado, imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
 
 export default function Scanner() {
   const navigate = useNavigate()
@@ -45,15 +45,41 @@ export default function Scanner() {
     try {
       let p = produtos.find((x) => x.codigoBarras === c)
 
-      if (p && imagemProdutoPrecisaTratamento(p)) {
-        p = await prepararProdutoParaJornal(p)
+      if (p && (!p.imagem || imagemProdutoPrecisaTratamento(p))) {
+        if (!p.imagem) {
+          const automatizado = await buscarProdutoAutomatizado(c, p)
+          const foto = automatizado?.foto || await buscarImagemProduto(p, { ignorarBackend: true })
+          if (foto?.imagem) {
+            p = {
+              ...p,
+              marca: foto.marca || p.marca || '',
+              imagem: foto.imagem,
+              imagemOrigem: foto.origem,
+              imagemOrigemNome: foto.origemNome,
+              imagemOriginal: foto.imagemOriginal,
+              imagemFonteUrl: foto.imagemFonteUrl,
+              imagemPaginaUrl: foto.imagemPaginaUrl,
+              imagemCorrespondencia: foto.correspondencia,
+              imagemAltaResolucao: Boolean(foto.imagemAltaResolucao),
+              imagemIlustrativa: Boolean(foto.imagemIlustrativa),
+              imagemTratada: Boolean(foto.imagemTratada),
+              imagemTratamento: foto.imagemTratamento,
+              imagemCachePermanente: Boolean(foto.imagemCachePermanente),
+              imagemSalvaEm: foto.imagemSalvaEm,
+            }
+          }
+        } else {
+          p = await prepararProdutoParaJornal(p)
+        }
         salvarProduto(p)
       }
 
       if (!p) {
-        const catalogo = await buscarProdutoBengala(c)
+        const catalogoLocal = await buscarProdutoBengala(c)
+        const automatizado = await buscarProdutoAutomatizado(c, catalogoLocal)
+        const catalogo = automatizado?.produto || catalogoLocal
         if (catalogo) {
-          const foto = await buscarImagemProduto(catalogo)
+          const foto = automatizado?.foto || await buscarImagemProduto(catalogo, { ignorarBackend: true })
           p = {
             ...catalogo,
             id: `mercadologia-${catalogo.codigoInterno}`,
@@ -63,6 +89,11 @@ export default function Scanner() {
             imagemOrigem: foto?.origem || null,
             imagemOrigemNome: foto?.origemNome || null,
             imagemOriginal: foto?.imagemOriginal || null,
+            imagemFonteUrl: foto?.imagemFonteUrl || null,
+            imagemPaginaUrl: foto?.imagemPaginaUrl || null,
+            imagemLargura: foto?.imagemLargura || null,
+            imagemAltura: foto?.imagemAltura || null,
+            imagemAprovada: Boolean(foto?.imagemAprovada),
             imagemCorrespondencia: foto?.correspondencia || null,
             imagemAltaResolucao: Boolean(foto?.imagemAltaResolucao),
             imagemIlustrativa: Boolean(foto?.imagemIlustrativa),
@@ -77,8 +108,8 @@ export default function Scanner() {
           salvarProduto(p)
           toast(
             foto?.imagem
-              ? `${p.nome}: produto e foto reconhecidos.`
-              : `${p.nome}: produto reconhecido; foto exata não localizada.`,
+              ? `${p.nome}: mercadologia e imagem vinculadas ao código ${p.codigoBarras}.`
+              : `${p.nome}: mercadologia vinculada; imagem exata ainda não localizada.`,
             foto?.imagem ? 'sucesso' : 'info'
           )
         }
@@ -163,7 +194,7 @@ export default function Scanner() {
     toast(
       jaEstavaNaFila
         ? `${resultado.nome}: validade atualizada; o produto já estava na fila.`
-        : `${resultado.nome}: confirmado na fila do jornal da Loja 3.`
+        : `${resultado.nome}: confirmado na fila do jornal de ${config.nomeMercado}.`
     )
     setVeredito(v)
     setResultado(atualizado)
@@ -221,14 +252,31 @@ export default function Scanner() {
     try {
       const { BrowserMultiFormatReader } = await import('@zxing/browser')
       const reader = new BrowserMultiFormatReader()
-      controlsRef.current = await reader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
+      const aoLer = (result) => {
         if (result) {
           const cod = result.getText()
           pararCam()
           buscar(cod)
           toast(`Código lido: ${cod}`)
         }
-      })
+      }
+      try {
+        controlsRef.current = await reader.decodeFromConstraints(
+          {
+            audio: false,
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+          },
+          videoRef.current,
+          aoLer
+        )
+      } catch (_) {
+        // Webcams de PC e WebViews antigos podem não aceitar facingMode.
+        controlsRef.current = await reader.decodeFromVideoDevice(undefined, videoRef.current, aoLer)
+      }
     } catch (e) {
       setScanning(false)
       toast('Não foi possível acessar a câmera. Verifique a permissão.', 'erro')
@@ -247,7 +295,7 @@ export default function Scanner() {
           </span>
           <div className="min-w-0 flex-1">
             <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-offer px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-navy">
-              <Icon name="Store" size={11} /> Piloto · Loja 3
+              <Icon name="Store" size={11} /> {config.nomeMercado}
             </div>
             <h2 className="font-bold">Escanear para o jornal</h2>
             <p className="text-sm text-cream/75">Bipe, confirme a validade e siga para o próximo. O resto é automático.</p>
@@ -259,8 +307,8 @@ export default function Scanner() {
       </div>
       {/* busca */}
       <div className="card-bengala p-4">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+          <div className="relative min-w-[180px] flex-1 basis-full sm:basis-auto">
             <Icon name="ScanLine" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" />
             <input
               ref={inputRef}
@@ -285,7 +333,7 @@ export default function Scanner() {
         {buscando && (
           <div className="mt-3 flex items-center gap-2 rounded-xl bg-bengala/5 px-3 py-2 text-sm font-medium text-bengala">
             <Icon name="LoaderCircle" size={16} className="animate-spin" />
-            Consultando os 7.860 produtos da mercadologia Bengala...
+            Consultando o catálogo de produtos configurado...
           </div>
         )}
 
@@ -382,7 +430,7 @@ export default function Scanner() {
                 </span>
                 <div className="flex-1">
                   <div className="text-base font-bold leading-tight">
-                    {veredito.jaEstavaNaFila ? 'Validade atualizada na fila!' : 'Confirmado no jornal da Loja 3!'}
+                    {veredito.jaEstavaNaFila ? 'Validade atualizada na fila!' : `Confirmado no jornal de ${config.nomeMercado}!`}
                   </div>
                   <div className="text-sm text-white/85">
                     {labelDias(veredito.dias)}

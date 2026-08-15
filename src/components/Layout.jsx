@@ -26,15 +26,15 @@ const MENU_MOBILE = [
   { key: 'jornal', label: 'Jornal', path: '/jornal', icone: 'Newspaper' },
 ]
 
-function Marca({ colapsado }) {
+function Marca({ colapsado, config }) {
   return (
     <div className="relative flex items-center gap-2.5 overflow-hidden border-b border-white/10 px-3 py-4">
       <span className="pointer-events-none absolute -right-5 -top-7 h-20 w-20 rounded-full border-[14px] border-offer/15" />
       <Logo h={colapsado ? 36 : 40} chip />
       {!colapsado && (
         <div className="relative leading-none">
-          <div className="display-bengala text-[16px] text-white">Cloud Market</div>
-          <div className="mt-1 text-[9px] font-bold uppercase tracking-[0.12em] text-offer">Supermercado Bengala</div>
+          <div className="display-bengala text-[16px] text-white">ClawMarket</div>
+          <div className="mt-1 max-w-[150px] truncate text-[9px] font-bold uppercase tracking-[0.12em] text-offer">{config.nomeMercado}</div>
         </div>
       )}
     </div>
@@ -42,7 +42,7 @@ function Marca({ colapsado }) {
 }
 
 export default function Layout() {
-  const { usuario, logout, lojas, lojaAtiva, setLojaAtiva } = useStore()
+  const { usuario, logout, lojas, lojaAtiva, setLojaAtiva, config } = useStore()
   const location = useLocation()
   const navigate = useNavigate()
   const [colapsado, setColapsado] = useState(false)
@@ -95,7 +95,7 @@ export default function Layout() {
       className="flex h-full flex-col bg-brick text-cream transition-all"
       style={{ width: mobile ? 248 : colapsado ? 64 : 240 }}
     >
-      <Marca colapsado={!mobile && colapsado} />
+      <Marca colapsado={!mobile && colapsado} config={config} />
       <nav className="flex-1 overflow-y-auto px-2 py-3">
         {(mobile || !colapsado) && <p className="mb-1 px-3 text-[9px] font-bold uppercase tracking-[.14em] text-white/35">Principal</p>}
         <div className="space-y-1">
@@ -152,7 +152,7 @@ export default function Layout() {
   )
 
   return (
-    <div className="flex h-screen overflow-hidden bg-cream">
+    <div className="flex h-screen h-dvh overflow-hidden bg-cream">
       {/* sidebar desktop */}
       <div className="hidden md:block">
         <Sidebar mobile={false} />
@@ -170,7 +170,10 @@ export default function Layout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* header */}
-        <header className="z-10 flex min-h-[64px] items-center gap-3 border-b border-navy/8 bg-white px-4 py-2.5 shadow-sm">
+        <header
+          className="z-10 flex min-h-[64px] items-center gap-3 border-b border-navy/8 bg-white px-4 pb-2.5 shadow-sm"
+          style={{ paddingTop: 'max(.625rem, env(safe-area-inset-top))' }}
+        >
           <button
             onClick={() => setDrawerAberto(true)}
             aria-label="Abrir menu"
@@ -189,8 +192,8 @@ export default function Layout() {
             <h1 className="display-bengala truncate text-xl leading-tight text-navy">{atual.label}</h1>
             <p className="truncate text-xs text-ink-soft">{SUBTITULOS[atual.key]}</p>
           </div>
-          <span className="hidden rounded-full bg-offer px-2.5 py-1 text-xs font-black text-navy sm:inline-flex lg:hidden">
-            Piloto · Loja 3
+          <span className="hidden max-w-40 truncate rounded-full bg-offer px-2.5 py-1 text-xs font-black text-navy sm:inline-flex lg:hidden">
+            {lojas.find((loja) => loja.id === lojaAtiva)?.nome || config.nomeMercado}
           </span>
           <OfflineBadge />
           <div className="relative hidden lg:block">

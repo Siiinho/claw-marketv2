@@ -35,16 +35,44 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       devOptions: { enabled: true },
-      workbox: { maximumFileSizeToCacheInBytes: 5 * 1024 * 1024 },
+      workbox: {
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        runtimeCaching: [
+          {
+            urlPattern: ({ url, sameOrigin }) =>
+              sameOrigin &&
+              (/\/templates\//.test(url.pathname) || /\.(?:png|jpe?g|webp|svg)$/i.test(url.pathname)),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'clawmarket-imagens-v1',
+              expiration: { maxEntries: 180, maxAgeSeconds: 30 * 24 * 60 * 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.endsWith('/api/jornal-oficial'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'clawmarket-api-v1',
+              networkTimeoutSeconds: 6,
+              expiration: { maxEntries: 8, maxAgeSeconds: 24 * 60 * 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
       manifest: {
-        name: 'ClawMarket — Bengala Supermercado',
+        id: './',
+        name: 'ClawMarket — Gestão de ofertas e validade',
         short_name: 'ClawMarket',
         description: 'Gestão de validade e ofertas para supermercados',
         lang: 'pt-BR',
         theme_color: '#7a241b',
         background_color: '#fbf6ee',
         display: 'standalone',
-        orientation: 'portrait-primary',
+        orientation: 'any',
         start_url: './',
         scope: './',
         icons: [

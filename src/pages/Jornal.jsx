@@ -9,10 +9,21 @@ import {
 import { exportarPDFPaginas } from '../lib/exportar'
 import { imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
 
-const PRODUTOS_POR_PAGINA = 12
-const TEMPLATE_INTERNO_APROVADO = '/templates/template-ofertas-internas-bengala-v2.png'
-const CABECALHO_INTERNO = '/templates/cabecalho-ofertas-internas-bengala-v2.png'
-const RODAPE_OFICIAL = '/templates/rodape-oficial-bengala.png'
+const PRODUTOS_POR_PAGINA = 4
+const assetPublico = (caminho) => `${import.meta.env.BASE_URL || '/'}${String(caminho).replace(/^\/+/, '')}`
+const CABECALHO_INTERNO = assetPublico('templates/cabecalho-ofertas-internas-bengala-v2.png')
+const RODAPE_OFICIAL = assetPublico('templates/rodape-oficial-bengala.png')
+const TEMPLATE_GERAL = assetPublico('templates/setores/oportunidades-bengala-geral.png')
+
+function imagemCompativelComPDF(src) {
+  if (!src || typeof src !== 'string') return false
+  if (src.startsWith('data:') || src.startsWith('blob:')) return true
+  try {
+    return new URL(src, window.location.href).origin === window.location.origin
+  } catch {
+    return false
+  }
+}
 
 function paginar(itens, tamanho = PRODUTOS_POR_PAGINA) {
   const paginas = []
@@ -36,6 +47,10 @@ function nomeLado(indice) {
   return `Folha ${folha} · ${lado}`
 }
 
+function slugArquivo(texto) {
+  return String(texto || 'mercado').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
 const TEMAS = {
   diaB: { nome: 'Dia B', cor: '#e23a2e', selo: 'ESPECIAL · DIA B', sub: 'Válido AMANHÃ', acento: '#f47b36' },
   copa: { nome: 'Copa', cor: '#1c6e48', selo: 'ESQUENTA DA COPA', sub: 'Ofertas da seleção', acento: '#ffd23f' },
@@ -44,15 +59,15 @@ const TEMAS = {
 }
 
 const TEMPLATE_SETOR = {
-  padaria: '/templates/setores/oportunidades-bengala-padaria.png',
-  laticinios: '/templates/setores/oportunidades-bengala-laticinios.png',
-  frios: '/templates/setores/oportunidades-bengala-frios.png',
-  hortifruti: '/templates/setores/oportunidades-bengala-hortifruti.png',
-  bebidas: '/templates/setores/oportunidades-bengala-bebidas.png',
-  mercearia: '/templates/setores/oportunidades-bengala-mercearia.png',
-  limpeza: '/templates/setores/oportunidades-bengala-limpeza.png',
-  congelados: '/templates/setores/oportunidades-bengala-congelados.png',
-  petshop: '/templates/setores/oportunidades-bengala-pet-shop.png',
+  padaria: assetPublico('templates/setores/oportunidades-bengala-padaria.png'),
+  laticinios: assetPublico('templates/setores/oportunidades-bengala-laticinios.png'),
+  frios: assetPublico('templates/setores/oportunidades-bengala-frios.png'),
+  hortifruti: assetPublico('templates/setores/oportunidades-bengala-hortifruti.png'),
+  bebidas: assetPublico('templates/setores/oportunidades-bengala-bebidas.png'),
+  mercearia: assetPublico('templates/setores/oportunidades-bengala-mercearia.png'),
+  limpeza: assetPublico('templates/setores/oportunidades-bengala-limpeza.png'),
+  congelados: assetPublico('templates/setores/oportunidades-bengala-congelados.png'),
+  petshop: assetPublico('templates/setores/oportunidades-bengala-pet-shop.png'),
 }
 
 export default function Jornal() {
@@ -65,11 +80,13 @@ export default function Jornal() {
   const [tipo, setTipo] = useState('geral') // setor | geral | sazonal
   const [setorSel, setSetorSel] = useState('frios')
   const [temaSel, setTemaSel] = useState('diaB')
-  const [titulo, setTitulo] = useState('Jornal de Ofertas — Bengala')
+  const [titulo, setTitulo] = useState(() => `Jornal de Ofertas - ${config.nomeMercado}`)
   const [excluidos, setExcluidos] = useState(() => new Set())
   const [exportando, setExportando] = useState(false)
+  const [pdfPronto, setPdfPronto] = useState(null)
   const [mostrarRevisao, setMostrarRevisao] = useState(false)
   const pageRefs = useRef([])
+  const revisaoRef = useRef(null)
   const ref = useRef(null)
 
   const tema = TEMAS[temaSel]
@@ -88,6 +105,10 @@ export default function Jornal() {
     })()
     return () => { ativo = false }
   }, [fila, salvarProduto])
+
+  useEffect(() => () => {
+    if (pdfPronto?.url) URL.revokeObjectURL(pdfPronto.url)
+  }, [pdfPronto])
 
   // ---- preço para o jornal ----
   const precoJornal = (p) => {
@@ -108,16 +129,22 @@ export default function Jornal() {
   const ativosDoModelo = tipo === 'setor' ? ativos.filter((p) => p.setor === setorSel) : ativos
   const vencimento = ativosDoModelo.filter((p) => p.origemFila === 'vencimento')
   const regulares = ativosDoModelo.filter((p) => p.origemFila !== 'vencimento')
-  const selo = tipo === 'sazonal' ? tema.selo : tipo === 'setor' ? setorById(setorSel).nome.toUpperCase() : 'SEMANA B'
+  const selo = tipo === 'sazonal' ? tema.selo : tipo === 'setor' ? setorById(setorSel).nome.toUpperCase() : 'PRODUTOS VARIADOS'
 
   // validade AUTOMÁTICA: do hoje até a última validade dos produtos do jornal
-  const itensJornal = [...vencimento, ...regulares]
+  const itensJornal = [...vencimento, ...regulares].sort(
+    (a, b) => diasParaVencer(a.validade) - diasParaVencer(b.validade)
+  )
   const paginasJornal = paginar(itensJornal)
   const bandas = []
   const validadeDe = dataISOmaisDias(0)
-  const validadeAte = itensJornal.length
-    ? itensJornal.map((p) => p.validade).filter(Boolean).sort().slice(-1)[0]
-    : dataISOmaisDias(7)
+  const validadesPublicaveis = itensJornal
+    .map((p) => p.validade)
+    .filter((validade) => validade && diasParaVencer(validade) >= 0)
+    .sort()
+  const validadeAte = validadesPublicaveis.length
+    ? validadesPublicaveis[validadesPublicaveis.length - 1]
+    : validadeDe
   const codigosRepetidos = new Set(
     itensJornal
       .map((p) => p.codigoBarras)
@@ -127,7 +154,10 @@ export default function Jornal() {
     ...itensJornal.filter((p) => !p.validade).map((p) => ({ nivel: 'erro', texto: `${p.nome}: informe a validade.` })),
     ...itensJornal.filter((p) => p.validade && diasParaVencer(p.validade) < 0).map((p) => ({ nivel: 'erro', texto: `${p.nome}: produto vencido não pode ser publicado.` })),
     ...itensJornal.filter((p) => !(Number(p.precoNormal) > 0)).map((p) => ({ nivel: 'erro', texto: `${p.nome}: informe um preço válido.` })),
-    ...itensJornal.filter((p) => !p.imagem).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: imagem ainda não localizada.` })),
+    ...itensJornal.filter((p) => !p.imagem).map((p) => ({ nivel: 'erro', texto: `${p.nome}: imagem ainda não localizada.` })),
+    ...itensJornal.filter((p) => p.imagem && !imagemCompativelComPDF(p.imagem)).map((p) => ({ nivel: 'erro', texto: `${p.nome}: salve a imagem no aplicativo antes de gerar o PDF.` })),
+    ...itensJornal.filter((p) => p.imagem && imagemProdutoPrecisaTratamento(p)).map((p) => ({ nivel: 'erro', texto: `${p.nome}: aguarde a versão nítida com fundo transparente.` })),
+    ...itensJornal.filter((p) => p.imagem && p.imagemAltaResolucao === false).map((p) => ({ nivel: 'erro', texto: `${p.nome}: a imagem disponível tem resolução insuficiente para impressão.` })),
     ...[...codigosRepetidos].map((codigo) => ({ nivel: 'erro', texto: `Código ${codigo} aparece mais de uma vez no jornal.` })),
   ]
   const bloqueiosPDF = problemasPDF.filter((p) => p.nivel === 'erro')
@@ -141,16 +171,37 @@ export default function Jornal() {
   const exportar = async () => {
     setMostrarRevisao(true)
     if (bloqueiosPDF.length) {
-      toast(`Revise ${bloqueiosPDF.length} ${bloqueiosPDF.length === 1 ? 'pendência obrigatória' : 'pendências obrigatórias'} antes do PDF.`, 'erro')
+      requestAnimationFrame(() => revisaoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+      const primeiraPendencia = bloqueiosPDF[0].texto
+      toast(`PDF não gerado: ${primeiraPendencia} Corrija ou retire o produto da fila.`, 'erro')
       return
     }
     setExportando(true)
+    setPdfPronto(null)
     try {
-      await exportarPDFPaginas(pageRefs.current.slice(0, paginasJornal.length), `jornal-bengala-${tipo}`)
-      toast(`Jornal exportado em ${paginasJornal.length} ${paginasJornal.length === 1 ? 'página' : 'páginas'} A4!`)
+      const arquivo = await exportarPDFPaginas(pageRefs.current.slice(0, paginasJornal.length), `jornal-${slugArquivo(config.nomeMercado)}-${tipo}`)
+      setPdfPronto(arquivo)
+      toast(`PDF pronto em ${paginasJornal.length} ${paginasJornal.length === 1 ? 'página' : 'páginas'} A4!`)
+    } catch (e) {
+      console.error('Erro ao exportar o jornal:', e)
+      toast(e?.message || 'Não foi possível exportar o PDF. Recarregue a página e tente novamente.', 'erro')
+    } finally {
+      setExportando(false)
     }
-    catch (e) { toast('Erro ao exportar PDF.', 'erro') }
-    setExportando(false)
+  }
+
+  const compartilharPDF = async () => {
+    if (!pdfPronto?.blob) return
+    try {
+      const arquivo = new File([pdfPronto.blob], pdfPronto.nome, { type: 'application/pdf' })
+      if (!navigator.canShare?.({ files: [arquivo] })) {
+        toast('Neste aparelho, use Abrir/baixar PDF.')
+        return
+      }
+      await navigator.share({ files: [arquivo], title: titulo })
+    } catch (erro) {
+      if (erro?.name !== 'AbortError') toast('Não foi possível compartilhar. Use Abrir/baixar PDF.', 'erro')
+    }
   }
 
   const salvar = () => {
@@ -164,6 +215,7 @@ export default function Jornal() {
       {badge > 0 && <span className="rounded-full bg-coral px-1.5 text-xs font-bold text-white">{badge}</span>}
     </button>
   )
+  const PaginaModelo = PaginaJornalModeloAprovado
 
   return (
     <div className="space-y-5">
@@ -182,7 +234,7 @@ export default function Jornal() {
         </div>
         <div className="grid border-t border-ink-soft/10 sm:grid-cols-3">
           {[
-            ['1', 'Escolha o modelo', tipo === 'setor' ? setorById(setorSel).nome : tipo === 'sazonal' ? tema.nome : 'Mercado inteiro', 'LayoutTemplate'],
+            ['1', 'Escolha o modelo', tipo === 'setor' ? setorById(setorSel).nome : tipo === 'sazonal' ? tema.nome : 'Produtos variados', 'LayoutTemplate'],
             ['2', 'Escaneie os produtos', `${fila.length} ${fila.length === 1 ? 'produto na fila' : 'produtos na fila'}`, 'ScanBarcode'],
             ['3', 'Gere e imprima', itensJornal.length ? `${itensJornal.length} ${itensJornal.length === 1 ? 'produto pronto' : 'produtos prontos'} para o jornal` : 'Aguardando produtos', 'FileDown'],
           ].map(([n, t, sub, ic], i) => (
@@ -219,17 +271,27 @@ export default function Jornal() {
                     </button>
                   ))}
                 </div>
-                <details className="mt-2.5 overflow-hidden rounded-xl border border-navy/10 bg-white">
-                  <summary className="cursor-pointer px-3 py-2 text-xs font-bold text-navy">
-                    Ver design aprovado · Ofertas Internas
-                  </summary>
-                  <img
-                    src={TEMPLATE_INTERNO_APROVADO}
-                    alt="Design aprovado de ofertas internas Bengala"
-                    className="h-44 w-full border-t border-navy/10 object-cover object-top"
-                  />
-                </details>
               </div>
+
+              {tipo === 'geral' && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-ink-soft">Produtos de vários setores no mesmo jornal</p>
+                  <div className="overflow-hidden rounded-xl border border-navy/10" style={{ background: config.corSecundaria }}>
+                    <div className="flex items-center justify-between px-3 py-2 text-white">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Prévia do modelo</span>
+                      <span className="rounded-full px-2 py-0.5 text-[9px] font-extrabold" style={{ background: config.corDestaque, color: config.corSecundaria }}>A4 proporcional</span>
+                    </div>
+                    <div className="flex h-40 items-center gap-3 bg-white p-4">
+                      <Logo h={54} chip />
+                      <div>
+                        <div className="display-bengala text-2xl uppercase leading-none" style={{ color: config.corSecundaria }}>Ofertas internas</div>
+                        <div className="mt-1 text-xs font-bold" style={{ color: config.corPrimaria }}>{config.nomeMercado}</div>
+                        <div className="mt-3 h-2 w-36 rounded-full" style={{ background: config.corDestaque }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {tipo === 'setor' && (
                 <div>
@@ -242,18 +304,20 @@ export default function Jornal() {
                       </button>
                     ))}
                   </div>
-                  <div className="mt-2.5 overflow-hidden rounded-xl border border-navy/10 bg-navy">
+                  <div className="mt-2.5 overflow-hidden rounded-xl border border-navy/10" style={{ background: config.corSecundaria }}>
                     <div className="flex items-center justify-between px-3 py-2 text-white">
                       <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Prévia do modelo</span>
                       <span className="rounded-full bg-offer px-2 py-0.5 text-[9px] font-extrabold text-navy">
                         {setorById(setorSel).nome}
                       </span>
                     </div>
-                    <img
-                      src={TEMPLATE_SETOR[setorSel]}
-                      alt={`Template do setor ${setorById(setorSel).nome}`}
-                      className="h-36 w-full bg-white object-cover object-top"
-                    />
+                    <div className="flex h-40 items-center justify-center bg-white p-4 text-center">
+                      <div>
+                        <Logo h={48} chip />
+                        <div className="display-bengala mt-2 text-xl uppercase" style={{ color: config.corSecundaria }}>{setorById(setorSel).nome}</div>
+                        <div className="mx-auto mt-2 h-2 w-28 rounded-full" style={{ background: config.corPrimaria }} />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -326,12 +390,12 @@ export default function Jornal() {
             )}
 
             {itensJornal.length > 0 && (
-              <div className={`rounded-xl border p-3 text-sm ${bloqueiosPDF.length ? 'border-critical/30 bg-critical/5' : 'border-success/30 bg-success/5'}`}>
+              <div ref={revisaoRef} className={`scroll-mt-4 rounded-xl border p-3 text-sm ${bloqueiosPDF.length ? 'border-critical/30 bg-critical/5' : 'border-success/30 bg-success/5'}`}>
                 <button onClick={() => setMostrarRevisao((v) => !v)} className="flex w-full items-center gap-2 text-left font-bold text-ink">
                   <Icon name={bloqueiosPDF.length ? 'TriangleAlert' : 'BadgeCheck'} size={17} className={bloqueiosPDF.length ? 'text-critical' : 'text-success'} />
                   <span className="flex-1">Revisão antes do PDF</span>
                   <span className="text-xs font-medium text-ink-soft">
-                    {problemasPDF.length ? `${problemasPDF.length} itens para conferir` : 'Tudo pronto'}
+                    {problemasPDF.length ? `${problemasPDF.length} ${problemasPDF.length === 1 ? 'item' : 'itens'} para conferir` : 'Tudo pronto'}
                   </span>
                   <Icon name={mostrarRevisao ? 'ChevronUp' : 'ChevronDown'} size={15} />
                 </button>
@@ -356,6 +420,33 @@ export default function Jornal() {
               <Botao variante="contorno" className="flex-1" onClick={salvar}><Icon name="Save" size={16} /> Salvar</Botao>
               <Botao className="flex-1" onClick={exportar} disabled={exportando || !itensJornal.length}><Icon name="FileDown" size={16} /> {exportando ? 'Gerando...' : 'Gerar PDF'}</Botao>
             </div>
+            {pdfPronto && (
+              <div className="rounded-xl border border-success/30 bg-success/5 p-3">
+                <div className="flex items-start gap-2 text-sm text-success">
+                  <Icon name="BadgeCheck" size={18} className="mt-0.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold">PDF gerado com sucesso</div>
+                    <div className="mt-0.5 text-xs text-ink-soft">Se o download não abriu sozinho, use o botão abaixo.</div>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <a
+                    href={pdfPronto.url}
+                    download={pdfPronto.nome}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-success px-3 py-2 text-sm font-bold text-white"
+                  >
+                    <Icon name="FileDown" size={16} /> Abrir/baixar PDF
+                  </a>
+                  {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                    <button onClick={compartilharPDF} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-success/30 bg-white px-3 py-2 text-sm font-bold text-success">
+                      <Icon name="Share2" size={16} /> Compartilhar
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             {itensJornal.length > 0 && itensJornal.length < 3 && (
               <button onClick={() => navigate('/cartazes')} className="flex w-full items-center justify-center gap-2 rounded-xl border border-coral/30 bg-coral/10 px-3 py-2.5 text-sm font-medium text-coral-dark hover:bg-coral/15">
                 <Icon name="Image" size={16} /> Poucos produtos? Criar cartaz individual
@@ -371,7 +462,7 @@ export default function Jornal() {
                   <span className="font-bold text-ink">{nomeLado(indice)}</span>
                   <span>{itens.length} {itens.length === 1 ? 'produto' : 'produtos'}</span>
                 </div>
-                <PaginaJornalInterno
+                <PaginaModelo
                   ref={(el) => { pageRefs.current[indice] = el }}
                   itens={itens}
                   precoJornal={precoJornal}
@@ -384,6 +475,7 @@ export default function Jornal() {
                   validadeAte={validadeAte}
                   numero={indice + 1}
                   total={paginasJornal.length}
+                  config={config}
                 />
               </div>
             ))}
@@ -489,6 +581,146 @@ export default function Jornal() {
 }
 
 // ---- célula de vencimento (grande ideia) — estilo encarte escuro ----
+function FotoEncarte({ produto, className = '' }) {
+  if (!produto?.imagem) return null
+  return (
+    <img
+      src={produto.imagem}
+      alt={produto.nome}
+      className={`absolute object-contain ${className}`}
+      style={{ filter: 'drop-shadow(0 5px 5px rgba(8,43,79,.18))' }}
+    />
+  )
+}
+
+function CirculoPreco({ valor, pequeno = false, cores }) {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center rounded-full text-center"
+      style={{
+        background: cores.primaria,
+        border: `${pequeno ? 2 : 3}px solid ${cores.destaque}`,
+        boxShadow: '0 5px 12px rgba(89,0,7,.22)',
+      }}
+    >
+      <div>
+        <div className={`${pequeno ? 'text-[6px]' : 'text-[8px]'} font-black uppercase leading-none text-white`}>POR:</div>
+        <PrecoVarejo valor={valor} className={pequeno ? 'text-[22px]' : 'text-[40px]'} cor="#ffffff" />
+      </div>
+    </div>
+  )
+}
+
+function OfertaDestaqueModelo({ produto, preco, cores }) {
+  const dias = statusValidade(produto.validade).dias
+  return (
+    <div className="absolute left-[14px] top-[120px] h-[160px] w-[412px] overflow-hidden rounded-[10px] bg-white shadow-sm">
+      <FotoEncarte produto={produto} className="left-[16px] top-[6px] h-[128px] w-[120px]" />
+      <div className="display-bengala absolute left-[145px] top-[16px] w-[137px] uppercase leading-[1.04]" style={{ ...estiloNomeCompleto(produto.nome, 14, 9.5), color: cores.secundaria }}>
+        {produto.nome}
+      </div>
+      <div className="absolute left-[145px] top-[83px] text-[8px] font-black uppercase" style={{ color: 'rgba(8,43,79,.85)' }}>
+        DE: <span className="text-[12px] text-[#777] line-through decoration-critical decoration-2">{formatBRL(produto.precoNormal)}</span>
+      </div>
+      <div className="absolute left-[286px] top-[8px] h-[112px] w-[112px]">
+        <CirculoPreco valor={preco} cores={cores} />
+      </div>
+      <div className="display-bengala absolute bottom-[6px] left-[145px] flex h-[25px] w-[137px] items-center justify-center rounded-md px-2 text-[10px] uppercase text-white" style={{ background: cores.primaria }}>
+        {dias < 0 ? 'VENCIDO' : dias === 0 ? 'VENCE HOJE' : `VENCE EM ${dias} ${dias === 1 ? 'DIA' : 'DIAS'}`}
+      </div>
+      <div className="display-bengala absolute bottom-[6px] right-[14px] flex h-[25px] w-[112px] items-center justify-center rounded-md px-2 text-[10px] uppercase text-white" style={{ background: cores.secundaria }}>
+        {Number(produto.estoque || 0)} UNIDADES
+      </div>
+    </div>
+  )
+}
+
+function OfertaMenorModelo({ produto, preco, indice, cores }) {
+  const dias = statusValidade(produto.validade).dias
+  const posicoes = [14, 153, 289]
+  const larguras = [133, 132, 137]
+  return (
+    <div
+      className="absolute top-[290px] h-[188px] overflow-hidden rounded-[9px] bg-white shadow-sm"
+      style={{ left: posicoes[indice], width: larguras[indice] }}
+    >
+      <FotoEncarte produto={produto} className="left-[5px] top-[10px] h-[120px] w-[61px]" />
+      <div className="display-bengala absolute left-[65px] top-[12px] w-[63px] uppercase leading-[1.04]" style={{ ...estiloNomeCompleto(produto.nome, 8.2, 5.4), color: cores.secundaria }}>
+        {produto.nome}
+      </div>
+      <div className="absolute left-[65px] top-[60px] text-[5.5px] font-black uppercase" style={{ color: 'rgba(8,43,79,.8)' }}>
+        DE: <span className="text-[7.5px] text-[#777] line-through decoration-critical">{formatBRL(produto.precoNormal)}</span>
+      </div>
+      <div className="absolute left-[68px] top-[75px] h-[58px] w-[58px]">
+        <CirculoPreco valor={preco} pequeno cores={cores} />
+      </div>
+      <div className="display-bengala absolute bottom-[6px] left-[5px] flex h-[17px] w-[61px] items-center justify-center rounded px-1 text-center text-[5.5px] uppercase leading-none text-white" style={{ background: cores.primaria }}>
+        {dias < 0 ? 'VENCIDO' : dias === 0 ? 'VENCE HOJE' : `VENCE EM ${dias}D`}
+      </div>
+      <div className="display-bengala absolute bottom-[6px] right-[5px] flex h-[17px] w-[60px] items-center justify-center rounded px-1 text-center text-[5.5px] uppercase leading-none text-white" style={{ background: cores.secundaria }}>
+        {Number(produto.estoque || 0)} UNIDADES
+      </div>
+    </div>
+  )
+}
+
+const PaginaJornalModeloAprovado = forwardRef(function PaginaJornalModeloAprovado(
+  { itens, precoJornal, validadeDe, validadeAte, numero, total, config },
+  ref
+) {
+  const hero = itens[0]
+  const menores = itens.slice(1, 4)
+  const cores = {
+    primaria: config.corPrimaria || '#e4232e',
+    secundaria: config.corSecundaria || '#082b4f',
+    destaque: config.corDestaque || '#ffc928',
+  }
+  return (
+    <div
+      ref={ref}
+      data-pdf-page="a4"
+      className="relative mx-auto h-[622px] w-[440px] shrink-0 overflow-hidden rounded-xl bg-white"
+      style={{ boxShadow: '0 14px 34px rgba(8,43,79,.16)' }}
+    >
+      <div className="absolute inset-0 bg-[#f3f6f8]" />
+      <div className="absolute inset-x-0 top-0 h-[108px] overflow-hidden text-white" style={{ background: cores.secundaria }}>
+        <span className="absolute -right-10 -top-16 h-40 w-40 rounded-full border-[22px] opacity-20" style={{ borderColor: cores.destaque }} />
+        <span className="absolute inset-x-0 bottom-0 h-[7px]" style={{ background: cores.primaria }} />
+        <div className="absolute left-[15px] top-[14px] flex items-center gap-3">
+          <Logo h={52} chip />
+          <div className="max-w-[205px]">
+            <div className="display-bengala text-[28px] uppercase leading-[.86]">OFERTAS<br /><span style={{ color: cores.destaque }}>INTERNAS</span></div>
+            <div className="mt-2 truncate text-[8px] font-bold uppercase tracking-[.14em] opacity-90">{config.nomeMercado}</div>
+          </div>
+        </div>
+        <div className="absolute right-[18px] top-[18px] w-[115px] rounded-lg border border-white/25 bg-black/15 px-3 py-2 text-center">
+          <div className="text-[7px] font-black uppercase tracking-[.12em]" style={{ color: cores.destaque }}>Ofertas válidas</div>
+          <div className="mt-1 text-[8px] font-bold">{formatData(validadeDe)} a {formatData(validadeAte)}</div>
+        </div>
+      </div>
+      {hero && <OfertaDestaqueModelo produto={hero} preco={precoJornal(hero)} cores={cores} />}
+      {menores.map((produto, indice) => (
+        <OfertaMenorModelo key={produto.id} produto={produto} preco={precoJornal(produto)} indice={indice} cores={cores} />
+      ))}
+      <div className="absolute inset-x-0 bottom-0 h-[132px] border-t-[6px] bg-white px-4 py-3" style={{ borderColor: cores.primaria }}>
+        <div className="flex items-center gap-3">
+          <Logo h={35} />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[9px] font-black uppercase" style={{ color: cores.secundaria }}>{config.nomeMercado}</div>
+            <div className="mt-0.5 truncate text-[7px] font-bold" style={{ color: cores.primaria }}>{config.slogan || 'Preço baixo. Desperdício zero.'}</div>
+          </div>
+          <div className="rounded px-2 py-1 text-[7px] font-black text-white" style={{ background: cores.secundaria }}>Página {numero}/{total}</div>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-[6px] leading-[1.35] text-[#59636d]">
+          <div><strong style={{ color: cores.secundaria }}>OFERTA RESPONSÁVEL</strong><br />Produtos identificados por código e vinculados ao estoque.</div>
+          <div><strong style={{ color: cores.secundaria }}>CONSULTE A LOJA</strong><br />Ofertas válidas enquanto durarem os estoques.</div>
+          <div><strong style={{ color: cores.secundaria }}>ECONOMIA E CONSUMO</strong><br />Compre apenas o necessário e evite desperdícios.</div>
+        </div>
+      </div>
+    </div>
+  )
+})
+
 const PaginaJornalAdaptavel = forwardRef(function PaginaJornalAdaptavel(
   { itens, precoJornal, descJornal, selo, tipo, temaSel, setorSel, validadeDe, validadeAte, numero, total },
   ref
@@ -497,11 +729,11 @@ const PaginaJornalAdaptavel = forwardRef(function PaginaJornalAdaptavel(
   const demais = itens.slice(1)
   const poucos = itens.length <= 3
   const colunas = demais.length <= 2 ? Math.max(demais.length, 1) : 3
-  const template = "url('./templates/oportunidades-bengala-v3-rodape-completo.png')"
+  const template = `url('${TEMPLATE_GERAL}')`
   const setorConfig = setorById(setorSel)
   const temaConfig = TEMAS[temaSel] || TEMAS.diaB
   const acento = tipo === 'sazonal' ? temaConfig.acento : tipo === 'setor' ? setorConfig.cor : '#ffc928'
-  const campanha = tipo === 'sazonal' ? temaConfig.nome : tipo === 'setor' ? setorConfig.nome : 'Mercado inteiro'
+  const campanha = tipo === 'sazonal' ? temaConfig.nome : tipo === 'setor' ? setorConfig.nome : 'Produtos variados'
   const heroSetor = hero ? setorById(hero.setor) : setorConfig
   const alturaHero = demais.length === 0 ? 'flex-1' : poucos ? 'h-[142px]' : 'h-[118px]'
 
@@ -538,7 +770,7 @@ const PaginaJornalAdaptavel = forwardRef(function PaginaJornalAdaptavel(
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="rounded-full px-2 py-0.5 text-[6.5px] font-black uppercase tracking-[.12em]" style={{ background: '#ffc928', color: '#082b4f' }}>
-                {tipo === 'sazonal' ? 'Especial Bengala' : 'Oferta de vencimento'}
+                {tipo === 'sazonal' ? 'Oferta especial' : 'Oferta de vencimento'}
               </span>
               <span className="truncate text-[7px] font-bold text-white/70">{campanha}</span>
             </div>
@@ -643,7 +875,7 @@ const PaginaJornalInterno = forwardRef(function PaginaJornalInterno(
 ) {
   const setorConfig = setorById(setorSel)
   const temaConfig = TEMAS[temaSel] || TEMAS.diaB
-  const campanha = tipo === 'sazonal' ? temaConfig.nome : tipo === 'setor' ? setorConfig.nome : 'Mercado inteiro'
+  const campanha = tipo === 'sazonal' ? temaConfig.nome : tipo === 'setor' ? setorConfig.nome : 'Produtos variados'
   const destaques = itens.slice(0, 4)
   const grade = itens.slice(4)
   const poucos = itens.length <= 4
@@ -656,7 +888,7 @@ const PaginaJornalInterno = forwardRef(function PaginaJornalInterno(
     >
       <img
         src={CABECALHO_INTERNO}
-        alt="Ofertas internas Supermercado Bengala"
+        alt="Ofertas internas do estabelecimento"
         className="block h-[130px] w-full object-cover"
       />
 
@@ -714,7 +946,7 @@ const PaginaJornalInterno = forwardRef(function PaginaJornalInterno(
       </div>
 
       <div className="h-[80px] border-t-2 border-bengala bg-white">
-        <img src={RODAPE_OFICIAL} alt="Informações oficiais do Supermercado Bengala" className="h-full w-full object-contain" />
+        <img src={RODAPE_OFICIAL} alt="Informações oficiais do estabelecimento" className="h-full w-full object-contain" />
       </div>
 
       <div className="absolute bottom-[82px] right-2 rounded px-1.5 py-0.5 text-[6px] font-bold text-white" style={{ background: '#082b4f' }}>
