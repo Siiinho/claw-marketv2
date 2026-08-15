@@ -112,45 +112,73 @@ def buscar_imagem_google(codigo: str, produto: dict[str, Any] | None) -> dict[st
     if not chave or not mecanismo:
         return None
     nome = (produto or {}).get("nome", "")
-    consulta = " ".join(
-        parte for parte in (codigo, nome, "produto embalagem packshot fundo transparente png") if parte
-    ).strip()
-    endpoint = "https://customsearch.googleapis.com/customsearch/v1?" + urlencode({
-        "key": chave,
-        "cx": mecanismo,
-        "q": consulta,
-        "searchType": "image",
-        "imgColorType": "trans",
-        "imgSize": "large",
-        "fileType": "png",
-        "safe": "active",
-        "gl": "br",
-        "hl": "pt-BR",
-        "num": 5,
-    })
-    resposta = obter_json(endpoint, timeout=10) or {}
-    for item in resposta.get("items", []):
-        url = item.get("link")
-        metadados = item.get("image", {})
-        contexto = metadados.get("contextLink")
-        largura = int(metadados.get("width") or 0)
-        altura = int(metadados.get("height") or 0)
-        if max(largura, altura) < 700:
+    consultas = [
+        " ".join(parte for parte in (codigo, nome, "embalagem produto fundo transparente") if parte),
+        " ".join(parte for parte in (f'"{nome}"' if nome else "", "produto packshot png") if parte),
+        " ".join(parte for parte in (nome, "embalagem produto") if parte),
+    ]
+    termos_nome = [
+        termo.lower() for termo in re.findall(r"[\wÀ-ÿ]+", nome)
+        if len(termo) >= 4 and not termo.isdigit()
+    ]
+    candidatos: list[tuple[int, dict[str, Any]]] = []
+
+    for indice_consulta, consulta in enumerate(dict.fromkeys(consultas)):
+        if not consulta.strip():
             continue
-        if url and urlparse(url).scheme in {"http", "https"}:
-            return {
+        endpoint = "https://customsearch.googleapis.com/customsearch/v1?" + urlencode({
+            "key": chave,
+            "cx": mecanismo,
+            "q": consulta,
+            "searchType": "image",
+            "imgColorType": "trans",
+            "imgSize": "large",
+            "safe": "active",
+            "gl": "br",
+            "hl": "pt-BR",
+            "num": 10,
+        })
+        resposta = obter_json(endpoint, timeout=10) or {}
+        for item in resposta.get("items", []):
+            url = item.get("link")
+            metadados = item.get("image", {})
+            contexto = metadados.get("contextLink")
+            largura = int(metadados.get("width") or 0)
+            altura = int(metadados.get("height") or 0)
+            if not url or urlparse(url).scheme not in {"http", "https"} or max(largura, altura) < 700:
+                continue
+            texto = " ".join((item.get("title", ""), url, contexto or "")).lower()
+            termos_encontrados = sum(1 for termo in termos_nome if termo in texto)
+            codigo_encontrado = codigo in texto
+            # Sem código na página, exigimos pelo menos dois termos comerciais
+            # (ou o único termo disponível) para não vincular outro produto.
+            minimo_termos = min(2, len(termos_nome))
+            if not codigo_encontrado and termos_encontrados < minimo_termos:
+                continue
+            formato = str(item.get("fileFormat") or "").lower()
+            pontuacao = (
+                (120 if codigo_encontrado else 0)
+                + termos_encontrados * 18
+                + (25 if "png" in formato or url.lower().split("?")[0].endswith(".png") else 0)
+                + min(max(largura, altura) // 100, 30)
+                - indice_consulta * 4
+            )
+            candidatos.append((pontuacao, {
                 "url": url,
                 "paginaUrl": contexto,
                 "origem": "google-custom-search",
                 "origemNome": "Google Imagens",
-                "correspondencia": "busca-por-codigo-e-nome",
+                "correspondencia": "codigo-exato" if codigo_encontrado else "busca-por-codigo-e-nome",
                 "nomeCatalogo": item.get("title", ""),
                 "marca": "",
                 "fundoTransparente": True,
                 "termoBusca": consulta,
                 "largura": largura,
                 "altura": altura,
-            }
+            }))
+
+    if candidatos:
+        return max(candidatos, key=lambda candidato: candidato[0])[1]
     return None
 
 
