@@ -351,7 +351,7 @@ export default function Produtos() {
           <form onSubmit={salvar} className="grid grid-cols-2 gap-3">
             <div className="col-span-2 flex items-center gap-3">
               {form.imagem
-                ? <img src={form.imagem} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" />
+                ? <img src={form.imagem} alt="" className="h-16 w-16 shrink-0 rounded-lg bg-white object-contain" />
                 : <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-cream-200 text-ink-soft"><Icon name="ImagePlus" size={22} /></div>}
               <div className="min-w-0 flex-1 space-y-1.5">
                 <div className="flex gap-2">

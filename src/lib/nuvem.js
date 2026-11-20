@@ -129,6 +129,29 @@ export function assinarNuvem(aoMudar, filtroColecao) {
   return () => { try { cliente().removeChannel(canal) } catch (_) {} }
 }
 
+// ---------- fotos dos produtos (pasta pública "produtos" do Supabase Storage) ----------
+const PASTA_FOTOS = 'produtos'
+
+// Sobe a foto que está na pasta de imagens do PC (ex.: /api/imagens-produtos/789.jpg) para a
+// nuvem e devolve o endereço público, que abre em qualquer aparelho.
+export async function enviarFotoNuvem(ean, urlLocal) {
+  const armazenamento = cliente()?.storage
+  if (!armazenamento || !ean || !urlLocal) return null
+  try {
+    const r = await fetch(urlLocal)
+    if (!r.ok) return null
+    const blob = await r.blob()
+    if (!String(blob.type || '').startsWith('image/')) return null
+    const extensao = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'
+    const caminho = `${ean}.${extensao}`
+    const { error } = await armazenamento.from(PASTA_FOTOS).upload(caminho, blob, { upsert: true, contentType: blob.type, cacheControl: '86400' })
+    if (error) return null
+    return armazenamento.from(PASTA_FOTOS).getPublicUrl(caminho)?.data?.publicUrl || null
+  } catch (_) {
+    return null
+  }
+}
+
 // ---------- encarte publicado (o cliente lê sem login) ----------
 export async function publicarEncarteNuvem(encarte) {
   await gravarNuvem([{ colecao: 'encarte', id: 'publicado', dados: encarte, excluido: false }])

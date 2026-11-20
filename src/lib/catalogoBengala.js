@@ -10,7 +10,9 @@ const fotoConferida = new Map()
 
 const somenteDigitos = (valor) => String(valor || '').replace(/\D/g, '')
 const BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || './'
-const IMAGENS_BASE = ((typeof import.meta !== 'undefined' && import.meta.env?.VITE_IMAGENS_BASE_URL) || '/api/imagens-produtos').replace(/\/+$/, '')
+const ENV = (typeof import.meta !== 'undefined' && import.meta.env) || {}
+// Cópia das fotos na nuvem: a pasta pública "produtos" do Supabase (ou VITE_IMAGENS_BASE_URL).
+const IMAGENS_BASE = (ENV.VITE_IMAGENS_BASE_URL || (ENV.VITE_SUPABASE_URL ? `${ENV.VITE_SUPABASE_URL}/storage/v1/object/public/produtos` : '/api/imagens-produtos')).replace(/\/+$/, '')
 
 async function carregarCatalogo() {
   if (!catalogoPromise) {
@@ -35,19 +37,40 @@ async function carregarBase() {
   return basePromise
 }
 
+// Pastas onde procurar a foto, na ordem: a pasta de imagens do PC da loja (servida pelo próprio
+// PC em /api/imagens-produtos) e a cópia na nuvem (VITE_IMAGENS_BASE_URL), que vale em qualquer
+// aparelho para os produtos que o PC já enviou.
+const PASTAS_FOTOS = [...new Set(['/api/imagens-produtos', IMAGENS_BASE])]
+export const ehFotoDaPastaLocal = (url) => String(url || '').startsWith('/api/imagens-produtos/')
+
+async function existeFoto(url) {
+  try {
+    const r = await fetch(url, { method: 'HEAD', cache: 'no-store' })
+    return r.ok && (r.headers.get('content-type') || '').startsWith('image/')
+  } catch (_) {
+    return false
+  }
+}
+
 // Endereço da foto do produto, se ela existir na pasta de imagens (confere uma vez por código).
 export async function fotoDoCatalogo(codigo) {
   const c = somenteDigitos(codigo)
   if (!c || typeof fetch !== 'function' || globalThis.location?.protocol === 'file:') return null
   if (fotoConferida.has(c)) return fotoConferida.get(c)
-  const url = `${IMAGENS_BASE}/${c}.jpg`
-  let achou = null
-  try {
-    const r = await fetch(url, { method: 'HEAD' })
-    if (r.ok && (r.headers.get('content-type') || '').startsWith('image/')) achou = url
-  } catch (_) { /* sem pasta de imagens neste endereço */ }
-  fotoConferida.set(c, achou)
-  return achou
+  const tentativa = (async () => {
+    for (const pasta of PASTAS_FOTOS) {
+      const nomes = c.length < 13 ? [c, c.padStart(13, '0')] : [c]
+      for (const nome of nomes) {
+        for (const ext of pasta.startsWith('/api/') ? ['jpg'] : ['jpg', 'png', 'webp']) {
+          const url = `${pasta}/${nome}.${ext}`
+          if (await existeFoto(url)) return url
+        }
+      }
+    }
+    return null
+  })()
+  fotoConferida.set(c, tentativa)
+  return tentativa
 }
 
 async function buscarNaBase(codigoBarras) {

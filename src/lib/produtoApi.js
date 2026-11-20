@@ -767,6 +767,8 @@ export async function buscarImagemProduto(produtoOuCodigo, opcoes = {}) {
 export function imagemProdutoPrecisaTratamento(produto) {
   if (!produto?.imagem) return false
   if (produto.imagemManual || produto.imagemTratamento === TRATAMENTO_MANUAL) return false
+  // Foto da pasta de imagens do mercado: já vem pronta e não é recortada nem trocada.
+  if (produto.imagemOrigem === 'catalogo') return false
   const chave = String(produto.codigoBarras || produto.id || '').replace(/\s/g, '')
   const aprovada = imagensAprovadas[chave]
   if (aprovada && produto.imagemFonteUrl !== aprovada.imagemFonteUrl) return true
