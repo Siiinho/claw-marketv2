@@ -4,6 +4,7 @@ import { useStore } from '../store/StoreContext'
 import { Icon, StatusBadge, ProdutoThumb, Botao, PrecoVarejo, inputCls } from '../components/ui'
 import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, precoComRegra, labelDias } from '../lib/utils'
 import { buscarProdutoBengala } from '../lib/catalogoBengala'
+import { useLeitorCamera } from '../lib/useLeitorCamera'
 import { buscarImagemProduto, buscarProdutoAutomatizado, imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
 
 export default function Scanner() {
@@ -27,10 +28,7 @@ export default function Scanner() {
   const [novoEstoque, setNovoEstoque] = useState('')
   const [veredito, setVeredito] = useState(null) // { tipo:'jornal'|'ok', desconto, precoNovo, dias }
   const [historico, setHistorico] = useState([]) // sessão de bipes
-  const [scanning, setScanning] = useState(false)
   const [buscando, setBuscando] = useState(false)
-  const videoRef = useRef(null)
-  const controlsRef = useRef(null)
   const inputRef = useRef(null)
 
   const buscar = async (cod) => {
@@ -240,48 +238,13 @@ export default function Scanner() {
   }
 
   // ---- câmera ----
-  const pararCam = () => {
-    try { controlsRef.current?.stop() } catch (_) {}
-    controlsRef.current = null
-    setScanning(false)
-  }
-  const escanearCamera = async () => {
-    if (scanning) return pararCam()
-    setScanning(true)
-    try {
-      const { BrowserMultiFormatReader } = await import('@zxing/browser')
-      const reader = new BrowserMultiFormatReader()
-      const aoLer = (result) => {
-        if (result) {
-          const cod = result.getText()
-          pararCam()
-          buscar(cod)
-          toast(`Código lido: ${cod}`)
-        }
-      }
-      try {
-        controlsRef.current = await reader.decodeFromConstraints(
-          {
-            audio: false,
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          },
-          videoRef.current,
-          aoLer
-        )
-      } catch (_) {
-        // Webcams de PC e WebViews antigos podem não aceitar facingMode.
-        controlsRef.current = await reader.decodeFromVideoDevice(undefined, videoRef.current, aoLer)
-      }
-    } catch (e) {
-      setScanning(false)
-      toast('Não foi possível acessar a câmera. Verifique a permissão.', 'erro')
-    }
-  }
-  useEffect(() => () => pararCam(), [])
+  const camera = useLeitorCamera(
+    (cod) => { buscar(cod); toast(`Código lido: ${cod}`) },
+    (mensagem) => toast(mensagem, 'erro'),
+  )
+  const scanning = camera.ativo
+  const escanearCamera = () => (camera.ativo ? camera.parar() : camera.abrir())
+
 
   const naFilaSessao = historico.filter((h) => h.tipo === 'jornal').length
 
@@ -338,7 +301,7 @@ export default function Scanner() {
 
         {scanning && (
           <div className="mt-3 overflow-hidden rounded-xl border border-ink-soft/15 bg-black">
-            <video ref={videoRef} className="aspect-video w-full object-cover" muted playsInline />
+            <video ref={camera.videoRef} className="aspect-video w-full object-cover" muted playsInline autoPlay />
             <div className="flex items-center justify-center gap-2 bg-ink/80 py-1.5 text-xs text-cream">
               <Icon name="ScanLine" size={14} /> Aponte para o código de barras
             </div>

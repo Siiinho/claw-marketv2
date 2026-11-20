@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { PrecoVarejo } from './ui'
+import { Icon, PrecoVarejo } from './ui'
 import { formatBRL, formatData, setorById } from '../lib/utils'
 import { caminhoArte } from '../lib/temasCampanha'
 import SeloArte from './SeloArte'
@@ -277,6 +277,12 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
   return (
     <div className={`relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: f.largura, height: f.altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
       {usarFundo && <img src={imagemFundo} alt="" className="cm-fundo absolute inset-0 h-full w-full object-cover" />}
+      {/* templates de setor: o ícone do setor grande ao fundo */}
+      {!usarFundo && tema.icone && (
+        <div aria-hidden="true" className="absolute" style={{ right: -f.altura * 0.06, top: -f.altura * 0.04, color: '#ffffff', opacity: 0.13, transform: 'rotate(-14deg)' }}>
+          <Icon name={tema.icone} size={Math.round(Math.min(f.largura, f.altura) * 0.62)} strokeWidth={1.6} />
+        </div>
+      )}
 
       {/* topo da campanha */}
       <div className="cm-topo absolute left-0 right-0 top-0" style={{ height: topo }}>

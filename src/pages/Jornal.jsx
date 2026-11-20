@@ -12,7 +12,7 @@ import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemp
 import SeletorTema from '../components/SeletorTema'
 import SeloArte from '../components/SeloArte'
 import PaginaTemplate, { Escalado, paginarTemplate, LARGURA, ALTURA } from '../components/PaginaTemplate'
-import { temaCampanhaById } from '../lib/temasCampanha'
+import { temaCampanhaById, temasDoSetor, caminhoArte } from '../lib/temasCampanha'
 import { abrirJanelaPrevisualizacao, previsualizarImpressaoPaginas } from '../lib/exportar'
 import { imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
 
@@ -65,6 +65,13 @@ export default function Jornal() {
   const [historicoParaAbrir, setHistoricoParaAbrir] = useState(null)
   const [produtoEditandoGerador, setProdutoEditandoGerador] = useState(null)
   const [seloEditando, setSeloEditando] = useState(null)
+  // Preço editado no mesmo painel do selo (toque no produto da prévia).
+  const [precoEditando, setPrecoEditando] = useState({ normal: '', promo: '' })
+  const abrirProdutoDaPrevia = (produto) => {
+    const atual = fila.find((f) => f.id === produto.id) || produto
+    setPrecoEditando({ normal: atual.precoNormal ?? '', promo: atual.precoPromo ?? '' })
+    setSeloEditando(atual)
+  }
   // Período da campanha: definido pelo operador, nunca calculado pela validade dos produtos.
   const [periodoDe, setPeriodoDe] = useState(() => dataISOmaisDias(0))
   const [periodoAte, setPeriodoAte] = useState(() => dataISOmaisDias(6))
@@ -139,9 +146,10 @@ export default function Jornal() {
 
   // ---- preço para o jornal ----
   const precoJornal = (p) => {
+    // O preço da oferta digitado no produto (ex.: pela prévia) vale mais que a oferta automática.
+    if (p.precoPromo) return p.precoPromo
     const o = ofertaDoProduto(p.id)
     if (o) return p.precoNormal * (1 - o.desconto / 100)
-    if (p.precoPromo) return p.precoPromo
     if (p.origemFila === 'vencimento') return p.precoNormal * (1 - (config.descontoPadrao || 30) / 100)
     return p.precoNormal
   }
@@ -239,6 +247,20 @@ export default function Jornal() {
   const lojaAtual = (store.lojas || []).find((l) => l.id === store.lojaAtiva) || (store.lojas || [])[0]
   const itensParaArte = () => itensArte
   const encarteArte = { periodoDe: validadeDe, periodoAte: validadeAte }
+  const salvarPrecoDaPrevia = () => {
+    const normal = Number(String(precoEditando.normal).replace(',', '.'))
+    const promo = String(precoEditando.promo).trim() ? Number(String(precoEditando.promo).replace(',', '.')) : null
+    if (!(normal > 0)) return toast('Informe o preço normal.', 'erro')
+    if (promo !== null && !(promo > 0 && promo < normal)) return toast('O preço da oferta precisa ser menor que o normal.', 'erro')
+    salvarProduto({ id: seloEditando.id, precoNormal: normal, precoPromo: promo })
+    toast(`${seloEditando.nome}: ${promo ? `de ${formatBRL(normal)} por ${formatBRL(promo)}` : formatBRL(normal)}.`)
+    setSeloEditando(null)
+  }
+  const escolherSetor = (id) => {
+    setSetorSel(id)
+    const primeiro = temasDoSetor(id)[0]
+    if (primeiro) setTemaDigital(primeiro.id)
+  }
   const trocarSelo = (produto, seloOferta) => {
     salvarProduto({ id: produto.id, seloOferta })
     const selo = SELOS_OFERTA.find((s) => s.id === seloOferta)
@@ -392,11 +414,31 @@ export default function Jornal() {
                   <p className="mb-1.5 text-xs font-medium text-ink-soft">Qual setor você vai trabalhar?</p>
                   <div className="grid grid-cols-2 gap-1.5">
                     {SETORES.map((s) => (
-                      <button key={s.id} onClick={() => setSetorSel(s.id)} className={`flex items-center gap-2 rounded-lg border-2 px-2.5 py-2 text-left text-xs font-medium ${setorSel === s.id ? 'border-bengala bg-bengala/5 text-bengala' : 'border-ink-soft/15 text-ink-soft'}`}>
+                      <button key={s.id} onClick={() => escolherSetor(s.id)} className={`flex items-center gap-2 rounded-lg border-2 px-2.5 py-2 text-left text-xs font-medium ${setorSel === s.id ? 'border-bengala bg-bengala/5 text-bengala' : 'border-ink-soft/15 text-ink-soft'}`}>
                         <span className="h-3 w-3 rounded-full" style={{ background: s.cor }} />
                         {s.nome}
                       </button>
                     ))}
+                  </div>
+                  <p className="mb-1.5 mt-3 text-xs font-medium text-ink-soft">Templates de {setorById(setorSel).nome}</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {temasDoSetor(setorSel).map((t) => {
+                      const mini = caminhoArte(t, 'miniatura')
+                      const ativo = temaDigital === t.id
+                      return (
+                        <button key={t.id} type="button" onClick={() => setTemaDigital(t.id)} aria-pressed={ativo} title={t.nome}
+                          className={`relative flex aspect-[4/3] flex-col overflow-hidden rounded-lg text-left ${ativo ? 'ring-4 ring-offer ring-offset-1' : 'ring-1 ring-black/10'}`}
+                          style={{ background: t.fundo }}>
+                          {mini ? <img src={mini} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-contain p-1" /> : (
+                            <span className="relative m-auto flex flex-col items-center px-1 text-center text-sm font-black uppercase italic leading-none text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,.4)' }}>
+                              {t.icone ? <Icon name={t.icone} size={22} className="mb-1 opacity-80" /> : null}
+                              {t.titulo}<br /><span style={{ color: t.corDestaque }}>{t.destaque}</span>
+                            </span>
+                          )}
+                          <span className="relative mt-auto truncate bg-black/55 px-1.5 py-0.5 text-[11px] font-bold text-white">{t.nome}</span>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -590,7 +632,7 @@ export default function Jornal() {
           <div className="min-w-0 space-y-4 pb-2">
             <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-ink-soft">
               <span className="font-bold text-ink">Prévia do encarte · {temaArte.nome}</span>
-              {itensJornal.length > 0 && <span>Toque num produto para escolher o selo dele</span>}
+              {itensJornal.length > 0 && <span>Toque num produto para trocar o selo ou o preço</span>}
             </div>
             {!itensJornal.length ? (
               <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border-2 border-dashed border-bengala/40 bg-white p-6 text-center">
@@ -606,7 +648,7 @@ export default function Jornal() {
                 </div>
                 <div className="overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5">
                   <Escalado largura={LARGURA} altura={ALTURA}>
-                    <PaginaTemplate tema={temaArte} itens={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutDigital} numero={indice + 1} total={paginasJornal.length} onAbrir={setSeloEditando} />
+                    <PaginaTemplate tema={temaArte} itens={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutDigital} numero={indice + 1} total={paginasJornal.length} onAbrir={abrirProdutoDaPrevia} />
                   </Escalado>
                 </div>
               </div>
@@ -698,16 +740,27 @@ export default function Jornal() {
       <Modal
         open={Boolean(seloEditando)}
         onClose={() => setSeloEditando(null)}
-        titulo={seloEditando ? `Selo de ${seloEditando.nome}` : 'Selo do produto'}
-        footer={<Botao variante="contorno" onClick={() => setSeloEditando(null)}>Fechar</Botao>}
+        titulo={seloEditando ? seloEditando.nome : 'Selo e preço do produto'}
+        footer={<><Botao variante="contorno" onClick={() => setSeloEditando(null)}>Fechar</Botao><Botao onClick={salvarPrecoDaPrevia}><Icon name="Save" size={15} /> Salvar preço</Botao></>}
       >
         {seloEditando && (
-          <div className="space-y-2">
-            <p className="text-sm text-ink-soft">Escolha o selo que aparece só neste produto no encarte, nas artes e nos cartazes.</p>
-            <SeletorSelo
-              value={(fila.find((f) => f.id === seloEditando.id) || seloEditando).seloOferta}
-              onChange={(id) => { trocarSelo(seloEditando, id); setSeloEditando(null) }}
-            />
+          <div className="space-y-4">
+            <div>
+              <p className="mb-2 text-sm font-bold text-ink">Preço no encarte</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Campo label="Preço normal (de)"><input type="number" inputMode="decimal" min="0.01" step="0.01" className={inputCls} value={precoEditando.normal} onChange={(e) => setPrecoEditando((p) => ({ ...p, normal: e.target.value }))} /></Campo>
+                <Campo label="Preço da oferta (por)"><input type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="sem oferta" className={inputCls} value={precoEditando.promo} onChange={(e) => setPrecoEditando((p) => ({ ...p, promo: e.target.value }))} /></Campo>
+              </div>
+              <p className="mt-1 text-xs text-ink-soft">Deixe o preço da oferta vazio para mostrar só o preço normal. Toque em Salvar preço.</p>
+            </div>
+            <div>
+              <p className="mb-2 text-sm font-bold text-ink">Selo</p>
+              <p className="mb-2 text-xs text-ink-soft">O selo aparece só neste produto no encarte, nas artes e nos cartazes. Muda na hora.</p>
+              <SeletorSelo
+                value={(fila.find((f) => f.id === seloEditando.id) || seloEditando).seloOferta}
+                onChange={(id) => trocarSelo(seloEditando, id)}
+              />
+            </div>
           </div>
         )}
       </Modal>

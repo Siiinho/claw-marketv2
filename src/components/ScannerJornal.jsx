@@ -3,6 +3,7 @@ import { useStore } from '../store/StoreContext'
 import { buscarProdutoBengala } from '../lib/catalogoBengala'
 import { buscarImagemProduto, buscarProdutoAutomatizado } from '../lib/produtoApi'
 import { dataISOmaisDias } from '../lib/utils'
+import { useLeitorCamera } from '../lib/useLeitorCamera'
 import { Botao, Campo, Icon, ProdutoThumb, inputCls } from './ui'
 
 const rascunhoVazio = (codigo = '') => ({
@@ -34,9 +35,6 @@ export default function ScannerJornal() {
   const [buscando, setBuscando] = useState(false)
   const [rascunho, setRascunho] = useState(null)
   const [expandido, setExpandido] = useState(false)
-  const [scanning, setScanning] = useState(false)
-  const videoRef = useRef(null)
-  const controlsRef = useRef(null)
   const inputRef = useRef(null)
 
   const recentes = useMemo(() => [...fila].sort((a, b) =>
@@ -44,16 +42,6 @@ export default function ScannerJornal() {
   ), [fila])
   const visiveis = expandido ? recentes : recentes.slice(0, 4)
   const restantes = Math.max(0, recentes.length - 4)
-
-  const pararCamera = () => {
-    try { controlsRef.current?.stop() } catch (_) {}
-    controlsRef.current = null
-    setScanning(false)
-  }
-
-  useEffect(() => () => {
-    try { controlsRef.current?.stop() } catch (_) {}
-  }, [])
 
   const adicionarConhecido = (produto) => {
     const jaEstava = Boolean(produto.naFila)
@@ -149,28 +137,12 @@ export default function ScannerJornal() {
     leitor.readAsDataURL(arquivo)
   }
 
-  const abrirCamera = async () => {
-    if (scanning) return pararCamera()
-    setScanning(true)
-    try {
-      const { BrowserMultiFormatReader } = await import('@zxing/browser')
-      const reader = new BrowserMultiFormatReader()
-      controlsRef.current = await reader.decodeFromConstraints(
-        { audio: false, video: { facingMode: { ideal: 'environment' } } },
-        videoRef.current,
-        (resultado) => {
-          if (!resultado) return
-          const lido = resultado.getText()
-          pararCamera()
-          setCodigo(lido)
-          buscar(lido)
-        }
-      )
-    } catch (_) {
-      pararCamera()
-      toast('Não foi possível acessar a câmera. Verifique a permissão.', 'erro')
-    }
-  }
+  const camera = useLeitorCamera(
+    (lido) => { setCodigo(lido); buscar(lido) },
+    (mensagem) => toast(mensagem, 'erro'),
+  )
+  const scanning = camera.ativo
+  const abrirCamera = () => (camera.ativo ? camera.parar() : camera.abrir())
 
   return (
     <section id="scanner-jornal" className="card-bengala scroll-mt-4 p-4">
@@ -204,7 +176,13 @@ export default function ScannerJornal() {
         </button>
       </div>
 
-      {scanning ? <video ref={videoRef} className="mt-3 max-h-64 w-full rounded-xl bg-black object-cover" muted playsInline /> : null}
+      {scanning ? (
+        <div className="relative mt-3 overflow-hidden rounded-xl bg-black">
+          <video ref={camera.videoRef} className="max-h-72 w-full object-cover" muted playsInline autoPlay />
+          <div className="pointer-events-none absolute inset-x-8 top-1/2 h-0.5 -translate-y-1/2 bg-red-500/80 shadow-[0_0_8px_rgba(255,0,0,.8)]" />
+          <div className="absolute inset-x-0 bottom-0 bg-black/60 py-1 text-center text-xs font-bold text-white">Aproxime o código de barras até ficar nítido</div>
+        </div>
+      ) : null}
 
       {rascunho ? (
         <div className="mt-4 rounded-xl border border-info/25 bg-info/5 p-3">

@@ -1,6 +1,57 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/StoreContext'
 import { Icon, Botao, Campo, inputCls } from '../components/ui'
+import { codigosComFotoDaLoja } from '../lib/catalogoBengala'
+import { enviarFotosCatalogoNuvem, nuvemAtiva } from '../lib/nuvem'
+
+// Sobe para a nuvem as fotos da pasta do PC (A:\imagens) dos produtos da mercadologia.
+// Só aparece no PC da loja, que é quem enxerga a pasta pelo /api/imagens-produtos.
+function FotosNaNuvem({ toast }) {
+  const [pastaNoPC, setPastaNoPC] = useState(false)
+  const [progresso, setProgresso] = useState(null)
+  const [rodando, setRodando] = useState(false)
+  const sinal = useRef({})
+  useEffect(() => {
+    fetch('/api/imagens-produtos?status=1', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setPastaNoPC(Boolean(d?.ativo)))
+      .catch(() => setPastaNoPC(false))
+    return () => { sinal.current.parar = true }
+  }, [])
+  if (!pastaNoPC || !nuvemAtiva()) return null
+  const enviar = async () => {
+    setRodando(true)
+    sinal.current = {}
+    try {
+      const codigos = await codigosComFotoDaLoja()
+      const fim = await enviarFotosCatalogoNuvem(codigos, setProgresso, sinal.current)
+      toast(`Fotos na nuvem: ${fim.enviados} enviadas agora, ${fim.jaNaNuvem} já estavam lá, ${fim.semFoto} sem foto na pasta.`)
+    } catch (erro) {
+      toast(erro.message || 'Não foi possível enviar as fotos.', 'erro')
+    } finally {
+      setRodando(false)
+    }
+  }
+  const pct = progresso?.total ? Math.round((progresso.feitos / progresso.total) * 100) : 0
+  return (
+    <div className="card-bengala p-5">
+      <div className="mb-2 flex items-center gap-2">
+        <Icon name="CloudUpload" size={18} className="text-bengala" />
+        <h2 className="font-bold text-ink">Fotos dos produtos na nuvem</h2>
+      </div>
+      <p className="mb-3 text-sm text-ink-soft">Envia as fotos da pasta de imagens deste PC para a nuvem. Depois disso, a foto aparece ao bipar pelo celular e no encarte publicado. Só envia as que ainda não estão lá.</p>
+      {progresso ? (
+        <div className="mb-3">
+          <div className="h-3 overflow-hidden rounded-full bg-ink-soft/10"><div className="h-full bg-bengala transition-all" style={{ width: `${pct}%` }} /></div>
+          <div className="mt-1 text-xs text-ink-soft">{progresso.feitos} de {progresso.total} · {progresso.enviados} enviadas · {progresso.jaNaNuvem} já estavam · {progresso.semFoto} sem foto na pasta</div>
+        </div>
+      ) : null}
+      {rodando
+        ? <Botao variante="contorno" onClick={() => { sinal.current.parar = true }}><Icon name="Square" size={15} /> Parar</Botao>
+        : <Botao onClick={enviar}><Icon name="CloudUpload" size={16} /> Enviar fotos da mercadologia</Botao>}
+    </div>
+  )
+}
 export default function Config() {
   const { config, salvarConfig, resetar, toast } = useStore()
   const [f, setF] = useState({ ...config })
@@ -58,6 +109,8 @@ export default function Config() {
           </label>
         </div>
       </div>
+
+      <FotosNaNuvem toast={toast} />
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
         <button onClick={confirmarReset} className="rounded-lg border border-critical/25 bg-critical/5 px-3 py-2 text-sm font-medium text-critical hover:bg-critical/10">

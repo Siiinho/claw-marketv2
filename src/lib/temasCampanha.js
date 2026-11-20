@@ -15,6 +15,10 @@ const P = {
   verde: { fundo: 'linear-gradient(160deg,#0a4a20 0%,#2e9e3f 50%,#f2c200 100%)', contorno: '#0a4a20', precoFundo: '#ffe14d', precoCor: '#0f6b2f', precoSombra: '#0a4a20', faixa: '#0f6b2f', faixaTexto: '#ffffff', corTitulo: '#ffffff', corDestaque: '#ffe14d' },
   azul: { fundo: 'linear-gradient(160deg,#06245a 0%,#1565d8 50%,#38b6ff 100%)', contorno: '#06245a', precoFundo: '#ffc928', precoCor: '#0a3d91', precoSombra: '#06245a', faixa: '#ffc928', faixaTexto: '#06245a', corTitulo: '#ffffff', corDestaque: '#ffc928' },
   rosa: { fundo: 'linear-gradient(160deg,#5c0636 0%,#e5157a 55%,#ffb703 100%)', contorno: '#5c0636', precoFundo: '#ffe14d', precoCor: '#c2185b', precoSombra: '#5c0636', faixa: '#ffe14d', faixaTexto: '#5c0636', corTitulo: '#ffffff', corDestaque: '#ffe14d' },
+  teal: { fundo: 'linear-gradient(160deg,#04342f 0%,#0f8f84 55%,#7fe3d4 100%)', contorno: '#04342f', precoFundo: '#ffe14d', precoCor: '#0c5f58', precoSombra: '#04342f', faixa: '#ffe14d', faixaTexto: '#04342f', corTitulo: '#ffffff', corDestaque: '#ffe14d' },
+  roxo: { fundo: 'linear-gradient(160deg,#2a0f3d 0%,#7b3fa0 55%,#ff9f1c 100%)', contorno: '#2a0f3d', precoFundo: '#ffd23f', precoCor: '#5c3070', precoSombra: '#2a0f3d', faixa: '#ffd23f', faixaTexto: '#2a0f3d', corTitulo: '#ffffff', corDestaque: '#ffd23f' },
+  gelo: { fundo: 'linear-gradient(160deg,#03243f 0%,#1a6fa8 50%,#9ad8ff 100%)', contorno: '#03243f', precoFundo: '#ffd23f', precoCor: '#1a597a', precoSombra: '#03243f', faixa: '#ffd23f', faixaTexto: '#03243f', corTitulo: '#ffffff', corDestaque: '#bdf0ff' },
+  cinza: { fundo: 'linear-gradient(160deg,#1d252e 0%,#4b5a69 55%,#f4a259 100%)', contorno: '#1d252e', precoFundo: '#ffd23f', precoCor: '#b3170f', precoSombra: '#1d252e', faixa: '#ffd23f', faixaTexto: '#1d252e', corTitulo: '#ffffff', corDestaque: '#ffd23f' },
   chocolate: { fundo: 'linear-gradient(160deg,#2b0f05 0%,#7a2e0e 50%,#f2a93b 100%)', contorno: '#2b0f05', precoFundo: '#ffd84d', precoCor: '#7a2e0e', precoSombra: '#2b0f05', faixa: '#ffd84d', faixaTexto: '#2b0f05', corTitulo: '#fff6d6', corDestaque: '#ffd84d' },
 }
 
@@ -50,7 +54,30 @@ const t = (id, nome, grupo, paleta, logo, titulo, destaque, chamada) => ({
   id, nome, grupo, arte: id, arteX: ARTE_X[id], logo, titulo, destaque, chamada, ...P[paleta],
 })
 
-export const GRUPOS_TEMA = ['Açougue', 'Hortifruti', 'Semana', 'Fim de semana', 'Fim de mês', 'Datas', 'Geral']
+export const GRUPOS_TEMA = ['Setores', 'Açougue', 'Hortifruti', 'Semana', 'Fim de semana', 'Fim de mês', 'Datas', 'Geral']
+
+// Um template para cada setor da loja (em CSS, com o ícone do setor ao fundo). Açougue e
+// Hortifruti também têm os templates com arte, ligados ao setor por `setor`.
+const s = (setor, paleta, titulo, destaque, chamada, icone) => ({
+  id: `setor-${setor}`, nome: `${titulo} ${destaque}`, grupo: 'Setores', setor, icone, titulo, destaque, chamada, ...P[paleta],
+})
+const TEMAS_SETOR = [
+  s('padaria', 'chocolate', 'Ofertas da', 'Padaria', 'Quentinho todo dia!', 'Croissant'),
+  s('laticinios', 'azul', 'Ofertas de', 'Laticínios', 'Fresquinhos para sua família', 'Milk'),
+  s('frios', 'vermelho', 'Festival de', 'Frios', 'Fatiados na hora!', 'Beef'),
+  s('hortifruti', 'verde', 'Feira do', 'Hortifruti', 'Direto do campo para sua mesa', 'Apple'),
+  s('bebidas', 'vermelho', 'Ofertas de', 'Bebidas', 'Gelou, chegou, economizou!', 'Wine'),
+  s('mercearia', 'laranja', 'Ofertas da', 'Mercearia', 'Encha a despensa gastando menos!', 'ShoppingBasket'),
+  s('limpeza', 'teal', 'Ofertas de', 'Limpeza', 'Casa limpa, bolso cheio!', 'SprayCan'),
+  s('congelados', 'gelo', 'Ofertas de', 'Congelados', 'Preço de derreter!', 'Snowflake'),
+  s('petshop', 'roxo', 'Ofertas', 'Pet Shop', 'Tudo para o seu melhor amigo', 'PawPrint'),
+  s('acougue', 'vermelho', 'Ofertas do', 'Açougue', 'Carnes selecionadas', 'Drumstick'),
+  s('higiene', 'rosa', 'Higiene e', 'Beleza', 'Cuidar de você custa pouco!', 'Bath'),
+  s('utilidades', 'cinza', 'Ofertas de', 'Utilidades', 'Tudo para sua casa', 'House'),
+  s('farmacia', 'azul', 'Ofertas da', 'Farmácia', 'Saúde e bem-estar', 'Pill'),
+]
+// Setor de cada tema com arte.
+const SETOR_DA_ARTE = { acougue: 'acougue', 'acougue-fds': 'acougue', hortifruti: 'hortifruti', 'hortifruti-nota10': 'hortifruti', 'ofertas-hortifruti': 'hortifruti' }
 
 export const TEMAS_CAMPANHA = [
   t('acougue', 'Açougue Nota 10', 'Açougue', 'vermelho', 'e', 'Açougue', 'Nota 10', 'Carnes selecionadas'),
@@ -76,11 +103,18 @@ export const TEMAS_CAMPANHA = [
   t('fire', 'Ofertas Fire', 'Geral', 'laranja', 'd', 'Ofertas', 'Fire!', 'Tá barato!'),
   t('so-aqui', 'Só Aqui Tem Economia', 'Geral', 'azul', 'e', 'Só aqui tem', 'Economia', 'Preço baixo de verdade'),
   t('economia-verdade', 'Economia de Verdade', 'Geral', 'laranja', 'd', 'Economia', 'de Verdade', 'Descontos nunca vistos!'),
+  ...TEMAS_SETOR,
   {
     id: 'mercado', nome: 'Cores do mercado', grupo: 'Geral', titulo: 'Ofertas', destaque: 'da Semana', chamada: 'Economia de verdade!',
     fundo: 'linear-gradient(160deg,#082b4f 0%,#123f6b 60%,#e4232e 100%)', corTitulo: '#ffffff', corDestaque: '#ffc928', contorno: '#041a30',
     precoFundo: '#ffc928', precoCor: '#bf1721', precoSombra: '#e4232e', faixa: '#e4232e', faixaTexto: '#ffffff',
   },
 ]
+
+TEMAS_CAMPANHA.forEach((tema) => { if (SETOR_DA_ARTE[tema.id]) tema.setor = SETOR_DA_ARTE[tema.id] })
+
+// Templates de um setor: primeiro os com arte, depois o template do setor.
+export const temasDoSetor = (setor) => TEMAS_CAMPANHA.filter((tema) => tema.setor === setor)
+  .sort((a, b) => Number(Boolean(b.arte)) - Number(Boolean(a.arte)))
 
 export const temaCampanhaById = (id) => TEMAS_CAMPANHA.find((tema) => tema.id === id) || TEMAS_CAMPANHA[TEMAS_CAMPANHA.length - 1]
