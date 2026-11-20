@@ -81,7 +81,10 @@ export default defineConfig(({ mode }) => {
   // host: true deixa o celular do cliente abrir o encarte pelo IP do PC na rede da loja.
   // `npm run beta`: o mesmo servidor em https (certificado próprio), para testar a câmera do
   // celular pelo IP do PC — o navegador só libera a câmera em https.
-  server: { host: true },
+  // O Vite só lê o app (index.html): pastas de outros projetos dentro do repositório, como
+  // sites-app/, pediam bibliotecas não instaladas e faziam a página recarregar em branco.
+  optimizeDeps: { entries: ['index.html'] },
+  server: { host: true, watch: { ignored: ['**/sites-app/**', '**/dados/**', '**/dev-dist/**'] } },
   preview: { host: true },
   plugins: [
     ...(mode === 'beta' ? [basicSsl({ name: 'clawmarket-beta' })] : []),
