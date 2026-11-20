@@ -21,7 +21,7 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // `saidas` limita as opções: o Jornal mostra só as artes de rede social e a aba Cartazes,
 // só cartazes e etiquetas para imprimir.
-export default function CentralArtes({ itens, titulo, encarte, loja, temaId, setTemaId, layout, setLayout, fundo, toast, saidas: idsSaidas, saidaInicial, subtitulo }) {
+export default function CentralArtes({ itens, titulo, encarte, loja, temaId, setTemaId, layout, setLayout, fundo, toast, saidas: idsSaidas, saidaInicial, subtitulo, escalaLogo }) {
   const opcoes = idsSaidas ? SAIDAS.filter((s) => idsSaidas.includes(s.id)) : SAIDAS
   const [saida, setSaida] = useState(saidaInicial || opcoes[0].id)
   const [tamanho, setTamanho] = useState('A5')
@@ -105,7 +105,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
     <FolhaCartazes ref={comRef ? (el) => { refs.current[i] = el } : undefined} itens={pagina} tamanho={tamanhoAtual} encarte={encarte} />
   ) : (
     <div ref={comRef ? (el) => { refs.current[i] = el } : undefined} style={{ width: dim.largura, height: dim.altura }}>
-      <PaginaTemplate tema={tema} itens={pagina} encarte={encarte} loja={loja} fundo={fundo} layout={layout} formato={saida} numero={saida === 'post' ? null : i + 1} total={paginas.length} />
+      <PaginaTemplate tema={tema} itens={pagina} encarte={encarte} loja={loja} fundo={fundo} layout={layout} formato={saida} numero={saida === 'post' ? null : i + 1} total={paginas.length} escalaLogo={escalaLogo} />
     </div>
   ))
 

@@ -219,9 +219,9 @@ export default function ScannerJornal() {
             {!expandido && restantes > 0 ? <button onClick={() => setExpandido(true)} className="rounded-full bg-bengala px-2 py-0.5 text-xs font-bold text-white">+{restantes}</button> : null}
             {expandido && recentes.length > 4 ? <button onClick={() => setExpandido(false)} className="text-xs font-bold text-bengala">Mostrar 4</button> : null}
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {visiveis.map((produto) => (
-              <div key={produto.id} className="flex items-center gap-2 rounded-lg border border-ink-soft/10 bg-white p-2">
+              <div key={produto.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-ink-soft/10 bg-white p-2">
                 <ProdutoThumb produto={produto} size={38} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-bold text-ink">{produto.nome}</div>

@@ -6,8 +6,24 @@ import SeloArte from './SeloArte'
 import logoTransparente from '../assets/logo-bengala-transparente.png'
 
 // Logo do mercado direto sobre a arte do tema, sem caixa branca (arquivo PNG transparente).
-function LogoEncarte({ h = 110 }) {
-  return <img src={logoTransparente} alt="Bengala Supermercado" className="block w-auto object-contain" style={{ height: h }} />
+// `escala` (0,4 a 1,3) vem do controle "Tamanho do logo" de cada jornal.
+function LogoEncarte({ h = 110, escala = 1 }) {
+  return <img src={logoTransparente} alt="Bengala Supermercado" className="block w-auto object-contain" style={{ height: h * escala }} />
+}
+
+// Ajuste de cada produto na arte (feito no editor, como no Canva): posição em fração da
+// célula e escala, para o nome, a foto e o preço. Sem ajuste, tudo fica no lugar padrão.
+export const AJUSTE_PADRAO = { nome: { x: 0, y: 0, s: 1 }, foto: { x: 0, y: 0, s: 1 }, preco: { x: 0, y: 0, s: 1 } }
+export const ajusteDe = (produto, camada) => ({ ...AJUSTE_PADRAO[camada], ...(produto?.ajusteArte?.[camada] || {}) })
+
+function Camada({ nome, produto, estilo, origem, children }) {
+  const a = ajusteDe(produto, nome)
+  const mexido = a.x || a.y || a.s !== 1
+  return (
+    <div data-camada={nome} className="pointer-events-none absolute inset-0" style={mexido ? { transform: `translate(${a.x * estilo.width}px, ${a.y * estilo.height}px) scale(${a.s})`, transformOrigin: origem } : undefined}>
+      {children}
+    </div>
+  )
 }
 
 // Motor de templates do encarte: a mesma lista de ofertas vira várias artes.
@@ -107,7 +123,7 @@ function SeloPrecoOval({ produto, tema, k, indice = 0 }) {
   )
 }
 
-function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
+export function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
   const setor = setorById(produto.setor)
   // Fator de escala da célula: cresce com a área, sem deixar o selo de preço sair da célula.
   const k = Math.max(0.8, Math.min(2.6,
@@ -128,12 +144,15 @@ function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
       className="cm-celula absolute overflow-hidden text-left focus:outline-none focus-visible:ring-8 focus-visible:ring-white"
       style={{ ...estilo, borderRadius: raio, background: tema.celula || '#ffffff', '--cm-i': indice }}
     >
+      <Camada nome="nome" produto={produto} estilo={estilo} origem="50% 0%">
       <div
         className="absolute left-0 right-0 top-0 text-center uppercase leading-[0.95]"
         style={{ color: tema.nomeCor || '#111', fontFamily: 'var(--font-encarte)', fontWeight: 800, letterSpacing: '0.005em', fontSize: 29 * k, height: 62 * k, padding: `${6 * Math.min(k, 1.5)}px ${10 * k}px 0`, overflow: 'hidden' }}
       >
         {produto.nome}
       </div>
+      </Camada>
+      <Camada nome="foto" produto={produto} estilo={estilo} origem={`50% ${(topoFoto + (estilo.height - topoFoto) / 2) / estilo.height * 100}%`}>
       {produto.imagem ? (
         <img
           src={produto.imagem}
@@ -144,6 +163,7 @@ function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
       ) : (
         <div className="absolute inset-x-0 text-center font-black" style={{ top: 90 * k, fontSize: 70 * k, color: setor.cor }}>•</div>
       )}
+      </Camada>
       <SeloArte produto={produto} largura={118 * k} className="cm-selo absolute" style={{ position: 'absolute', left: 2 * k, top: topoFoto - 4 * k, '--cm-i': indice }} />
       {k >= 1.2 && temDesconto(produto) && (
         <span
@@ -153,7 +173,9 @@ function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
           De <span style={{ textDecoration: 'line-through' }}>{formatBRL(produto.precoNormal)}</span> por
         </span>
       )}
-      <SeloPrecoOval produto={produto} tema={tema} k={k} indice={indice} />
+      <Camada nome="preco" produto={produto} estilo={estilo} origem={`calc(100% - ${106 * k}px) calc(100% - ${61 * k}px)`}>
+        <SeloPrecoOval produto={produto} tema={tema} k={k} indice={indice} />
+      </Camada>
     </button>
     </>
   )
@@ -233,7 +255,7 @@ function CaixaLoja({ loja, tema, fonte = 20, alinhar = 'right' }) {
   )
 }
 
-function ColunaArte({ tema, encarte, loja, f, topo }) {
+function ColunaArte({ tema, encarte, loja, f, topo, escalaLogo = 1 }) {
   const [ax0, ax1] = tema.arteX || [440, 1000]
   const direita = tema.logo === 'd'
   const esquerda = direita ? Math.min(Math.max(ax1 + 8, 520), 740) : MARGEM
@@ -246,7 +268,7 @@ function ColunaArte({ tema, encarte, loja, f, topo }) {
   return (
     <div className="absolute flex flex-col gap-2" style={{ left: esquerda, width: largura, top: f.id === 'stories' ? 40 : 24, height: topo - (f.id === 'stories' ? 56 : 36), alignItems: direita ? 'flex-end' : 'flex-start' }}>
       <div className="relative flex shrink-0 items-center" style={{ height: alturaLogo, justifyContent: direita ? 'flex-end' : 'flex-start' }}>
-        <LogoEncarte h={alturaLogo} />
+        <LogoEncarte h={alturaLogo} escala={escalaLogo} />
       </div>
       {tema.chamada && (
         <div className="uppercase leading-[0.95] text-white" style={{ fontFamily: 'Bangers, var(--font-sans)', fontSize: fonteChamada, letterSpacing: '0.02em', textAlign: direita ? 'right' : 'left', textShadow: contornoTexto(tema.contorno, 3) }}>
@@ -262,8 +284,10 @@ function ColunaArte({ tema, encarte, loja, f, topo }) {
 }
 
 // `animado`: liga o motion design (só na página pública; as exportações em PNG/PDF saem paradas).
-export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layout = 'grade', formato: formatoId = 'feed', numero, total, onAbrir, animado = false }) {
+export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layout = 'grade', formato: formatoId = 'feed', numero, total, onAbrir, animado = false, escalaLogo }) {
   const f = formatoById(formatoId)
+  // Tamanho do logo deste jornal: vem do encarte publicado ou do controle do Jornal.
+  const logo = Math.min(1.3, Math.max(0.4, Number(escalaLogo ?? encarte?.escalaLogo ?? 1) || 1))
   const contorno = contornoTexto(tema.contorno)
   // Fundo: o enviado pelo mercado (só no Feed, preparado em 4:5) ou a arte do tema no formato.
   const imagemFundo = (f.id === 'feed' && fundo) || caminhoArte(tema, f.id)
@@ -274,6 +298,10 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
   // Temas com arte nos formatos altos: logo, chamada, validade e endereço numa coluna ao lado da arte.
   const colunaArte = tema.arte && !f.compacto && !fundo
   const larguraTitulo = f.largura - MARGEM * 2
+  // Temas sem arte: o título começa abaixo do logo (não passa por cima dele) e encolhe para
+  // caber antes da validade. Logo menor = título mais alto e maior.
+  const tituloTop = f.tituloTop ? Math.max(f.tituloTop - 30, 32 + 160 * logo - 6) : 0
+  const fonteTitulo = f.tituloTop ? Math.min(1, (topo - 120 - tituloTop) / (f.titulo * 0.9 + f.destaque * 0.95)) : 1
   return (
     <div className={`relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: f.largura, height: f.altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
       {usarFundo && <img src={imagemFundo} alt="" className="cm-fundo absolute inset-0 h-full w-full object-cover" />}
@@ -287,10 +315,10 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
       {/* topo da campanha */}
       <div className="cm-topo absolute left-0 right-0 top-0" style={{ height: topo }}>
         {colunaArte ? (
-          <ColunaArte tema={tema} encarte={encarte} loja={loja} f={f} topo={topo} />
+          <ColunaArte tema={tema} encarte={encarte} loja={loja} f={f} topo={topo} escalaLogo={logo} />
         ) : (
           <div className="absolute" style={{ left: MARGEM, top: f.compacto ? 24 : 32 }}>
-            <LogoEncarte h={f.compacto ? 140 : 160} />
+            <LogoEncarte h={f.compacto ? 140 : 160} escala={logo} />
           </div>
         )}
 
@@ -304,9 +332,9 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
           </div>
         ) : !usarFundo && (
           <>
-            <div className="absolute text-center italic" style={{ left: MARGEM, right: MARGEM, top: f.tituloTop }}>
-              <div className="whitespace-nowrap font-black uppercase leading-[0.9] tracking-tight" style={{ fontSize: fonteQueCabe(tema.titulo, larguraTitulo, f.titulo), color: tema.corTitulo, textShadow: contorno }}>{tema.titulo}</div>
-              <div className="whitespace-nowrap font-black uppercase leading-[0.95] tracking-tight" style={{ fontSize: fonteQueCabe(tema.destaque, larguraTitulo, f.destaque), color: tema.corDestaque, textShadow: contorno }}>{tema.destaque}</div>
+            <div className="absolute text-center italic" style={{ left: MARGEM, right: MARGEM, top: tituloTop }}>
+              <div className="whitespace-nowrap font-black uppercase leading-[0.9] tracking-tight" style={{ fontSize: fonteQueCabe(tema.titulo, larguraTitulo, f.titulo * fonteTitulo), color: tema.corTitulo, textShadow: contorno }}>{tema.titulo}</div>
+              <div className="whitespace-nowrap font-black uppercase leading-[0.95] tracking-tight" style={{ fontSize: fonteQueCabe(tema.destaque, larguraTitulo, f.destaque * fonteTitulo), color: tema.corDestaque, textShadow: contorno }}>{tema.destaque}</div>
             </div>
             <div className="absolute text-right font-black uppercase leading-tight text-white" style={{ right: MARGEM, top: 44, width: f.largura - 260, maxWidth: 560, fontSize: 30, textShadow: contornoTexto(tema.contorno, 2) }}>
               {tema.chamada}

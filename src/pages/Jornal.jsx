@@ -11,6 +11,7 @@ import {
 import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
 import SeletorTema from '../components/SeletorTema'
 import SeloArte from '../components/SeloArte'
+import EditorCelula from '../components/EditorCelula'
 import PaginaTemplate, { Escalado, paginarTemplate, LARGURA, ALTURA } from '../components/PaginaTemplate'
 import { temaCampanhaById, temasDoSetor, caminhoArte } from '../lib/temasCampanha'
 import { abrirJanelaPrevisualizacao, previsualizarImpressaoPaginas } from '../lib/exportar'
@@ -67,9 +68,11 @@ export default function Jornal() {
   const [seloEditando, setSeloEditando] = useState(null)
   // Preço editado no mesmo painel do selo (toque no produto da prévia).
   const [precoEditando, setPrecoEditando] = useState({ normal: '', promo: '' })
+  const [ajusteEditando, setAjusteEditando] = useState(null)
   const abrirProdutoDaPrevia = (produto) => {
     const atual = fila.find((f) => f.id === produto.id) || produto
     setPrecoEditando({ normal: atual.precoNormal ?? '', promo: atual.precoPromo ?? '' })
+    setAjusteEditando(atual.ajusteArte || null)
     setSeloEditando(atual)
   }
   // Período da campanha: definido pelo operador, nunca calculado pela validade dos produtos.
@@ -78,6 +81,10 @@ export default function Jornal() {
   const [publicadoEm, setPublicadoEm] = useState(() => lerEncartePublicado()?.publicadoEm || null)
   const [temaDigital, setTemaDigital] = useState(() => lerEncartePublicado()?.tema || 'ofertao')
   const [layoutDigital, setLayoutDigital] = useState(() => lerEncartePublicado()?.layout || 'grade')
+  // Tamanho do logo no jornal (0,4 a 1,3) e o template de cada setor (jornal de cada setor).
+  const [escalaLogo, setEscalaLogo] = useState(() => Number(lerEncartePublicado()?.escalaLogo) || 1)
+  const [temasSetor, setTemasSetor] = useState(() => lerEncartePublicado()?.temasSetor || {})
+  const temaDoSetor = (id) => temasSetor[id] || temasDoSetor(id)[0]?.id || temaDigital
   const [publicando, setPublicando] = useState(false)
   const [site, setSite] = useState({ online: null, protegido: false, erro: null })
   const [senhaPublicacao, setSenhaPublicacao] = useState(lerSenhaPublicacao)
@@ -174,7 +181,12 @@ export default function Jornal() {
   ]
   const itensArte = itensJornal.map((p) => ({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
   const paginasJornal = paginarTemplate(itensArte, layoutDigital, 'feed')
-  const temaArte = temaCampanhaById(temaDigital)
+  const temaArte = temaCampanhaById(tipo === 'setor' ? temaDoSetor(setorSel) : temaDigital)
+  // O site do cliente sempre recebe todos os produtos; cada setor vira uma aba com o template dele.
+  const ordenarParaJornal = (lista) => [
+    ...lista.filter((p) => p.origemFila === 'vencimento'),
+    ...lista.filter((p) => p.origemFila !== 'vencimento').sort((a, b) => ordemSetor(a) - ordemSetor(b)),
+  ].map((p) => ({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
   const bandas = []
   const validadeDe = periodoDe
   const validadeAte = periodoAte && periodoAte >= periodoDe ? periodoAte : periodoDe
@@ -209,7 +221,8 @@ export default function Jornal() {
     validadeAte,
     totalItens: itensJornal.length,
     totalPaginas: paginasJornal.length,
-    temaArte: temaDigital,
+    temaArte: tipo === 'setor' ? temaDoSetor(setorSel) : temaDigital,
+    escalaLogo,
     layoutArte: layoutDigital,
     fundoArte: fundoDigital,
     produtos: itensJornal.map((produto) => ({
@@ -252,15 +265,12 @@ export default function Jornal() {
     const promo = String(precoEditando.promo).trim() ? Number(String(precoEditando.promo).replace(',', '.')) : null
     if (!(normal > 0)) return toast('Informe o preço normal.', 'erro')
     if (promo !== null && !(promo > 0 && promo < normal)) return toast('O preço da oferta precisa ser menor que o normal.', 'erro')
-    salvarProduto({ id: seloEditando.id, precoNormal: normal, precoPromo: promo })
+    salvarProduto({ id: seloEditando.id, precoNormal: normal, precoPromo: promo, ajusteArte: ajusteEditando })
     toast(`${seloEditando.nome}: ${promo ? `de ${formatBRL(normal)} por ${formatBRL(promo)}` : formatBRL(normal)}.`)
     setSeloEditando(null)
   }
-  const escolherSetor = (id) => {
-    setSetorSel(id)
-    const primeiro = temasDoSetor(id)[0]
-    if (primeiro) setTemaDigital(primeiro.id)
-  }
+  const escolherSetor = (id) => setSetorSel(id)
+  const escolherTemaSetor = (id) => setTemasSetor((atual) => ({ ...atual, [setorSel]: id }))
   const trocarSelo = (produto, seloOferta) => {
     salvarProduto({ id: produto.id, seloOferta })
     const selo = SELOS_OFERTA.find((s) => s.id === seloOferta)
@@ -268,17 +278,21 @@ export default function Jornal() {
   }
 
   const publicarDigital = async () => {
-    if (!itensJornal.length) return toast('Adicione ao menos um produto ao jornal.', 'erro')
+    if (!ativos.length) return toast('Adicione ao menos um produto ao jornal.', 'erro')
+    const todos = ordenarParaJornal(ativos)
+    const setoresDoJornal = [...new Set(todos.map((p) => p.setor).filter(Boolean))]
     const dados = {
       titulo,
       mercado: config.nomeMercado,
       periodoDe: validadeDe,
       periodoAte: validadeAte,
       tema: temaDigital,
+      temasSetor: Object.fromEntries(setoresDoJornal.map((id) => [id, temaDoSetor(id)])),
+      escalaLogo,
       layout: layoutDigital,
       fundo: fundoDigital,
       loja: lojaAtual,
-      itens: itensParaArte(),
+      itens: todos,
     }
     const publicado = publicarEncarte(dados)
     setPublicadoEm(publicado.publicadoEm)
@@ -337,9 +351,9 @@ export default function Jornal() {
   }
 
   const Tab = ({ id, icone, children, badge }) => (
-    <button onClick={() => setAba(id)} className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition ${aba === id ? 'border-bengala text-bengala' : 'border-transparent text-ink-soft hover:text-ink'}`}>
-      <Icon name={icone} size={16} /> {children}
-      {badge > 0 && <span className="rounded-full bg-coral px-1.5 text-xs font-bold text-white">{badge}</span>}
+    <button onClick={() => setAba(id)} aria-pressed={aba === id} className={`relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border-2 px-1.5 py-2 text-center text-[11px] font-bold leading-tight transition sm:shrink-0 sm:flex-row sm:gap-2 sm:rounded-none sm:border-0 sm:border-b-2 sm:px-4 sm:py-2.5 sm:text-sm sm:font-medium ${aba === id ? 'border-bengala bg-bengala/5 text-bengala sm:bg-transparent' : 'border-ink-soft/15 bg-white text-ink-soft hover:text-ink sm:border-transparent sm:bg-transparent'}`}>
+      <Icon name={icone} size={18} /> <span>{children}</span>
+      {badge > 0 && <span className="absolute right-1 top-1 rounded-full bg-coral px-1.5 text-[10px] font-bold text-white sm:static sm:text-xs">{badge}</span>}
     </button>
   )
 
@@ -378,7 +392,7 @@ export default function Jornal() {
 
       <ScannerJornal />
 
-      <div className="flex gap-1 overflow-x-auto border-b border-ink-soft/10">
+      <div className="grid grid-cols-3 gap-1.5 sm:flex sm:gap-1 sm:overflow-x-auto sm:border-b sm:border-ink-soft/10">
         <Tab id="gerar" icone="LayoutTemplate">Montar jornal</Tab>
         <Tab id="artes" icone="Images">Baixar artes</Tab>
         <Tab id="fila" icone="ListChecks" badge={fila.length}>Produtos escaneados</Tab>
@@ -390,7 +404,7 @@ export default function Jornal() {
       {aba === 'gerar' && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[330px_minmax(0,1fr)]">
           {/* controles */}
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <div className="card-bengala space-y-3 p-4">
               <div>
                 <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">1. Escolha o modelo</p>
@@ -420,13 +434,13 @@ export default function Jornal() {
                       </button>
                     ))}
                   </div>
-                  <p className="mb-1.5 mt-3 text-xs font-medium text-ink-soft">Templates de {setorById(setorSel).nome}</p>
+                  <p className="mb-1.5 mt-3 text-xs font-medium text-ink-soft">Template do jornal de {setorById(setorSel).nome} (é o que o cliente vê na aba desse setor)</p>
                   <div className="grid grid-cols-2 gap-1.5">
                     {temasDoSetor(setorSel).map((t) => {
                       const mini = caminhoArte(t, 'miniatura')
-                      const ativo = temaDigital === t.id
+                      const ativo = temaDoSetor(setorSel) === t.id
                       return (
-                        <button key={t.id} type="button" onClick={() => setTemaDigital(t.id)} aria-pressed={ativo} title={t.nome}
+                        <button key={t.id} type="button" onClick={() => escolherTemaSetor(t.id)} aria-pressed={ativo} title={t.nome}
                           className={`relative flex aspect-[4/3] flex-col overflow-hidden rounded-lg text-left ${ativo ? 'ring-4 ring-offer ring-offset-1' : 'ring-1 ring-black/10'}`}
                           style={{ background: t.fundo }}>
                           {mini ? <img src={mini} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-contain p-1" /> : (
@@ -474,7 +488,8 @@ export default function Jornal() {
                     ? `Última publicação: ${new Date(publicadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
                     : 'Ainda não publicado.'}
                 </p>
-                <div className="mt-2 text-xs font-bold uppercase text-navy">Tema da campanha</div>
+                <div className="mt-2 text-xs font-bold uppercase text-navy">Tema do jornal geral</div>
+                <p className="text-[11px] text-ink-soft">O cliente vê a aba Geral com este tema e uma aba para cada setor, com o template escolhido em "Por setor".</p>
                 <div className="mt-1"><SeletorTema compacto value={temaDigital} onChange={setTemaDigital} /></div>
                 <div className="mt-3 text-xs font-bold uppercase text-navy">Layout</div>
                 <div className="mt-1 grid grid-cols-2 gap-1.5">
@@ -484,6 +499,14 @@ export default function Jornal() {
                       {rotulo}
                     </button>
                   ))}
+                </div>
+                <div className="mt-3 flex items-center justify-between text-xs font-bold uppercase text-navy">
+                  <span>Tamanho do logo</span><span>{Math.round(escalaLogo * 100)}%</span>
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <button type="button" onClick={() => setEscalaLogo((v) => Math.max(0.4, Math.round((v - 0.1) * 10) / 10))} aria-label="Diminuir o logo" className="h-9 w-9 shrink-0 rounded-lg border-2 border-navy/20 bg-white text-lg font-black text-navy">−</button>
+                  <input type="range" min="0.4" max="1.3" step="0.05" value={escalaLogo} onChange={(e) => setEscalaLogo(Number(e.target.value))} className="w-full accent-bengala" aria-label="Tamanho do logo" />
+                  <button type="button" onClick={() => setEscalaLogo((v) => Math.min(1.3, Math.round((v + 0.1) * 10) / 10))} aria-label="Aumentar o logo" className="h-9 w-9 shrink-0 rounded-lg border-2 border-navy/20 bg-white text-lg font-black text-navy">+</button>
                 </div>
                 <div className="mt-3 text-xs font-bold uppercase text-navy">Fundo do template (opcional)</div>
                 <p className="text-[11px] text-ink-soft">Exporte a arte do template sem produtos, sem logo e sem texto de validade (1080 × 1350). O sistema coloca tudo por cima.</p>
@@ -629,7 +652,7 @@ export default function Jornal() {
           </div>
 
           {/* prévia do encarte novo (o mesmo do link da tag NFC e das artes) */}
-          <div className="min-w-0 space-y-4 pb-2">
+          <div className="order-first min-w-0 space-y-4 pb-2 lg:order-none">
             <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-ink-soft">
               <span className="font-bold text-ink">Prévia do encarte · {temaArte.nome}</span>
               {itensJornal.length > 0 && <span>Toque num produto para trocar o selo ou o preço</span>}
@@ -648,7 +671,7 @@ export default function Jornal() {
                 </div>
                 <div className="overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5">
                   <Escalado largura={LARGURA} altura={ALTURA}>
-                    <PaginaTemplate tema={temaArte} itens={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutDigital} numero={indice + 1} total={paginasJornal.length} onAbrir={abrirProdutoDaPrevia} />
+                    <PaginaTemplate tema={temaArte} itens={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutDigital} numero={indice + 1} total={paginasJornal.length} onAbrir={abrirProdutoDaPrevia} escalaLogo={escalaLogo} />
                   </Escalado>
                 </div>
               </div>
@@ -660,7 +683,7 @@ export default function Jornal() {
             <div className="pointer-events-none fixed top-0" style={{ left: -20000 }} aria-hidden="true">
               {paginasJornal.map((itens, indice) => (
                 <div key={indice} ref={(el) => { pageRefs.current[indice] = el }} style={{ width: LARGURA, height: ALTURA }}>
-                  <PaginaTemplate tema={temaArte} itens={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutDigital} numero={indice + 1} total={paginasJornal.length} />
+                  <PaginaTemplate tema={temaArte} itens={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutDigital} numero={indice + 1} total={paginasJornal.length} escalaLogo={escalaLogo} />
                 </div>
               ))}
             </div>
@@ -679,6 +702,7 @@ export default function Jornal() {
           loja={lojaAtual}
           temaId={temaDigital}
           setTemaId={setTemaDigital}
+          escalaLogo={escalaLogo}
           layout={layoutDigital}
           setLayout={setLayoutDigital}
           fundo={fundoDigital}
@@ -729,6 +753,7 @@ export default function Jornal() {
                 loja={lojaAtual}
                 fundo={historicoParaAbrir.jornal.fundoArte || null}
                 layout={historicoParaAbrir.jornal.layoutArte || 'grade'}
+                escalaLogo={historicoParaAbrir.jornal.escalaLogo}
                 numero={indice + 1}
                 total={todas.length}
               />
@@ -741,7 +766,7 @@ export default function Jornal() {
         open={Boolean(seloEditando)}
         onClose={() => setSeloEditando(null)}
         titulo={seloEditando ? seloEditando.nome : 'Selo e preço do produto'}
-        footer={<><Botao variante="contorno" onClick={() => setSeloEditando(null)}>Fechar</Botao><Botao onClick={salvarPrecoDaPrevia}><Icon name="Save" size={15} /> Salvar preço</Botao></>}
+        footer={<><Botao variante="contorno" onClick={() => setSeloEditando(null)}>Fechar</Botao><Botao onClick={salvarPrecoDaPrevia}><Icon name="Save" size={15} /> Salvar produto</Botao></>}
       >
         {seloEditando && (
           <div className="space-y-4">
@@ -751,7 +776,16 @@ export default function Jornal() {
                 <Campo label="Preço normal (de)"><input type="number" inputMode="decimal" min="0.01" step="0.01" className={inputCls} value={precoEditando.normal} onChange={(e) => setPrecoEditando((p) => ({ ...p, normal: e.target.value }))} /></Campo>
                 <Campo label="Preço da oferta (por)"><input type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="sem oferta" className={inputCls} value={precoEditando.promo} onChange={(e) => setPrecoEditando((p) => ({ ...p, promo: e.target.value }))} /></Campo>
               </div>
-              <p className="mt-1 text-xs text-ink-soft">Deixe o preço da oferta vazio para mostrar só o preço normal. Toque em Salvar preço.</p>
+              <p className="mt-1 text-xs text-ink-soft">Deixe o preço da oferta vazio para mostrar só o preço normal.</p>
+            </div>
+            <div>
+              <p className="mb-2 text-sm font-bold text-ink">Ajustar na arte</p>
+              <EditorCelula
+                produto={{ ...(fila.find((f) => f.id === seloEditando.id) || seloEditando), precoJornal: Number(String(precoEditando.promo).replace(',', '.')) || Number(String(precoEditando.normal).replace(',', '.')) || precoJornal(seloEditando) }}
+                tema={temaArte}
+                ajuste={ajusteEditando}
+                onChange={setAjusteEditando}
+              />
             </div>
             <div>
               <p className="mb-2 text-sm font-bold text-ink">Selo</p>

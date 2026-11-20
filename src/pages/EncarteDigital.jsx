@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Icon, Logo, PrecoVarejo } from '../components/ui'
 import { SETORES, setorById, formatBRL, formatData } from '../lib/utils'
 import { carregarEncartePublicado, assinarEncarte, linkDoEncarte } from '../lib/encartePublico'
-import { temaCampanhaById } from '../lib/temasCampanha'
+import { temaCampanhaById, temasDoSetor } from '../lib/temasCampanha'
 import SeloArte from '../components/SeloArte'
 import { SimboloClawMarket } from '../components/MarcaClawMarket'
 import PaginaTemplate, { Escalado, paginarTemplate } from '../components/PaginaTemplate'
@@ -46,14 +46,16 @@ function SeloPreco({ valor, tema, grande = false }) {
   )
 }
 
-function CartaoProduto({ produto, onAbrir, tema, indice = 0 }) {
+function CartaoProduto({ produto, onAbrir, tema, indice = 0, compras }) {
   const desconto = Number(produto.descontoJornal) || 0
   const temDe = desconto > 0 && Number(produto.precoNormal) > Number(produto.precoJornal)
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onAbrir(produto)}
-      className="cm-cartao group relative flex flex-col overflow-hidden rounded-2xl border-2 border-navy/15 bg-white text-left shadow-sm focus:outline-none focus-visible:ring-4 focus-visible:ring-offer"
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAbrir(produto) } }}
+      className="cm-cartao group cursor-pointer relative flex flex-col overflow-hidden rounded-2xl border-2 border-navy/15 bg-white text-left shadow-sm focus:outline-none focus-visible:ring-4 focus-visible:ring-offer"
       style={{ '--cm-i': Math.min(indice, 12) }}
       aria-label={`Ver oferta: ${produto.nome}`}
     >
@@ -75,16 +77,131 @@ function CartaoProduto({ produto, onAbrir, tema, indice = 0 }) {
               De <span className="line-through">{formatBRL(produto.precoNormal)}</span>
             </div>
           )}
-          <div className="mt-1"><span className="cm-preco-lista"><SeloPreco valor={produto.precoJornal} tema={tema} /></span></div>
+          <div className="mt-1 flex items-end justify-between gap-1">
+            <span className="cm-preco-lista"><SeloPreco valor={produto.precoJornal} tema={tema} /></span>
+            {compras && <BotaoLista produto={produto} compras={compras} />}
+          </div>
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 
 const soDigitos = (v) => String(v || '').replace(/\D/g, '')
 
-function PreviewProduto({ produto, lista, onTrocar, onFechar, tema, encarte, loja }) {
+// ---- lista de compras do cliente (fica só no celular dele) ----
+const CHAVE_LISTA = 'clawmarket:lista-compras:v1'
+function lerLista() {
+  try { const l = JSON.parse(localStorage.getItem(CHAVE_LISTA) || '[]'); return Array.isArray(l) ? l : [] } catch (_) { return [] }
+}
+function useListaCompras() {
+  const [lista, setLista] = useState(lerLista)
+  const gravar = useCallback((fn) => setLista((atual) => {
+    const nova = fn(atual)
+    try { localStorage.setItem(CHAVE_LISTA, JSON.stringify(nova)) } catch (_) { /* sem espaço: fica só na tela */ }
+    return nova
+  }), [])
+  const tem = useCallback((id) => lista.some((i) => i.id === String(id)), [lista])
+  const alternar = useCallback((p) => gravar((atual) => (atual.some((i) => i.id === String(p.id))
+    ? atual.filter((i) => i.id !== String(p.id))
+    : [...atual, {
+      id: String(p.id), nome: p.nome, setor: p.setor, preco: Number(p.precoJornal) || 0, qtd: 1, pego: false,
+      unidade: p.unidade || '', imagem: /^https?:|^\//.test(String(p.imagem || '')) ? p.imagem : null,
+    }])), [gravar])
+  const mudar = useCallback((id, dados) => gravar((atual) => atual.map((i) => (i.id === id ? { ...i, ...dados } : i))), [gravar])
+  const remover = useCallback((id) => gravar((atual) => atual.filter((i) => i.id !== id)), [gravar])
+  const limparPegos = useCallback(() => gravar((atual) => atual.filter((i) => !i.pego)), [gravar])
+  const limparTudo = useCallback(() => gravar(() => []), [gravar])
+  return { lista, tem, alternar, mudar, remover, limparPegos, limparTudo }
+}
+
+function BotaoLista({ produto, compras, grande = false }) {
+  const na = compras.tem(produto.id)
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); compras.alternar(produto) }}
+      aria-pressed={na}
+      className={`flex items-center justify-center gap-1.5 rounded-xl border-2 font-black ${grande ? 'px-3 py-3 text-base' : 'px-2 py-1.5 text-xs'} ${na ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-navy bg-white text-navy'}`}
+    >
+      <Icon name={na ? 'ListChecks' : 'ListPlus'} size={grande ? 20 : 15} /> {na ? 'Na lista' : grande ? 'Pôr na lista de compras' : 'Lista'}
+    </button>
+  )
+}
+
+function ListaCompras({ compras, loja, encarte }) {
+  const { lista } = compras
+  const total = lista.reduce((t, i) => t + i.preco * (Number(i.qtd) || 1), 0)
+  const pegos = lista.filter((i) => i.pego).length
+  const grupos = SETORES.map((s) => ({ setor: s, itens: lista.filter((i) => i.setor === s.id) })).filter((g) => g.itens.length)
+  const semSetor = lista.filter((i) => !SETORES.some((s) => s.id === i.setor))
+  if (semSetor.length) grupos.push({ setor: { id: 'outros', nome: 'Outros', cor: '#334155', icone: 'ShoppingBag' }, itens: semSetor })
+  const texto = [
+    `Minha lista de compras${encarte?.mercado ? ` - ${encarte.mercado}` : ''}`,
+    ...lista.map((i) => `${i.pego ? '[x]' : '[ ]'} ${i.qtd}x ${i.nome} - ${formatBRL(i.preco)}`),
+    `Total estimado: ${formatBRL(total)}`,
+  ].join('\n')
+  const compartilhar = async () => {
+    try { if (navigator.share) { await navigator.share({ title: 'Minha lista de compras', text: texto }); return } } catch (e) { if (e?.name === 'AbortError') return }
+    try { await navigator.clipboard.writeText(texto) } catch (_) { window.prompt('Copie sua lista:', texto) }
+  }
+  if (!lista.length) {
+    return (
+      <div className="rounded-3xl bg-white px-4 py-14 text-center">
+        <Icon name="ListPlus" size={48} className="mx-auto text-navy" />
+        <p className="mt-3 text-xl font-black text-navy">Sua lista de compras está vazia</p>
+        <p className="mt-1 text-base text-ink-soft">Toque em "Lista" nas ofertas para guardar o que você vai levar. Ela fica salva neste celular.</p>
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl bg-white p-4 shadow">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-sm font-bold text-ink-soft">{lista.length} {lista.length === 1 ? 'item' : 'itens'} · {pegos} no carrinho</div>
+            <div className="text-2xl font-black text-navy">Total estimado {formatBRL(total)}</div>
+          </div>
+          <Icon name="ShoppingCart" size={34} className="text-bengala" />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button type="button" onClick={compartilhar} className="flex items-center justify-center gap-2 rounded-xl border-2 border-navy px-3 py-2.5 text-sm font-black text-navy"><Icon name="Share2" size={18} /> Enviar lista</button>
+          <button type="button" onClick={pegos ? compras.limparPegos : compras.limparTudo} className="flex items-center justify-center gap-2 rounded-xl border-2 border-critical/40 px-3 py-2.5 text-sm font-black text-critical"><Icon name="Trash2" size={18} /> {pegos ? 'Tirar os pegos' : 'Limpar lista'}</button>
+        </div>
+      </div>
+      {grupos.map((g) => (
+        <section key={g.setor.id}>
+          <h2 className="mb-2 flex items-center gap-2 rounded-xl px-4 py-2 text-base font-black uppercase text-white" style={{ background: g.setor.cor }}>
+            <Icon name={g.setor.icone} size={20} /> {g.setor.nome}
+          </h2>
+          <div className="space-y-2">
+            {g.itens.map((i) => (
+              <div key={i.id} className={`flex items-center gap-3 rounded-2xl bg-white p-3 shadow-sm ${i.pego ? 'opacity-60' : ''}`}>
+                <button type="button" onClick={() => compras.mudar(i.id, { pego: !i.pego })} aria-pressed={i.pego} aria-label={i.pego ? 'Desmarcar' : 'Marcar como pego'}
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 ${i.pego ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-navy/30 bg-white text-transparent'}`}>
+                  <Icon name="Check" size={20} />
+                </button>
+                {i.imagem ? <img src={i.imagem} alt="" className="h-12 w-12 shrink-0 object-contain" /> : null}
+                <div className="min-w-0 flex-1">
+                  <div className={`text-sm font-extrabold uppercase leading-tight text-navy ${i.pego ? 'line-through' : ''}`}>{i.nome}</div>
+                  <div className="text-sm font-bold text-bengala">{formatBRL(i.preco)}{i.unidade ? ` ${i.unidade}` : ''}</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button type="button" onClick={() => (i.qtd > 1 ? compras.mudar(i.id, { qtd: i.qtd - 1 }) : compras.remover(i.id))} className="h-8 w-8 rounded-lg border-2 border-navy/20 text-lg font-black text-navy" aria-label="Menos">−</button>
+                  <span className="w-6 text-center text-base font-black text-navy">{i.qtd}</span>
+                  <button type="button" onClick={() => compras.mudar(i.id, { qtd: i.qtd + 1 })} className="h-8 w-8 rounded-lg border-2 border-navy/20 text-lg font-black text-navy" aria-label="Mais">+</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+      <p className="text-center text-xs font-semibold text-white" style={{ textShadow: '0 1px 2px rgba(0,0,0,.5)' }}>Preços do encarte. O total é uma estimativa.{loja?.endereco ? ` ${loja.endereco}.` : ''}</p>
+    </div>
+  )
+}
+
+function PreviewProduto({ produto, lista, onTrocar, onFechar, tema, encarte, loja, compras }) {
   const indice = produto ? lista.findIndex((p) => p.id === produto.id) : -1
   const anterior = indice > 0 ? lista[indice - 1] : null
   const proximo = indice >= 0 && indice < lista.length - 1 ? lista[indice + 1] : null
@@ -204,6 +321,7 @@ function PreviewProduto({ produto, lista, onTrocar, onFechar, tema, encarte, loj
         </div>
 
         <div className="space-y-3 px-5 pt-4">
+          {compras && <BotaoLista produto={produto} compras={compras} grande />}
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={compartilhar} className="flex items-center justify-center gap-2 rounded-xl border-2 border-navy px-3 py-3 text-base font-black text-navy">
               <Icon name={copiado ? 'Check' : 'Share2'} size={20} /> {copiado ? 'Link copiado' : 'Compartilhar'}
@@ -245,7 +363,9 @@ function PaginaViva({ children }) {
 export default function EncarteDigital() {
   const [encarte, setEncarte] = useState(null)
   const [carregando, setCarregando] = useState(true)
+  // Aba: 'todos' (jornal geral), o id de um setor (jornal daquele setor) ou 'compras'.
   const [setorFiltro, setSetorFiltro] = useState('todos')
+  const compras = useListaCompras()
   const [params, setParams] = useSearchParams()
   const [acabouDeAtualizar, setAcabouDeAtualizar] = useState(false)
   const [modo, setModo] = useState('encarte')
@@ -272,13 +392,16 @@ export default function EncarteDigital() {
   }, [])
 
   const itens = encarte?.itens || []
-  const tema = temaCampanhaById(encarte?.tema)
+  const temaGeral = temaCampanhaById(encarte?.tema)
+  // Cada setor tem o seu jornal, com o template escolhido para ele no Jornal.
+  const temaDoSetor = (id) => temaCampanhaById(encarte?.temasSetor?.[id] || temasDoSetor(id)[0]?.id || encarte?.tema)
+  const tema = setorFiltro !== 'todos' && setorFiltro !== 'compras' ? temaDoSetor(setorFiltro) : temaGeral
   const setoresPresentes = useMemo(
     () => SETORES.filter((s) => itens.some((p) => p.setor === s.id)),
     [itens]
   )
-  const visiveis = setorFiltro === 'todos' ? itens : itens.filter((p) => p.setor === setorFiltro)
-  const grupos = setorFiltro === 'todos'
+  const visiveis = setorFiltro === 'todos' || setorFiltro === 'compras' ? itens : itens.filter((p) => p.setor === setorFiltro)
+  const grupos = setorFiltro === 'todos' || setorFiltro === 'compras'
     ? setoresPresentes.map((s) => ({ setor: s, itens: itens.filter((p) => p.setor === s.id) }))
     : [{ setor: setorById(setorFiltro), itens: visiveis }]
   const layout = encarte?.layout || 'grade'
@@ -332,7 +455,7 @@ export default function EncarteDigital() {
         <nav className="sticky top-0 z-20 border-b-2 border-navy/10 bg-white/95 backdrop-blur" aria-label="Seções do mercado">
           <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 py-3">
             <div className="flex shrink-0 overflow-hidden rounded-full border-2 border-navy" role="group" aria-label="Modo de visualização">
-              {[['encarte', 'Encarte'], ['lista', 'Lista']].map(([id, rotulo]) => (
+              {[['encarte', 'Encarte'], ['lista', 'Produtos']].map(([id, rotulo]) => (
                 <button key={id} type="button" onClick={() => setModo(id)} aria-pressed={modo === id} className={`px-4 py-2 text-sm font-black ${modo === id ? 'bg-navy text-white' : 'bg-white text-navy'}`}>
                   {rotulo}
                 </button>
@@ -341,10 +464,17 @@ export default function EncarteDigital() {
             <span className="w-px shrink-0 bg-navy/15" />
             <button
               type="button"
+              onClick={() => setSetorFiltro('compras')}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 px-4 py-2 text-sm font-black ${setorFiltro === 'compras' ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-[#128c4a]/50 bg-white text-[#128c4a]'}`}
+            >
+              <Icon name="ShoppingCart" size={16} /> Minha lista{compras.lista.length ? ` (${compras.lista.length})` : ''}
+            </button>
+            <button
+              type="button"
               onClick={() => setSetorFiltro('todos')}
               className={`shrink-0 rounded-full border-2 px-4 py-2 text-sm font-black ${setorFiltro === 'todos' ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}
             >
-              Todas ({itens.length})
+              Geral ({itens.length})
             </button>
             {setoresPresentes.map((s) => (
               <button
@@ -357,6 +487,7 @@ export default function EncarteDigital() {
                 {s.nome}
               </button>
             ))}
+
           </div>
         </nav>
       )}
@@ -370,6 +501,8 @@ export default function EncarteDigital() {
             <p className="mt-3 text-xl font-black text-navy">Nenhuma oferta publicada ainda.</p>
             <p className="mt-1 text-base text-ink-soft">Assim que o mercado publicar, as ofertas aparecem aqui.</p>
           </div>
+        ) : setorFiltro === 'compras' ? (
+          <ListaCompras compras={compras} loja={loja} encarte={encarte} />
         ) : modo === 'encarte' ? (
           <div className="grid gap-6 lg:grid-cols-2">
             {paginas.map((pagina, i) => (
@@ -390,7 +523,7 @@ export default function EncarteDigital() {
                   <Icon name={g.setor.icone} size={22} /> {g.setor.nome}
                 </h2>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  {g.itens.map((p, i) => <CartaoProduto key={p.id} produto={p} indice={i} onAbrir={abrir} tema={tema} />)}
+                  {g.itens.map((p, i) => <CartaoProduto key={p.id} produto={p} indice={i} onAbrir={abrir} tema={tema} compras={compras} />)}
                 </div>
               </section>
             ))}
@@ -413,7 +546,7 @@ export default function EncarteDigital() {
         </div>
       )}
 
-      <PreviewProduto produto={aberto} lista={listaPreview} onTrocar={abrir} onFechar={fechar} tema={tema} encarte={encarte} loja={loja} />
+      <PreviewProduto produto={aberto} lista={listaPreview} onTrocar={abrir} onFechar={fechar} tema={tema} encarte={encarte} loja={loja} compras={compras} />
     </div>
   )
 }
