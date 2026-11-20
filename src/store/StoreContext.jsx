@@ -11,8 +11,9 @@ import { uid, statusValidade } from '../lib/utils'
 import { restaurarImagensSalvas } from '../lib/produtoApi'
 import {
   nuvemAtiva, sessaoNuvem, entrarNuvem, criarContaNuvem, sairNuvem, trocarSenhaNuvem,
-  listarPerfisNuvem, alterarPapelNuvem, baixarTudoNuvem, gravarNuvem, assinarNuvem,
+  listarPerfisNuvem, alterarPapelNuvem, baixarTudoNuvem, gravarNuvem, assinarNuvem, enviarFotoNuvem,
 } from '../lib/nuvem'
+import { fotoDoCatalogo, ehFotoDaPastaLocal } from '../lib/catalogoBengala'
 
 const KEY = 'clawmarket:v1'
 const LIMPEZA_CATALOGO_KEY = 'clawmarket:catalogo-limpo:2026-07-24'
@@ -397,6 +398,59 @@ export function StoreProvider({ children }) {
     })()
     return () => { ativo = false; parar?.(); pronta.current = false }
   }, [nuvem, usuario?.id])
+
+  // Fotos da pasta de imagens do mercado (A:\\imagens no PC): valem para todos os produtos com
+  // código de barras, no lugar das fotos antigas. O PC envia cada foto para a nuvem, e os outros
+  // aparelhos passam a ver a mesma foto inteira, sem recorte.
+  const fotosConferidas = useRef(new Set())
+  const fotosRodando = useRef(false)
+  const montado = useRef(true)
+  const [fotosRodada, setFotosRodada] = useState(0)
+  useEffect(() => { montado.current = true; return () => { montado.current = false } }, [])
+  useEffect(() => {
+    if (fotosRodando.current) return undefined
+    if (nuvem && (!usuario?.id || nuvemStatus !== 'online')) return undefined
+    const pendentes = produtos.filter((p) => {
+      const ean = String(p.codigoBarras || '').replace(/\D/g, '')
+      if (ean.length < 8 || fotosConferidas.current.has(`${ean}|${p.imagem || ''}`)) return false
+      if (p.imagemOrigem !== 'catalogo') return true
+      return nuvem && ehFotoDaPastaLocal(p.imagem) // foto do PC que ainda não foi para a nuvem
+    })
+    if (!pendentes.length) return undefined
+    fotosRodando.current = true
+    ;(async () => {
+      const trocas = new Map()
+      const fila = [...pendentes]
+      const trabalhar = async () => {
+        while (fila.length && montado.current) {
+          const p = fila.shift()
+          const ean = String(p.codigoBarras).replace(/\D/g, '')
+          fotosConferidas.current.add(`${ean}|${p.imagem || ''}`)
+          let url = await fotoDoCatalogo(ean)
+          if (!url) continue
+          if (nuvem && ehFotoDaPastaLocal(url)) url = (await enviarFotoNuvem(ean, url)) || url
+          if (url === p.imagem && p.imagemOrigem === 'catalogo') continue
+          fotosConferidas.current.add(`${ean}|${url}`)
+          trocas.set(p.id, url)
+        }
+      }
+      await Promise.all([trabalhar(), trabalhar(), trabalhar(), trabalhar()])
+      fotosRodando.current = false
+      if (!montado.current) return
+      if (!trocas.size) { setFotosRodada((n) => n + 1); return } // confere o que entrou durante a rodada
+      setProdutos((lista) => lista.map((p) => (trocas.has(p.id) ? {
+        ...p,
+        imagem: trocas.get(p.id),
+        imagemOrigem: 'catalogo',
+        imagemOrigemNome: 'Pasta de imagens do mercado',
+        imagemAprovada: true,
+        imagemTratada: true,
+        imagemCachePermanente: false,
+        imagemFonteUrl: null,
+      } : p)))
+    })()
+    return undefined
+  }, [nuvem, usuario?.id, nuvemStatus, produtos, fotosRodada])
 
   // Cada mudança feita aqui sobe para a nuvem (só os itens que mudaram), no máximo meio segundo
   // depois. O cronômetro não reinicia a cada mudança: mesmo com edições seguidas, o envio sai.
