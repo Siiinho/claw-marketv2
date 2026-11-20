@@ -9,7 +9,8 @@ import {
   percentDesc, dataISOmaisDias, diaSemana, SELOS_OFERTA, seloDoProduto,
 } from '../lib/utils'
 import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate } from '../lib/encartePublico'
-import { TEMAS_CAMPANHA } from '../lib/temasCampanha'
+import SeletorTema from '../components/SeletorTema'
+import SeloArte from '../components/SeloArte'
 import { abrirJanelaPrevisualizacao, previsualizarImpressaoPaginas } from '../lib/exportar'
 import { imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
 
@@ -361,7 +362,7 @@ export default function Jornal() {
 
       {/* ============ GERAR ============ */}
       {aba === 'gerar' && (
-        <div className="grid gap-5 lg:grid-cols-[330px_1fr]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[330px_minmax(0,1fr)]">
           {/* controles */}
           <div className="space-y-4">
             <div className="card-bengala space-y-3 p-4">
@@ -457,20 +458,7 @@ export default function Jornal() {
                     : 'Ainda não publicado.'}
                 </p>
                 <div className="mt-2 text-xs font-bold uppercase text-navy">Tema da campanha</div>
-                <div className="mt-1 grid grid-cols-2 gap-1.5">
-                  {TEMAS_CAMPANHA.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setTemaDigital(t.id)}
-                      className={`rounded-lg px-2 py-2 text-left text-xs font-black text-white ${temaDigital === t.id ? 'ring-4 ring-offer' : ''}`}
-                      style={{ background: t.fundo, textShadow: '0 1px 2px rgba(0,0,0,.6)' }}
-                      aria-pressed={temaDigital === t.id}
-                    >
-                      {t.nome}
-                    </button>
-                  ))}
-                </div>
+                <div className="mt-1"><SeletorTema compacto value={temaDigital} onChange={setTemaDigital} /></div>
                 <div className="mt-3 text-xs font-bold uppercase text-navy">Layout</div>
                 <div className="mt-1 grid grid-cols-2 gap-1.5">
                   {[['grade', 'Grade 3×3 (9 produtos)'], ['destaque', '1 destaque + 7']].map(([id, rotulo]) => (
@@ -1063,10 +1051,16 @@ const PaginaJornalAdaptavel = forwardRef(function PaginaJornalAdaptavel(
 })
 
 function SeletorSelo({ value, onChange }) {
+  const atual = value || 'oferta'
   return (
-    <select className={inputCls} value={value || 'oferta'} onChange={(e) => onChange(e.target.value)}>
-      {SELOS_OFERTA.map((s) => <option key={s.id} value={s.id}>{s.texto}</option>)}
-    </select>
+    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+      {SELOS_OFERTA.map((s) => (
+        <button key={s.id} type="button" onClick={() => onChange(s.id)} aria-pressed={atual === s.id} title={s.texto}
+          className={`flex h-16 items-center justify-center rounded-lg border-2 bg-white ${atual === s.id ? 'border-bengala ring-2 ring-bengala/30' : 'border-ink-soft/15'}`}>
+          <SeloArte selo={s} largura={104} girar={-4} />
+        </button>
+      ))}
+    </div>
   )
 }
 

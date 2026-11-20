@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Logo, PrecoVarejo } from './ui'
-import { formatBRL, formatData, seloDoProduto, setorById } from '../lib/utils'
+import { formatBRL, formatData, setorById } from '../lib/utils'
+import { caminhoArte } from '../lib/temasCampanha'
+import SeloArte from './SeloArte'
 
 // Motor de templates do encarte: a mesma lista de ofertas vira várias artes.
 //  - Feed 4:5 (1080 × 1350), Stories 9:16 (1080 × 1920), TV 16:9 (1920 × 1080)
@@ -99,7 +101,6 @@ function SeloPrecoOval({ produto, tema, k }) {
 }
 
 function CelulaProduto({ produto, tema, onAbrir, estilo }) {
-  const selo = seloDoProduto(produto)
   const setor = setorById(produto.setor)
   // Fator de escala da célula: cresce com a área, sem deixar o selo de preço sair da célula.
   const k = Math.max(0.8, Math.min(2.6,
@@ -135,12 +136,7 @@ function CelulaProduto({ produto, tema, onAbrir, estilo }) {
       ) : (
         <div className="absolute inset-x-0 text-center font-black" style={{ top: 90 * k, fontSize: 70 * k, color: setor.cor }}>•</div>
       )}
-      <span
-        className="absolute rounded-lg font-black uppercase leading-none"
-        style={{ left: 8 * k, top: topoFoto, padding: `${4 * k}px ${10 * k}px`, fontSize: 14 * k, background: selo.fundo, color: selo.cor, transform: 'rotate(-4deg)' }}
-      >
-        {selo.texto}
-      </span>
+      <SeloArte produto={produto} largura={118 * k} className="absolute" style={{ position: 'absolute', left: 2 * k, top: topoFoto - 4 * k }} />
       {k >= 1.2 && temDesconto(produto) && (
         <span
           className="absolute rounded-md bg-white/90 font-black leading-none text-[#222]"
@@ -156,9 +152,10 @@ function CelulaProduto({ produto, tema, onAbrir, estilo }) {
 }
 
 // Posições das células dentro da área de produtos.
-export function posicoesGrade(formatoId, layout, quantidade) {
+export function posicoesGrade(formatoId, layout, quantidade, topo) {
   const f = formatoById(formatoId)
-  const area = { x: MARGEM, y: f.topo, w: f.largura - MARGEM * 2, h: f.altura - f.topo - MARGEM }
+  const y0 = topo || f.topo
+  const area = { x: MARGEM, y: y0, w: f.largura - MARGEM * 2, h: f.altura - y0 - MARGEM }
   const montar = (cols, lins) => {
     const w = (area.w - GAP * (cols - 1)) / cols
     const h = (area.h - GAP * (lins - 1)) / lins
@@ -224,25 +221,62 @@ function CaixaLoja({ loja, fonte = 20 }) {
   )
 }
 
+// Coluna de informações ao lado da arte do título (temas com arte, formatos altos).
+function ColunaArte({ tema, encarte, loja, f, topo }) {
+  const [ax0, ax1] = tema.arteX || [440, 1000]
+  const direita = tema.logo === 'd'
+  const esquerda = direita ? Math.min(Math.max(ax1 + 8, 520), 740) : MARGEM
+  const fim = direita ? f.largura - MARGEM : Math.min(Math.max(ax0 - 8, 340), 560)
+  const largura = fim - esquerda
+  const linhasChamada = String(tema.chamada || '').length > 16 ? 2 : 1
+  const fonteChamada = Math.min(48, (largura * linhasChamada) / (String(tema.chamada || '').length * 0.5))
+  return (
+    <div className="absolute flex flex-col gap-3" style={{ left: esquerda, width: largura, top: f.id === 'stories' ? 40 : 24, height: topo - (f.id === 'stories' ? 56 : 36), alignItems: direita ? 'flex-end' : 'flex-start' }}>
+      <div className="relative shrink-0" style={{ width: Math.min(largura, 300), height: 104 }}>
+        <div aria-hidden="true" className="absolute inset-0 rounded-2xl" style={{ top: 6, bottom: -6, background: 'rgba(0,0,0,.2)' }} />
+        <div className="relative flex h-full items-center justify-center rounded-2xl bg-white"><Logo h={92} /></div>
+      </div>
+      {tema.chamada && (
+        <div className="uppercase leading-[0.95] text-white" style={{ fontFamily: 'Bangers, var(--font-sans)', fontSize: fonteChamada, letterSpacing: '0.02em', textAlign: direita ? 'right' : 'left', textShadow: contornoTexto(tema.contorno, 3) }}>
+          {tema.chamada}
+        </div>
+      )}
+      <div className="mt-auto flex w-full flex-col gap-2" style={{ alignItems: direita ? 'flex-end' : 'flex-start' }}>
+        <FaixaValidade encarte={encarte} tema={tema} fonte={largura < 400 ? 19 : 22} />
+        <CaixaLoja loja={loja} fonte={largura < 400 ? 16 : 18} />
+      </div>
+    </div>
+  )
+}
+
 export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layout = 'grade', formato: formatoId = 'feed', numero, total, onAbrir }) {
   const f = formatoById(formatoId)
   const contorno = contornoTexto(tema.contorno)
-  const posicoes = posicoesGrade(f.id, layout, itens.length)
-  // O fundo enviado é preparado em 4:5; nos outros formatos ele cortaria a arte.
-  const usarFundo = fundo && f.id === 'feed'
+  // Fundo: o enviado pelo mercado (só no Feed, preparado em 4:5) ou a arte do tema no formato.
+  const imagemFundo = (f.id === 'feed' && fundo) || caminhoArte(tema, f.id)
+  const usarFundo = !!imagemFundo
+  // Nos temas com arte, a arte do título desce um pouco mais no Feed.
+  const topo = tema.arte && f.id === 'feed' && !fundo ? 500 : f.topo
+  const posicoes = posicoesGrade(f.id, layout, itens.length, topo)
+  // Temas com arte nos formatos altos: logo, chamada, validade e endereço numa coluna ao lado da arte.
+  const colunaArte = tema.arte && !f.compacto && !fundo
   const larguraTitulo = f.largura - MARGEM * 2
   return (
     <div className="relative overflow-hidden" style={{ width: f.largura, height: f.altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
-      {usarFundo && <img src={fundo} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+      {usarFundo && <img src={imagemFundo} alt="" className="absolute inset-0 h-full w-full object-cover" />}
 
       {/* topo da campanha */}
-      <div className="absolute left-0 right-0 top-0" style={{ height: f.topo }}>
-        <div className="absolute" style={{ left: MARGEM, top: f.compacto ? 24 : 32 }}>
-          <div aria-hidden="true" className="absolute inset-0 rounded-2xl" style={{ top: 6, bottom: -6, background: 'rgba(0,0,0,.2)' }} />
-          <div className="relative rounded-2xl bg-white p-3"><Logo h={f.compacto ? 92 : 96} /></div>
-        </div>
+      <div className="absolute left-0 right-0 top-0" style={{ height: topo }}>
+        {colunaArte ? (
+          <ColunaArte tema={tema} encarte={encarte} loja={loja} f={f} topo={topo} />
+        ) : (
+          <div className="absolute" style={{ left: MARGEM, top: f.compacto ? 24 : 32 }}>
+            <div aria-hidden="true" className="absolute inset-0 rounded-2xl" style={{ top: 6, bottom: -6, background: 'rgba(0,0,0,.2)' }} />
+            <div className="relative rounded-2xl bg-white p-3"><Logo h={f.compacto ? 92 : 96} /></div>
+          </div>
+        )}
 
-        {f.compacto ? (
+        {f.compacto ? !tema.arte && (
           <div
             className="absolute flex items-center whitespace-nowrap font-black uppercase italic leading-none tracking-tight"
             style={{ left: 180, right: MARGEM, top: 24, height: 124, justifyContent: 'center', gap: '0.25em', fontSize: fonteQueCabe(`${tema.titulo} ${tema.destaque}`, f.largura - 180 - MARGEM - 20, f.titulo) }}
@@ -262,13 +296,13 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
           </>
         )}
 
-        <div className="absolute flex items-end justify-between gap-4" style={{ left: MARGEM, right: MARGEM, bottom: 18 }}>
+        {!colunaArte && <div className="absolute flex items-end justify-between gap-4" style={{ left: MARGEM, right: MARGEM, bottom: 18 }}>
           <FaixaValidade encarte={encarte} tema={tema} fonte={f.id === 'stories' ? 28 : 24} />
-          {f.id === 'tv' && tema.chamada && (
+          {f.id === 'tv' && tema.chamada && !tema.arte && (
             <div className="self-center font-black uppercase italic text-white" style={{ fontSize: 40, textShadow: contornoTexto(tema.contorno, 3) }}>{tema.chamada}</div>
           )}
           <CaixaLoja loja={loja} fonte={f.id === 'stories' ? 24 : 20} />
-        </div>
+        </div>}
       </div>
 
       {numero && total > 1 && (

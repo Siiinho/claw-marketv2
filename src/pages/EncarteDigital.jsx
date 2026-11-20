@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon, Logo, PrecoVarejo } from '../components/ui'
-import { SETORES, setorById, formatBRL, formatData, seloDoProduto } from '../lib/utils'
+import { SETORES, setorById, formatBRL, formatData } from '../lib/utils'
 import { carregarEncartePublicado, assinarEncarte } from '../lib/encartePublico'
 import { temaCampanhaById } from '../lib/temasCampanha'
+import SeloArte from '../components/SeloArte'
 import { SimboloClawMarket } from '../components/MarcaClawMarket'
 import PaginaTemplate, { Escalado, paginarTemplate } from '../components/PaginaTemplate'
 import { LOJAS } from '../data/seed'
@@ -15,15 +16,7 @@ const horaCurta = (iso) =>
   iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''
 
 function TagSelo({ produto, grande = false }) {
-  const selo = seloDoProduto(produto)
-  return (
-    <span
-      className={`inline-block rounded-md font-black uppercase leading-none tracking-wide ${grande ? 'px-3 py-1.5 text-sm' : 'px-2 py-1 text-[11px]'}`}
-      style={{ background: selo.fundo, color: selo.cor }}
-    >
-      {selo.texto}
-    </span>
-  )
+  return <SeloArte produto={produto} largura={grande ? 150 : 96} />
 }
 
 function FotoProduto({ produto, className = '' }) {

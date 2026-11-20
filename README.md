@@ -232,3 +232,26 @@ As artes de rede social saem em PNG no tamanho exato; no celular o botão
 **Compartilhar** manda direto para WhatsApp ou Instagram. Cartazes e etiquetas
 saem em PDF A4 de alta resolução. A validade dos produtos nunca aparece, só o
 período da campanha.
+
+## Temas com arte e selos ilustrados
+
+- `public/temas/<tema>/` guarda os fundos de cada tema (Feed, Stories, TV, Post e a
+  miniatura do seletor). Foram gerados a partir dos templates enviados pelo mercado: o
+  template é desfocado (somem os produtos e textos de exemplo) e a arte do título fica
+  nítida. Logo, chamada, validade, endereço e produtos são colocados pelo sistema.
+  **Antes de vender o ClawMarket para outros mercados, confirme que a licença desses
+  templates permite esse uso, ou troque por artes próprias.**
+- Os temas ficam em `src/lib/temasCampanha.js`, separados por seção (Açougue, Hortifruti,
+  Peixaria, Semana, Fim de semana, Fim de mês, Datas, Geral).
+- Os selos (Oferta, Imperdível, Queima de estoque, Super oferta, Preço baixo, Leve mais,
+  Só hoje, Exclusivo) são desenhados em `src/components/SeloArte.jsx` com a fonte livre
+  Bangers (OFL, pacote `@fontsource/bangers`).
+
+### Testar a EAN Images no PC
+
+Coloque a chave no `.env` (`EANIMAGES_API_KEY=...`) e rode:
+
+```bash
+npm run testar:eanimages                    # confere a chave e o saldo, sem gastar crédito
+npm run testar:eanimages -- 7891000100103   # busca um produto (pode gastar créditos na 1ª vez)
+```

@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from 'react'
 import { Icon, Botao, EmptyState } from './ui'
 import PaginaTemplate, { Escalado, FORMATOS, paginarTemplate } from './PaginaTemplate'
 import { FolhaCartazes, FOLHA_A4, TAMANHOS_CARTAZ, paginarCartazes } from './Cartaz'
-import { TEMAS_CAMPANHA, temaCampanhaById } from '../lib/temasCampanha'
+import { temaCampanhaById } from '../lib/temasCampanha'
+import SeletorTema from './SeletorTema'
 import { exportarPNG, exportarPDFPaginas, gerarPNG } from '../lib/exportar'
 
 // Central de artes: a mesma lista de ofertas vira Feed, Stories, TV, post por oferta,
@@ -144,18 +145,10 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
         )}
 
         {!impressao && (
-          <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto]">
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
             <div>
               <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-soft">Campanha</p>
-              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
-                {TEMAS_CAMPANHA.map((t) => (
-                  <button key={t.id} type="button" onClick={() => setTemaId(t.id)} aria-pressed={temaId === t.id}
-                    className={`rounded-lg px-2 py-2 text-left text-xs font-black text-white ${temaId === t.id ? 'ring-4 ring-offer' : ''}`}
-                    style={{ background: t.fundo, textShadow: '0 1px 2px rgba(0,0,0,.6)' }}>
-                    {t.nome}
-                  </button>
-                ))}
-              </div>
+              <SeletorTema value={temaId} onChange={setTemaId} />
             </div>
             {saida !== 'post' && (
               <div>

@@ -1,11 +1,12 @@
 import { forwardRef } from 'react'
 import { Logo } from './ui'
 import { formatBRL, formatData, partesPreco, seloDoProduto } from '../lib/utils'
-import { fonteQueCabe, unidadeDe } from './PaginaTemplate'
+import { unidadeDe } from './PaginaTemplate'
+import SeloArte from './SeloArte'
 
 // Cartazes de oferta para impressão: folha A4 com 1 cartaz A4, 2 A5, 4 A6 ou 8 A7,
 // e folha de etiquetas de gôndola (24 por A4). Fundo branco para gastar pouca tinta,
-// faixa do selo da oferta no topo e preço grande em vermelho.
+// selo ilustrado da oferta no topo e preço grande em vermelho.
 // A validade do produto nunca aparece: só o período da campanha.
 
 export const FOLHA_A4 = { largura: 794, altura: 1123 } // A4 a 96 dpi; exportado em alta resolução
@@ -54,12 +55,12 @@ export function Cartaz({ produto, encarte, w, h }) {
   const linhas = nome.length <= 14 ? 1 : nome.length <= 30 ? 2 : 3
   const fonteNome = Math.min(h * (linhas === 1 ? 0.1 : 0.075), (w * 0.9) / (Math.ceil(nome.length / linhas) * 0.6))
   const desconto = Number(produto.precoNormal) > Number(produto.precoJornal) + 0.009
-  const faixa = h * 0.15
+  const faixa = h * 0.2
   const detalhe = [produto.marca, produto.gramagem].filter(Boolean).join(' · ')
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-center" style={{ fontFamily: 'var(--font-sans)' }}>
-      <div className="flex shrink-0 items-center justify-center font-black uppercase italic leading-none" style={{ height: faixa, background: selo.fundo, color: selo.cor, fontSize: fonteQueCabe(selo.texto, w * 0.88, faixa * 0.72) }}>
-        {selo.texto}
+      <div className="flex shrink-0 items-center justify-center" style={{ height: faixa, paddingTop: faixa * 0.06 }}>
+        <SeloArte selo={selo} largura={w * 0.76} altura={faixa * 0.92} girar={-3} />
       </div>
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center" style={{ padding: `${h * 0.02}px ${w * 0.05}px` }}>
         <div className="font-black uppercase leading-[1.02] text-[#111]" style={{ fontSize: fonteNome }}>{nome}</div>
