@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { Logo, PrecoVarejo } from './ui'
+import { PrecoVarejo } from './ui'
 import { formatBRL, formatData, setorById } from '../lib/utils'
 import { caminhoArte } from '../lib/temasCampanha'
 import SeloArte from './SeloArte'
+import logoTransparente from '../assets/logo-bengala-transparente.png'
+
+// Logo do mercado direto sobre a arte do tema, sem caixa branca (arquivo PNG transparente).
+function LogoEncarte({ h = 110 }) {
+  return <img src={logoTransparente} alt="Bengala Supermercado" className="block w-auto object-contain" style={{ height: h }} />
+}
 
 // Motor de templates do encarte: a mesma lista de ofertas vira várias artes.
 //  - Feed 4:5 (1080 × 1350), Stories 9:16 (1080 × 1920), TV 16:9 (1920 × 1080)
@@ -234,12 +240,13 @@ function ColunaArte({ tema, encarte, loja, f, topo }) {
   const fim = direita ? f.largura - MARGEM : Math.min(Math.max(ax0 - 8, 340), 560)
   const largura = fim - esquerda
   const linhasChamada = String(tema.chamada || '').length > 16 ? 2 : 1
-  const fonteChamada = Math.min(66, (largura * linhasChamada) / (String(tema.chamada || '').length * 0.46))
+  // Logo maior; a chamada encolhe um pouco no Feed para tudo caber acima dos produtos.
+  const alturaLogo = f.id === 'stories' ? 190 : 150
+  const fonteChamada = Math.min(f.id === 'stories' ? 66 : 58, (largura * linhasChamada) / (String(tema.chamada || '').length * 0.46))
   return (
-    <div className="absolute flex flex-col gap-3" style={{ left: esquerda, width: largura, top: f.id === 'stories' ? 40 : 24, height: topo - (f.id === 'stories' ? 56 : 36), alignItems: direita ? 'flex-end' : 'flex-start' }}>
-      <div className="relative shrink-0" style={{ width: Math.min(largura, 300), height: 104 }}>
-        <div aria-hidden="true" className="absolute inset-0 rounded-2xl" style={{ top: 6, bottom: -6, background: 'rgba(0,0,0,.2)' }} />
-        <div className="relative flex h-full items-center justify-center rounded-2xl bg-white"><Logo h={92} /></div>
+    <div className="absolute flex flex-col gap-2" style={{ left: esquerda, width: largura, top: f.id === 'stories' ? 40 : 24, height: topo - (f.id === 'stories' ? 56 : 36), alignItems: direita ? 'flex-end' : 'flex-start' }}>
+      <div className="relative flex shrink-0 items-center" style={{ height: alturaLogo, justifyContent: direita ? 'flex-end' : 'flex-start' }}>
+        <LogoEncarte h={alturaLogo} />
       </div>
       {tema.chamada && (
         <div className="uppercase leading-[0.95] text-white" style={{ fontFamily: 'Bangers, var(--font-sans)', fontSize: fonteChamada, letterSpacing: '0.02em', textAlign: direita ? 'right' : 'left', textShadow: contornoTexto(tema.contorno, 3) }}>
@@ -277,8 +284,7 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
           <ColunaArte tema={tema} encarte={encarte} loja={loja} f={f} topo={topo} />
         ) : (
           <div className="absolute" style={{ left: MARGEM, top: f.compacto ? 24 : 32 }}>
-            <div aria-hidden="true" className="absolute inset-0 rounded-2xl" style={{ top: 6, bottom: -6, background: 'rgba(0,0,0,.2)' }} />
-            <div className="relative rounded-2xl bg-white p-3"><Logo h={f.compacto ? 92 : 96} /></div>
+            <LogoEncarte h={f.compacto ? 140 : 160} />
           </div>
         )}
 

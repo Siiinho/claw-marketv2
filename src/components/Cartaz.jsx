@@ -53,7 +53,9 @@ export function Cartaz({ produto, encarte, w, h }) {
   const selo = seloDoProduto(produto)
   const nome = String(produto.nome || '').toUpperCase()
   const linhas = nome.length <= 14 ? 1 : nome.length <= 30 ? 2 : 3
-  const fonteNome = Math.min(h * (linhas === 1 ? 0.1 : 0.075), (w * 0.9) / (Math.ceil(nome.length / linhas) * 0.6))
+  // Com foto, o nome e o preço encolhem um pouco para a foto caber no meio do cartaz.
+  const foto = produto.imagem || null
+  const fonteNome = Math.min(h * (linhas === 1 ? 0.1 : 0.075) * (foto ? 0.78 : 1), (w * 0.9) / (Math.ceil(nome.length / linhas) * 0.6))
   const desconto = Number(produto.precoNormal) > Number(produto.precoJornal) + 0.009
   const faixa = h * 0.2
   const detalhe = [produto.marca, produto.gramagem].filter(Boolean).join(' · ')
@@ -65,13 +67,16 @@ export function Cartaz({ produto, encarte, w, h }) {
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center" style={{ padding: `${h * 0.02}px ${w * 0.05}px` }}>
         <div className="font-black uppercase leading-[1.02] text-[#111]" style={{ fontSize: fonteNome }}>{nome}</div>
         {detalhe && <div className="font-bold uppercase text-[#555]" style={{ fontSize: Math.max(7, h * 0.032), marginTop: h * 0.008 }}>{detalhe}</div>}
+        {foto && (
+          <img src={foto} alt="" className="block object-contain" style={{ width: '86%', height: h * 0.27, marginTop: h * 0.012 }} />
+        )}
         {desconto && (
           <div className="font-black text-[#222]" style={{ fontSize: Math.max(7, h * 0.042), marginTop: h * 0.015 }}>
             De <span style={{ textDecoration: 'line-through' }}>{formatBRL(produto.precoNormal)}</span> por
           </div>
         )}
         <div style={{ marginTop: h * 0.01 }}>
-          <PrecoCartaz valor={produto.precoJornal} unidade={unidadeDe(produto)} w={w} h={h * (desconto ? 0.3 : 0.34)} />
+          <PrecoCartaz valor={produto.precoJornal} unidade={unidadeDe(produto)} w={w} h={h * (desconto ? 0.3 : 0.34) * (foto ? 0.68 : 1)} />
         </div>
       </div>
       <div className="flex shrink-0 items-center justify-between gap-2 border-t-2 border-[#111]" style={{ padding: `${h * 0.012}px ${w * 0.04}px`, minHeight: h * 0.07 }}>

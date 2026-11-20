@@ -101,15 +101,21 @@ export default function Jornal() {
   const tema = TEMAS[temaSel]
 
   // Garante que nenhuma fotografia crua de celular chegue à arte final.
+  // Cada foto é tentada uma vez por sessão: sem isso, uma foto que não vira packshot era salva
+  // de novo a cada renderização (laço infinito que enchia o histórico e travava o envio à nuvem).
+  const fotosTentadas = useRef(new Set())
   useEffect(() => {
     let ativo = true
-    const pendentes = fila.filter(imagemProdutoPrecisaTratamento)
+    const chaveFoto = (p) => `${p.id}|${String(p.imagem || '').slice(-64)}|${p.imagemFonteUrl || ''}`
+    const pendentes = fila.filter((p) => imagemProdutoPrecisaTratamento(p) && !fotosTentadas.current.has(chaveFoto(p)))
     if (!pendentes.length) return () => { ativo = false }
     ;(async () => {
       for (const produto of pendentes) {
+        fotosTentadas.current.add(chaveFoto(produto))
         const preparado = await prepararProdutoParaJornal(produto)
         if (!ativo) return
-        if (preparado.imagemTratada) salvarProduto(preparado)
+        const mudou = preparado !== produto && (preparado.imagem !== produto.imagem || preparado.imagemTratamento !== produto.imagemTratamento || preparado.imagemFonteUrl !== produto.imagemFonteUrl)
+        if (preparado.imagemTratada && mudou) salvarProduto(preparado)
       }
     })()
     return () => { ativo = false }
@@ -623,6 +629,8 @@ export default function Jornal() {
       {/* ============ ARTES (Feed, Stories, TV, post, cartaz, etiqueta) ============ */}
       {aba === 'artes' && (
         <CentralArtes
+          saidas={['feed', 'stories', 'tv', 'post']}
+          subtitulo="Cartazes e etiquetas para imprimir ficam na aba Cartazes."
           itens={itensParaArte()}
           titulo={titulo}
           encarte={{ periodoDe: validadeDe, periodoAte: validadeAte }}

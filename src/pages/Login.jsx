@@ -17,26 +17,44 @@ export default function Login() {
   const [identificador, setIdentificador] = useState('')
   const [senha, setSenha] = useState('')
   const [nome, setNome] = useState('')
-  const [papel, setPapel] = useState('repositor')
   const [erro, setErro] = useState('')
+  const [enviando, setEnviando] = useState(false)
 
   const CLS = 'w-full rounded-lg border border-ink-soft/20 bg-white px-3 py-2.5 text-sm outline-none focus:border-bengala focus:ring-2 focus:ring-bengala/20'
 
-  const entrar = (e) => {
+  const entrar = async (e) => {
     e.preventDefault()
-    if (login(identificador, senha)) {
-      toast(`Bem-vindo, ${identificador.split('@')[0]}!`)
-      navigate('/')
-    } else setErro('Nome de usuário ou senha incorretos.')
+    if (enviando) return
+    setEnviando(true)
+    setErro('')
+    try {
+      if (await login(identificador, senha)) {
+        toast(`Bem-vindo, ${identificador.split('@')[0]}!`)
+        navigate('/')
+      } else setErro('Nome de usuário ou senha incorretos.')
+    } catch (_) {
+      setErro('Sem conexão com o servidor. Tente de novo.')
+    } finally {
+      setEnviando(false)
+    }
   }
 
-  const criar = (e) => {
+  const criar = async (e) => {
     e.preventDefault()
-    const r = registrar({ nome, papel, senha })
-    if (r.ok) {
-      toast(`Conta criada. Bem-vindo, ${nome}!`)
-      navigate('/')
-    } else setErro(r.erro)
+    if (enviando) return
+    setEnviando(true)
+    setErro('')
+    try {
+      const r = await registrar({ nome, senha })
+      if (r.ok) {
+        toast(`Conta criada. Bem-vindo, ${nome}!`)
+        navigate('/')
+      } else setErro(r.erro)
+    } catch (_) {
+      setErro('Sem conexão com o servidor. Tente de novo.')
+    } finally {
+      setEnviando(false)
+    }
   }
 
   return (
@@ -101,7 +119,7 @@ export default function Login() {
                 <input id="login-senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••" autoComplete="current-password" className={CLS} />
               </div>
               {erro && <p className="text-sm text-critical">{erro}</p>}
-              <Botao type="submit" className="w-full py-2.5">Entrar</Botao>
+              <Botao type="submit" className="w-full py-2.5" disabled={enviando}>{enviando ? 'Entrando…' : 'Entrar'}</Botao>
             </form>
           ) : (
             <form onSubmit={criar} className="space-y-4">
@@ -109,20 +127,13 @@ export default function Login() {
                 <label htmlFor="criar-usuario" className="mb-1 block text-sm font-medium">Nome de usuário</label>
                 <input id="criar-usuario" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Crie seu nome de usuário" autoComplete="username" className={CLS} />
               </div>
-              <div>
-                <label htmlFor="criar-funcao" className="mb-1 block text-sm font-medium">Função</label>
-                <select id="criar-funcao" value={papel} onChange={(e) => setPapel(e.target.value)} className={CLS}>
-                  <option value="admin">Administrador — acesso total</option>
-                  <option value="gerente">Gerente — ofertas, jornal e fila</option>
-                  <option value="repositor">Repositor — chão de loja</option>
-                </select>
-              </div>
+              <p className="rounded-lg bg-cream-200 px-3 py-2 text-xs text-ink-soft">A conta nova começa como Repositor. O administrador muda a função na tela Usuários.</p>
               <div>
                 <label htmlFor="criar-senha" className="mb-1 block text-sm font-medium">Senha</label>
                 <input id="criar-senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••" autoComplete="new-password" className={CLS} />
               </div>
               {erro && <p className="text-sm text-critical">{erro}</p>}
-              <Botao type="submit" className="w-full py-2.5">Criar conta e entrar</Botao>
+              <Botao type="submit" className="w-full py-2.5" disabled={enviando}>{enviando ? 'Criando…' : 'Criar conta e entrar'}</Botao>
             </form>
           )}
           <p className="mt-6 text-center text-xs text-ink-soft">Cada conta mantém seus próprios produtos, bipagens, ofertas e jornais.</p>
