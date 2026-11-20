@@ -60,7 +60,7 @@ export function Cartaz({ produto, encarte, w, h }) {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-center" style={{ fontFamily: 'var(--font-sans)' }}>
       <div className="flex shrink-0 items-center justify-center" style={{ height: faixa, paddingTop: faixa * 0.06 }}>
-        <SeloArte selo={selo} largura={w * 0.76} altura={faixa * 0.92} girar={-3} />
+        {!selo.nenhum && <SeloArte selo={selo} largura={w * 0.76} altura={faixa * 0.92} girar={-3} />}
       </div>
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center" style={{ padding: `${h * 0.02}px ${w * 0.05}px` }}>
         <div className="font-black uppercase leading-[1.02] text-[#111]" style={{ fontSize: fonteNome }}>{nome}</div>
@@ -95,7 +95,7 @@ export function Etiqueta({ produto, w, h }) {
     <div className="flex h-full w-full flex-col overflow-hidden" style={{ background: '#ffe14d', fontFamily: 'var(--font-sans)', padding: '6px 8px' }}>
       <div className="flex items-start justify-between gap-1">
         <div className="min-w-0 flex-1 font-black uppercase leading-[1.05] text-[#111]" style={{ fontSize: 12, maxHeight: 38, overflow: 'hidden' }}>{produto.nome}</div>
-        <span className="shrink-0 rounded px-1 py-0.5 font-black uppercase leading-none" style={{ fontSize: 8, background: selo.fundo, color: selo.cor }}>{selo.texto}</span>
+        {!selo.nenhum && <span className="shrink-0 rounded px-1 py-0.5 font-black uppercase leading-none" style={{ fontSize: 8, background: selo.fundo, color: selo.cor }}>{selo.texto}</span>}
       </div>
       <div className="mt-auto flex items-end justify-between gap-1">
         <div className="min-w-0 font-bold leading-tight text-[#333]" style={{ fontSize: 8 }}>

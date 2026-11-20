@@ -174,6 +174,8 @@ export const SELOS_OFERTA = [
   { id: 'leve-mais', texto: 'Leve mais, pague menos', fundo: '#d9641f', cor: '#ffffff' },
   { id: 'so-hoje', texto: 'Só hoje', fundo: '#7c2230', cor: '#ffffff' },
   { id: 'exclusivo', texto: 'Exclusivo da loja', fundo: '#2c84b0', cor: '#ffffff' },
+  // Escolha do operador para um produto sair sem selo nenhum.
+  { id: 'nenhum', texto: 'Sem selo', fundo: '#ffffff', cor: '#5c6b7a', nenhum: true },
 ]
 
 export const seloOfertaById = (id) => SELOS_OFERTA.find((s) => s.id === id) || null

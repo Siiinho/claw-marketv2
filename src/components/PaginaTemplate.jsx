@@ -109,7 +109,8 @@ function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
     estilo.width / 300,
     estilo.height / 220,
   ))
-  const topoFoto = 54 * k
+  // Nome maior (2 linhas) e foto ocupando quase toda a célula: o cliente lê de longe.
+  const topoFoto = 60 * k
   const raio = 22 * Math.min(k, 1.6)
   return (
     <>
@@ -123,7 +124,7 @@ function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
     >
       <div
         className="absolute left-0 right-0 top-0 text-center uppercase leading-[0.95]"
-        style={{ color: tema.nomeCor || '#111', fontFamily: 'var(--font-encarte)', fontWeight: 800, letterSpacing: '0.005em', fontSize: 25 * k, height: 54 * k, padding: `${8 * Math.min(k, 1.5)}px ${12 * k}px 0`, overflow: 'hidden' }}
+        style={{ color: tema.nomeCor || '#111', fontFamily: 'var(--font-encarte)', fontWeight: 800, letterSpacing: '0.005em', fontSize: 29 * k, height: 62 * k, padding: `${6 * Math.min(k, 1.5)}px ${10 * k}px 0`, overflow: 'hidden' }}
       >
         {produto.nome}
       </div>
@@ -132,7 +133,7 @@ function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
           src={produto.imagem}
           alt=""
           className="cm-foto absolute object-contain"
-          style={{ '--cm-i': indice, left: 10 * k, top: topoFoto, width: `calc(100% - ${20 * k}px)`, height: `calc(100% - ${topoFoto + 10 * k}px)` }}
+          style={{ '--cm-i': indice, left: 4 * k, top: topoFoto, width: `calc(100% - ${8 * k}px)`, height: `calc(100% - ${topoFoto + 2 * k}px)` }}
         />
       ) : (
         <div className="absolute inset-x-0 text-center font-black" style={{ top: 90 * k, fontSize: 70 * k, color: setor.cor }}>•</div>

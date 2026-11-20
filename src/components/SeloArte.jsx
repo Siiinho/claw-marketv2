@@ -83,6 +83,7 @@ function linhasDo(texto) {
 // selo: objeto de SELOS_OFERTA (ou use `produto`, ou `id`).
 export default function SeloArte({ selo, produto, id, largura = 160, altura, girar = -6, className = '', style }) {
   const s = selo || (produto ? seloDoProduto(produto) : seloOfertaById(id)) || SELOS_OFERTA[0]
+  if (s.nenhum) return null
   const e = estiloDe(s.id)
   const w = largura
   const h = altura || Math.round(largura * (e.forma === 'circulo' ? 0.62 : e.forma === 'estrela' || e.forma === 'chama' ? 0.62 : 0.42))
