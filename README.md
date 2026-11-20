@@ -215,6 +215,32 @@ mesma variável em *Environment Variables*. Nunca use o prefixo `VITE_` nessa ch
   (arte 1080 × 1350 exportada sem produtos, logo e validade). Clique **Publicar agora**.
 - A validade dos produtos nunca aparece no encarte.
 
+### Como o site fica no ar pelo PC do mercado
+
+1. No PC da loja rode `npm run dev` (ou `npm run build && npm run preview`). O servidor
+   já escuta na rede (`host: true`), então o terminal mostra um endereço `Network`.
+2. Em **Jornal › Encarte digital** aparece "Site no ar" com o link para gravar na tag NFC
+   (ex.: `http://192.168.0.10:5173/#/encarte`) e o botão **Copiar**. Use um IP fixo no PC
+   (reserva de DHCP no roteador) para a tag não perder o endereço.
+3. **Publicar agora** manda o encarte para `server/encarteServidor.js`, que guarda a versão
+   em `dados/encarte/encarte.json` e as fotos em `dados/encarte/img/` (fora do Git).
+4. Todo celular com o link aberto recebe a versão nova na hora (Server-Sent Events em
+   `/api/encarte/eventos`), mostra a faixa "Ofertas atualizadas agora!" e remonta o encarte.
+
+Quem pode publicar: sem `ENCARTE_TOKEN` no `.env`, só o próprio PC e a rede local (pedidos
+vindos de túnel/proxy são recusados). Para publicar de fora, defina `ENCARTE_TOKEN` no `.env`
+do PC; o app pede a "Senha de publicação" e a guarda só naquele aparelho.
+
+### Motion design e prévia de cada produto
+
+- As páginas se montam ao aparecer na tela: topo desce, produtos entram em sequência, selos
+  "carimbam" e balançam, o preço pulsa com um brilho e o fundo faz um zoom lento.
+  A animação só roda na página pública (`<PaginaTemplate animado>`); PNG e PDF saem parados.
+  Quem pede menos movimento no celular (`prefers-reduced-motion`) vê tudo parado.
+- Tocar num produto abre a prévia: foto, selo, De/Por, "Você economiza", **Compartilhar**
+  (menu do celular ou copia o link) e **WhatsApp** da loja. Deslize para o lado (ou use as
+  setas) para ver a próxima oferta. Cada produto tem link próprio: `#/encarte?p=<id>`.
+
 ## Baixar artes (várias saídas da mesma lista)
 
 Em **Jornal › Baixar artes**, a mesma lista de ofertas bipadas vira:

@@ -80,17 +80,18 @@ export function unidadeDe(produto) {
 
 const temDesconto = (p) => Number(p.precoNormal) > Number(p.precoJornal) + 0.009
 
-function SeloPrecoOval({ produto, tema, k }) {
+function SeloPrecoOval({ produto, tema, k, indice = 0 }) {
   const w = 186 * k
   const h = 92 * k
   // Sombra desenhada como elemento próprio: o box-shadow sai errado na exportação em PNG.
   return (
-    <div className="absolute" style={{ right: 8 * k + 5 * k, bottom: 8 * k + 7 * k, width: w, height: h, transform: 'rotate(-4deg)' }}>
+    <div className="cm-preco absolute" style={{ right: 8 * k + 5 * k, bottom: 8 * k + 7 * k, width: w, height: h, transform: 'rotate(-4deg)', '--cm-i': indice }}>
       <div className="absolute" style={{ left: 5 * k, top: 7 * k, width: w, height: h, borderRadius: '50%', background: tema.precoSombra }} />
       <div
-        className="absolute inset-0 flex items-center justify-center"
+        className="absolute inset-0 flex items-center justify-center overflow-hidden"
         style={{ borderRadius: '50%', background: tema.precoFundo, border: `${4 * k}px solid ${tema.precoSombra}` }}
       >
+        <span aria-hidden="true" className="cm-brilho absolute inset-y-0 left-0" style={{ width: '30%', background: 'linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent)' }} />
         <div className="flex items-end leading-none">
           <PrecoVarejo valor={produto.precoJornal} style={{ fontSize: 46 * k }} cor={tema.precoCor} />
           <span className="ml-1 font-black" style={{ marginBottom: 4 * k, fontSize: 15 * k, color: tema.precoCor }}>{unidadeDe(produto)}</span>
@@ -100,7 +101,7 @@ function SeloPrecoOval({ produto, tema, k }) {
   )
 }
 
-function CelulaProduto({ produto, tema, onAbrir, estilo }) {
+function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
   const setor = setorById(produto.setor)
   // Fator de escala da célula: cresce com a área, sem deixar o selo de preço sair da célula.
   const k = Math.max(0.8, Math.min(2.6,
@@ -112,13 +113,13 @@ function CelulaProduto({ produto, tema, onAbrir, estilo }) {
   const raio = 22 * Math.min(k, 1.6)
   return (
     <>
-    <div aria-hidden="true" className="absolute" style={{ left: estilo.left, top: estilo.top + 6, width: estilo.width, height: estilo.height, borderRadius: raio, background: 'rgba(0,0,0,.18)' }} />
+    <div aria-hidden="true" className="cm-celula absolute" style={{ left: estilo.left, top: estilo.top + 6, width: estilo.width, height: estilo.height, borderRadius: raio, background: 'rgba(0,0,0,.18)', '--cm-i': indice }} />
     <button
       type="button"
       onClick={() => onAbrir?.(produto)}
       aria-label={`Ver oferta: ${produto.nome}`}
-      className="absolute overflow-hidden text-left focus:outline-none focus-visible:ring-8 focus-visible:ring-white"
-      style={{ ...estilo, borderRadius: raio, background: tema.celula || '#ffffff' }}
+      className="cm-celula absolute overflow-hidden text-left focus:outline-none focus-visible:ring-8 focus-visible:ring-white"
+      style={{ ...estilo, borderRadius: raio, background: tema.celula || '#ffffff', '--cm-i': indice }}
     >
       <div
         className="absolute left-0 right-0 top-0 text-center font-black uppercase leading-[1.05]"
@@ -130,13 +131,13 @@ function CelulaProduto({ produto, tema, onAbrir, estilo }) {
         <img
           src={produto.imagem}
           alt=""
-          className="absolute object-contain"
-          style={{ left: 10 * k, top: topoFoto, width: `calc(100% - ${20 * k}px)`, height: `calc(100% - ${topoFoto + 10 * k}px)` }}
+          className="cm-foto absolute object-contain"
+          style={{ '--cm-i': indice, left: 10 * k, top: topoFoto, width: `calc(100% - ${20 * k}px)`, height: `calc(100% - ${topoFoto + 10 * k}px)` }}
         />
       ) : (
         <div className="absolute inset-x-0 text-center font-black" style={{ top: 90 * k, fontSize: 70 * k, color: setor.cor }}>•</div>
       )}
-      <SeloArte produto={produto} largura={118 * k} className="absolute" style={{ position: 'absolute', left: 2 * k, top: topoFoto - 4 * k }} />
+      <SeloArte produto={produto} largura={118 * k} className="cm-selo absolute" style={{ position: 'absolute', left: 2 * k, top: topoFoto - 4 * k, '--cm-i': indice }} />
       {k >= 1.2 && temDesconto(produto) && (
         <span
           className="absolute rounded-md bg-white/90 font-black leading-none text-[#222]"
@@ -145,7 +146,7 @@ function CelulaProduto({ produto, tema, onAbrir, estilo }) {
           De <span style={{ textDecoration: 'line-through' }}>{formatBRL(produto.precoNormal)}</span> por
         </span>
       )}
-      <SeloPrecoOval produto={produto} tema={tema} k={k} />
+      <SeloPrecoOval produto={produto} tema={tema} k={k} indice={indice} />
     </button>
     </>
   )
@@ -249,7 +250,8 @@ function ColunaArte({ tema, encarte, loja, f, topo }) {
   )
 }
 
-export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layout = 'grade', formato: formatoId = 'feed', numero, total, onAbrir }) {
+// `animado`: liga o motion design (só na página pública; as exportações em PNG/PDF saem paradas).
+export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layout = 'grade', formato: formatoId = 'feed', numero, total, onAbrir, animado = false }) {
   const f = formatoById(formatoId)
   const contorno = contornoTexto(tema.contorno)
   // Fundo: o enviado pelo mercado (só no Feed, preparado em 4:5) ou a arte do tema no formato.
@@ -262,11 +264,11 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
   const colunaArte = tema.arte && !f.compacto && !fundo
   const larguraTitulo = f.largura - MARGEM * 2
   return (
-    <div className="relative overflow-hidden" style={{ width: f.largura, height: f.altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
-      {usarFundo && <img src={imagemFundo} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+    <div className={`relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: f.largura, height: f.altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
+      {usarFundo && <img src={imagemFundo} alt="" className="cm-fundo absolute inset-0 h-full w-full object-cover" />}
 
       {/* topo da campanha */}
-      <div className="absolute left-0 right-0 top-0" style={{ height: topo }}>
+      <div className="cm-topo absolute left-0 right-0 top-0" style={{ height: topo }}>
         {colunaArte ? (
           <ColunaArte tema={tema} encarte={encarte} loja={loja} f={f} topo={topo} />
         ) : (
@@ -315,7 +317,7 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
       {itens.map((p, i) => {
         const pos = posicoes[i]
         if (!pos) return null
-        return <CelulaProduto key={p.id || i} produto={p} tema={tema} onAbrir={onAbrir} estilo={pos} />
+        return <CelulaProduto key={p.id || i} produto={p} tema={tema} onAbrir={onAbrir} estilo={pos} indice={i} />
       })}
     </div>
   )

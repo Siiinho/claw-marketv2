@@ -1,10 +1,12 @@
 // Encarte digital publicado — o que a tag NFC abre.
 //
-// Hoje a publicação fica neste aparelho (localStorage) e se propaga ao vivo
-// para todas as abas abertas nele (evento `storage` + BroadcastChannel).
-// Quando o Supabase for ligado, só estas três funções mudam: `publicarEncarte`
-// grava na tabela, `lerEncartePublicado` lê a versão mais nova e
-// `assinarEncarte` usa o Realtime. A página pública não precisa mudar.
+// O app publica em dois lugares:
+//   1. no servidor do PC do mercado (/api/encarte, ver server/encarteServidor.js),
+//      que é o que os celulares dos clientes abrem pela tag NFC; e
+//   2. neste aparelho (localStorage), como cópia de segurança se o servidor cair.
+// A página pública lê do servidor e ouve /api/encarte/eventos: quando sai uma
+// versão nova, ela troca sozinha, sem o cliente recarregar.
+// Quando o Supabase for ligado, só este arquivo muda. A página pública não precisa mudar.
 //
 // Regra de negócio: a validade do produto NUNCA sai daqui. Só passam os campos
 // que o cliente pode ver.
@@ -56,6 +58,82 @@ export function publicarEncarte({ titulo, mercado, periodoDe, periodoAte, tema, 
   return encarte
 }
 
+// ---------- servidor do encarte (o site da tag NFC) ----------
+const API = '/api/encarte'
+const CHAVE_SENHA = 'clawmarket:senha-publicacao'
+
+export function lerSenhaPublicacao() {
+  try { return localStorage.getItem(CHAVE_SENHA) || '' } catch (_) { return '' }
+}
+export function salvarSenhaPublicacao(senha) {
+  try { senha ? localStorage.setItem(CHAVE_SENHA, senha) : localStorage.removeItem(CHAVE_SENHA) } catch (_) {}
+}
+
+const ehJson = (r) => (r.headers.get('content-type') || '').includes('application/json')
+
+// { online, protegido } — se o servidor do encarte está no ar e se pede senha para publicar.
+export async function statusSiteEncarte() {
+  try {
+    const r = await fetch(`${API}?status=1`, { cache: 'no-store' })
+    if (!r.ok || !ehJson(r)) return { online: false, protegido: false }
+    const j = await r.json()
+    return { online: true, protegido: !!j.protegido, enderecos: Array.isArray(j.enderecos) ? j.enderecos : [] }
+  } catch (_) {
+    return { online: false, protegido: false }
+  }
+}
+
+// Link que vai gravado na tag NFC. Aberto no próprio PC (localhost), troca pelo IP do PC na
+// rede da loja, que é o endereço que o celular do cliente consegue abrir.
+export function linkDoEncarte(enderecos = []) {
+  const { protocol, hostname, port, pathname } = window.location
+  const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname)
+  const host = local && enderecos[0] ? `${enderecos[0]}${port ? `:${port}` : ''}` : window.location.host
+  return `${protocol}//${host}${pathname}#/encarte`
+}
+
+// Manda o encarte (com as fotos) para o servidor. Devolve { versao, publicadoEm, itens }.
+export async function enviarEncarteAoSite({ titulo, mercado, periodoDe, periodoAte, tema, layout, fundo, loja, itens }) {
+  const comFotos = await restaurarImagensSalvas(itens || [])
+  const corpo = {
+    titulo, mercado, periodoDe, periodoAte, tema, layout, fundo: fundo || null,
+    loja: loja ? { nome: loja.nome, endereco: loja.endereco, cidade: loja.cidade, whatsapp: loja.whatsapp } : null,
+    itens: comFotos.map((item) => {
+      const limpo = soPublico({ ...item, imagemCachePermanente: false })
+      delete limpo.imagemCachePermanente
+      delete limpo.imagemTratamento
+      return limpo
+    }),
+  }
+  const senha = lerSenhaPublicacao()
+  let r
+  try {
+    r = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(senha ? { 'x-encarte-token': senha } : {}) },
+      body: JSON.stringify(corpo),
+    })
+  } catch (_) {
+    throw Object.assign(new Error('Servidor do encarte fora do ar. Abra o app pelo PC do mercado (npm run dev ou npm run preview).'), { codigo: 'offline' })
+  }
+  if (!ehJson(r)) throw Object.assign(new Error('Este endereço não tem o servidor do encarte. Abra o app pelo PC do mercado.'), { codigo: 'offline' })
+  const j = await r.json()
+  if (!r.ok) throw Object.assign(new Error(j.erro || 'Não foi possível publicar no site.'), { codigo: r.status === 401 ? 'senha' : 'erro' })
+  return j
+}
+
+async function lerDoSite() {
+  try {
+    const r = await fetch(API, { cache: 'no-store' })
+    if (!ehJson(r)) return undefined
+    if (r.status === 404) return null
+    if (!r.ok) return undefined
+    return { ...(await r.json()), origem: 'site' }
+  } catch (_) {
+    return undefined // sem servidor (ex.: app aberto direto do arquivo)
+  }
+}
+
 export function lerEncartePublicado() {
   try {
     return JSON.parse(localStorage.getItem(CHAVE) || 'null')
@@ -64,14 +142,19 @@ export function lerEncartePublicado() {
   }
 }
 
+// Lê do servidor; se ele não responder (ou ainda não tiver nada), usa a cópia deste aparelho.
 export async function carregarEncartePublicado() {
+  const doSite = await lerDoSite()
+  if (doSite) return doSite
   const encarte = lerEncartePublicado()
   if (!encarte) return null
   const itens = await restaurarImagensSalvas(encarte.itens || [])
   return { ...encarte, itens }
 }
 
-// Chama `aoMudar` sempre que uma nova versão for publicada. Devolve a função de cancelar.
+// Chama `aoMudar(versao?)` sempre que uma nova versão for publicada. Devolve a função de cancelar.
+// No celular do cliente o aviso vem do servidor (Server-Sent Events). Se a conexão
+// cair de vez, confere a cada 30 s. Neste aparelho também ouve o localStorage.
 export function assinarEncarte(aoMudar) {
   const naChave = (evento) => { if (evento.key === CHAVE) aoMudar() }
   const aoVoltar = () => { if (document.visibilityState === 'visible') aoMudar() }
@@ -82,10 +165,20 @@ export function assinarEncarte(aoMudar) {
     canal = new BroadcastChannel(CANAL)
     canal.onmessage = () => aoMudar()
   } catch (_) {}
+  let fonte = null
+  try {
+    fonte = new EventSource(`${API}/eventos`)
+    fonte.addEventListener('versao', (e) => aoMudar(Number(e.data) || undefined))
+  } catch (_) {}
+  const reserva = setInterval(() => {
+    if ((!fonte || fonte.readyState === 2) && document.visibilityState === 'visible') aoMudar()
+  }, 30000)
   return () => {
     window.removeEventListener('storage', naChave)
     document.removeEventListener('visibilitychange', aoVoltar)
     canal?.close()
+    fonte?.close()
+    clearInterval(reserva)
   }
 }
 

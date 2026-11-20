@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { buscarJornalOficial } from './server/jornalOficial.js'
 import { responderEanImages } from './server/eanImages.js'
+import { middlewareEncarte } from './server/encarteServidor.js'
 
 // Middleware de dev: expõe /api/jornal-oficial rodando no servidor (sem CORS).
 // Em produção, a mesma lógica vive em api/jornal-oficial.js (função serverless).
@@ -42,20 +43,34 @@ function eanImagesApi() {
   }
 }
 
+// /api/encarte: o site do encarte que a tag NFC abre. O app publica aqui e todos os
+// celulares com o link aberto recebem a versão nova na hora (ver server/encarteServidor.js).
+function encarteApi() {
+  return {
+    name: 'encarte-api',
+    configureServer(server) { server.middlewares.use('/api/encarte', middlewareEncarte) },
+    configurePreviewServer(server) { server.middlewares.use('/api/encarte', middlewareEncarte) },
+  }
+}
+
 // base './' lets the production build (dist/index.html) open directly from file://
 export default defineConfig(({ mode }) => {
   // Variáveis só do servidor (sem prefixo VITE_): ficam fora do código do navegador.
   const env = loadEnv(mode, process.cwd(), '')
-  for (const nome of ['EANIMAGES_API_KEY', 'EANIMAGES_COM_DADOS']) {
+  for (const nome of ['EANIMAGES_API_KEY', 'EANIMAGES_COM_DADOS', 'ENCARTE_TOKEN', 'ENCARTE_DIR']) {
     if (env[nome] && !process.env[nome]) process.env[nome] = env[nome]
   }
   return {
   base: './',
+  // host: true deixa o celular do cliente abrir o encarte pelo IP do PC na rede da loja.
+  server: { host: true },
+  preview: { host: true },
   plugins: [
     react(),
     tailwindcss(),
     jornalOficialApi(),
     eanImagesApi(),
+    encarteApi(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
@@ -63,6 +78,7 @@ export default defineConfig(({ mode }) => {
       workbox: {
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         cleanupOutdatedCaches: true,
+        navigateFallbackDenylist: [/^\/api\//],
         clientsClaim: true,
         runtimeCaching: [
           {

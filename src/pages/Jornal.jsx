@@ -8,7 +8,7 @@ import {
   SETORES, setorById, formatBRL, formatData,
   percentDesc, dataISOmaisDias, diaSemana, SELOS_OFERTA, seloDoProduto,
 } from '../lib/utils'
-import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate } from '../lib/encartePublico'
+import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
 import SeletorTema from '../components/SeletorTema'
 import SeloArte from '../components/SeloArte'
 import { abrirJanelaPrevisualizacao, previsualizarImpressaoPaginas } from '../lib/exportar'
@@ -103,6 +103,19 @@ export default function Jornal() {
   const [publicadoEm, setPublicadoEm] = useState(() => lerEncartePublicado()?.publicadoEm || null)
   const [temaDigital, setTemaDigital] = useState(() => lerEncartePublicado()?.tema || 'ofertao')
   const [layoutDigital, setLayoutDigital] = useState(() => lerEncartePublicado()?.layout || 'grade')
+  const [publicando, setPublicando] = useState(false)
+  const [site, setSite] = useState({ online: null, protegido: false, erro: null })
+  const [senhaPublicacao, setSenhaPublicacao] = useState(lerSenhaPublicacao)
+  useEffect(() => {
+    let ativo = true
+    statusSiteEncarte().then((st) => { if (ativo) setSite((s) => ({ ...s, ...st })) })
+    return () => { ativo = false }
+  }, [])
+  const linkEncarte = linkDoEncarte(site.enderecos)
+  const [linkCopiado, setLinkCopiado] = useState(false)
+  const copiarLink = async () => {
+    try { await navigator.clipboard.writeText(linkEncarte); setLinkCopiado(true); setTimeout(() => setLinkCopiado(false), 2500) } catch (_) { window.prompt('Copie o link da tag NFC:', linkEncarte) }
+  }
   const [fundoDigital, setFundoDigital] = useState(null)
   useEffect(() => { setFundoDigital(lerFundoTemplate(temaDigital)) }, [temaDigital])
   const trocarFundo = async (arquivo) => {
@@ -251,9 +264,9 @@ export default function Jornal() {
     descontoJornal: descJornal(p),
   }))
 
-  const publicarDigital = () => {
+  const publicarDigital = async () => {
     if (!itensJornal.length) return toast('Adicione ao menos um produto ao jornal.', 'erro')
-    const publicado = publicarEncarte({
+    const dados = {
       titulo,
       mercado: config.nomeMercado,
       periodoDe: validadeDe,
@@ -263,9 +276,20 @@ export default function Jornal() {
       fundo: fundoDigital,
       loja: lojaAtual,
       itens: itensParaArte(),
-    })
+    }
+    const publicado = publicarEncarte(dados)
     setPublicadoEm(publicado.publicadoEm)
-    toast('Encarte digital publicado. Quem estiver com o link aberto já vê a nova versão.')
+    setPublicando(true)
+    try {
+      const r = await enviarEncarteAoSite(dados)
+      setSite((s) => ({ ...s, online: true, erro: null, publicadoEm: r.publicadoEm }))
+      toast(`Publicado no site: ${r.itens} produtos. Quem estiver com o link aberto já vê a nova versão.`)
+    } catch (erro) {
+      setSite((s) => ({ ...s, online: erro.codigo !== 'offline', protegido: s.protegido || erro.codigo === 'senha', erro: erro.message }))
+      toast(`Salvo só neste aparelho. ${erro.message}`, 'erro')
+    } finally {
+      setPublicando(false)
+    }
   }
 
   const salvar = () => {
@@ -480,9 +504,30 @@ export default function Jornal() {
                     <button type="button" className="text-xs font-bold text-critical" onClick={() => { salvarFundoTemplate(temaDigital, null); setFundoDigital(null) }}>Remover</button>
                   )}
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button type="button" onClick={publicarDigital} className="rounded-lg bg-bengala px-3 py-3 text-sm font-black text-white">
-                    Publicar agora
+                {site.protegido && (
+                  <label className="mt-3 block">
+                    <span className="text-xs font-bold uppercase text-navy">Senha de publicação</span>
+                    <input type="password" autoComplete="current-password" className={inputCls} value={senhaPublicacao}
+                      onChange={(e) => { setSenhaPublicacao(e.target.value); salvarSenhaPublicacao(e.target.value) }} />
+                  </label>
+                )}
+                <div className={`mt-3 rounded-lg px-2 py-1.5 text-[11px] font-bold ${site.erro ? 'bg-critical/10 text-critical' : site.online ? 'bg-success/10 text-navy' : 'bg-navy/5 text-ink-soft'}`} role="status">
+                  {site.erro
+                    ? site.erro
+                    : site.online
+                      ? (
+                        <div className="flex items-center justify-between gap-2">
+                          <span>Site no ar. Link da tag NFC: <span className="break-all font-black">{linkEncarte}</span></span>
+                          <button type="button" onClick={copiarLink} className="shrink-0 rounded-md border-2 border-navy/30 bg-white px-2 py-1 text-[11px] font-black text-navy">{linkCopiado ? 'Copiado' : 'Copiar'}</button>
+                        </div>
+                      )
+                      : site.online === false
+                        ? 'Servidor do encarte não encontrado. Publique pelo PC do mercado para os clientes verem.'
+                        : 'Verificando o site…'}
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={publicarDigital} disabled={publicando} className="rounded-lg bg-bengala px-3 py-3 text-sm font-black text-white disabled:opacity-60">
+                    {publicando ? 'Publicando…' : 'Publicar agora'}
                   </button>
                   <a href="#/encarte" target="_blank" rel="noreferrer" className="rounded-lg border-2 border-navy px-3 py-3 text-center text-sm font-black text-navy">
                     Abrir encarte
