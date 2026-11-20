@@ -7,7 +7,7 @@ import {
   SETORES, setorById, formatBRL, formatData,
   percentDesc, dataISOmaisDias, diaSemana, SELOS_OFERTA, seloDoProduto,
 } from '../lib/utils'
-import { publicarEncarte, lerEncartePublicado } from '../lib/encartePublico'
+import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate } from '../lib/encartePublico'
 import { TEMAS_CAMPANHA } from '../lib/temasCampanha'
 import { abrirJanelaPrevisualizacao, previsualizarImpressaoPaginas } from '../lib/exportar'
 import { imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
@@ -100,6 +100,20 @@ export default function Jornal() {
   const [periodoAte, setPeriodoAte] = useState(() => dataISOmaisDias(6))
   const [publicadoEm, setPublicadoEm] = useState(() => lerEncartePublicado()?.publicadoEm || null)
   const [temaDigital, setTemaDigital] = useState(() => lerEncartePublicado()?.tema || 'ofertao')
+  const [layoutDigital, setLayoutDigital] = useState(() => lerEncartePublicado()?.layout || 'grade')
+  const [fundoDigital, setFundoDigital] = useState(null)
+  useEffect(() => { setFundoDigital(lerFundoTemplate(temaDigital)) }, [temaDigital])
+  const trocarFundo = async (arquivo) => {
+    if (!arquivo) return
+    try {
+      const dataUrl = await prepararFundoTemplate(arquivo)
+      if (!salvarFundoTemplate(temaDigital, dataUrl)) return toast('Imagem grande demais para guardar neste aparelho.', 'erro')
+      setFundoDigital(dataUrl)
+      toast('Fundo do template salvo para este tema.')
+    } catch (erro) {
+      toast(erro.message, 'erro')
+    }
+  }
 
   const tema = TEMAS[temaSel]
 
@@ -236,6 +250,9 @@ export default function Jornal() {
       periodoDe: validadeDe,
       periodoAte: validadeAte,
       tema: temaDigital,
+      layout: layoutDigital,
+      fundo: fundoDigital,
+      loja: (store.lojas || []).find((l) => l.id === store.lojaAtiva) || (store.lojas || [])[0],
       itens: itensJornal.map((p) => ({
         ...p,
         precoJornal: precoJornal(p),
@@ -449,7 +466,28 @@ export default function Jornal() {
                     </button>
                   ))}
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="mt-3 text-xs font-bold uppercase text-navy">Layout</div>
+                <div className="mt-1 grid grid-cols-2 gap-1.5">
+                  {[['grade', 'Grade 3×3 (9 produtos)'], ['destaque', '1 destaque + 7']].map(([id, rotulo]) => (
+                    <button key={id} type="button" onClick={() => setLayoutDigital(id)} aria-pressed={layoutDigital === id}
+                      className={`rounded-lg border-2 px-2 py-2 text-xs font-black ${layoutDigital === id ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}>
+                      {rotulo}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 text-xs font-bold uppercase text-navy">Fundo do template (opcional)</div>
+                <p className="text-[11px] text-ink-soft">Exporte a arte do template sem produtos, sem logo e sem texto de validade (1080 × 1350). O sistema coloca tudo por cima.</p>
+                <div className="mt-1 flex items-center gap-2">
+                  {fundoDigital && <img src={fundoDigital} alt="Fundo do template" className="h-14 w-11 rounded object-cover ring-1 ring-black/10" />}
+                  <label className="cursor-pointer rounded-lg border-2 border-navy/20 bg-white px-3 py-2 text-xs font-black text-navy">
+                    {fundoDigital ? 'Trocar fundo' : 'Enviar fundo'}
+                    <input type="file" accept="image/*" className="sr-only" onChange={(e) => { trocarFundo(e.target.files?.[0]); e.target.value = '' }} />
+                  </label>
+                  {fundoDigital && (
+                    <button type="button" className="text-xs font-bold text-critical" onClick={() => { salvarFundoTemplate(temaDigital, null); setFundoDigital(null) }}>Remover</button>
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
                   <button type="button" onClick={publicarDigital} className="rounded-lg bg-bengala px-3 py-3 text-sm font-black text-white">
                     Publicar agora
                   </button>
@@ -731,6 +769,7 @@ export default function Jornal() {
             <Campo label="Marca"><input className={inputCls} value={produtoEditandoGerador.marca || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, marca: e.target.value }))} /></Campo>
             <Campo label="Gramagem"><input className={inputCls} value={produtoEditandoGerador.gramagem || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, gramagem: e.target.value }))} /></Campo>
             <Campo label="Selo da oferta"><SeletorSelo value={produtoEditandoGerador.seloOferta} onChange={(seloOferta) => setProdutoEditandoGerador((p) => ({ ...p, seloOferta }))} /></Campo>
+            <Campo label="Vendido por"><SeletorUnidade value={produtoEditandoGerador.unidade} setor={produtoEditandoGerador.setor} onChange={(unidade) => setProdutoEditandoGerador((p) => ({ ...p, unidade }))} /></Campo>
             <Campo label="Quantidade"><input type="number" min="0" className={inputCls} value={produtoEditandoGerador.estoque ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, estoque: e.target.value }))} /></Campo>
             <Campo label="Preço normal"><input type="number" min="0.01" step="0.01" className={inputCls} value={produtoEditandoGerador.precoNormal ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, precoNormal: e.target.value }))} /></Campo>
             <Campo label="Preço promocional"><input type="number" min="0.01" step="0.01" className={inputCls} value={produtoEditandoGerador.precoPromo ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, precoPromo: e.target.value }))} /></Campo>
@@ -1006,6 +1045,15 @@ function SeletorSelo({ value, onChange }) {
   return (
     <select className={inputCls} value={value || 'oferta'} onChange={(e) => onChange(e.target.value)}>
       {SELOS_OFERTA.map((s) => <option key={s.id} value={s.id}>{s.texto}</option>)}
+    </select>
+  )
+}
+
+function SeletorUnidade({ value, setor, onChange }) {
+  const padrao = setor === 'hortifruti' ? 'KG' : 'UNI'
+  return (
+    <select className={inputCls} value={value || padrao} onChange={(e) => onChange(e.target.value)}>
+      {['UNI', 'KG', 'PCT', 'CX', 'BDJ', 'DZ'].map((u) => <option key={u} value={u}>{u}</option>)}
     </select>
   )
 }
@@ -1341,6 +1389,7 @@ function FilaView({ fila, vencimento, remover, salvarProduto, toast }) {
             <Campo label="Gramagem"><input className={inputCls} value={editando.gramagem || ''} onChange={(e) => setEditando((p) => ({ ...p, gramagem: e.target.value }))} /></Campo>
             <Campo label="Validade (uso interno)"><input type="date" className={inputCls} value={editando.validade || ''} onChange={(e) => setEditando((p) => ({ ...p, validade: e.target.value }))} /></Campo>
             <Campo label="Selo da oferta"><SeletorSelo value={editando.seloOferta} onChange={(seloOferta) => setEditando((p) => ({ ...p, seloOferta }))} /></Campo>
+            <Campo label="Vendido por"><SeletorUnidade value={editando.unidade} setor={editando.setor} onChange={(unidade) => setEditando((p) => ({ ...p, unidade }))} /></Campo>
             <Campo label="Quantidade"><input type="number" min="0" className={inputCls} value={editando.estoque ?? ''} onChange={(e) => setEditando((p) => ({ ...p, estoque: e.target.value }))} /></Campo>
             <Campo label="Preço normal"><input type="number" min="0.01" step="0.01" className={inputCls} value={editando.precoNormal ?? ''} onChange={(e) => setEditando((p) => ({ ...p, precoNormal: e.target.value }))} /></Campo>
             <Campo label="Preço promocional"><input type="number" min="0.01" step="0.01" className={inputCls} value={editando.precoPromo ?? ''} onChange={(e) => setEditando((p) => ({ ...p, precoPromo: e.target.value }))} /></Campo>

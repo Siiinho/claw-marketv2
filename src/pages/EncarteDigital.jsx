@@ -4,6 +4,8 @@ import { SETORES, setorById, formatBRL, formatData, seloDoProduto } from '../lib
 import { carregarEncartePublicado, assinarEncarte } from '../lib/encartePublico'
 import { temaCampanhaById } from '../lib/temasCampanha'
 import { SimboloClawMarket } from '../components/MarcaClawMarket'
+import PaginaTemplate, { Escalado, paginarTemplate } from '../components/PaginaTemplate'
+import { LOJAS } from '../data/seed'
 
 // Encarte digital público: a página que a tag NFC abre.
 // Feita para celular primeiro, com alto contraste e letras grandes.
@@ -146,6 +148,7 @@ export default function EncarteDigital() {
   const [setorFiltro, setSetorFiltro] = useState('todos')
   const [aberto, setAberto] = useState(null)
   const [acabouDeAtualizar, setAcabouDeAtualizar] = useState(false)
+  const [modo, setModo] = useState('encarte')
 
   useEffect(() => {
     let ativo = true
@@ -169,7 +172,6 @@ export default function EncarteDigital() {
 
   const itens = encarte?.itens || []
   const tema = temaCampanhaById(encarte?.tema)
-  const contorno = `-2px -2px 0 ${tema.contorno}, 2px -2px 0 ${tema.contorno}, -2px 2px 0 ${tema.contorno}, 2px 2px 0 ${tema.contorno}, 0 5px 0 ${tema.contorno}`
   const setoresPresentes = useMemo(
     () => SETORES.filter((s) => itens.some((p) => p.setor === s.id)),
     [itens]
@@ -178,44 +180,45 @@ export default function EncarteDigital() {
   const grupos = setorFiltro === 'todos'
     ? setoresPresentes.map((s) => ({ setor: s, itens: itens.filter((p) => p.setor === s.id) }))
     : [{ setor: setorById(setorFiltro), itens: visiveis }]
+  const layout = encarte?.layout || 'grade'
+  const paginas = paginarTemplate(visiveis, layout)
+  const loja = encarte?.loja || LOJAS[0]
 
   return (
     <div className="min-h-screen" style={{ background: tema.fundo, backgroundAttachment: 'fixed' }}>
-      <header style={{ background: tema.fundo }} className="text-white">
-        <div className="mx-auto max-w-6xl px-4 pb-5 pt-[max(1rem,env(safe-area-inset-top))]">
-          <div className="flex items-center justify-between gap-3">
-            <Logo h={46} chip />
-            {encarte?.publicadoEm && (
-              <span className="flex items-center gap-2 rounded-full bg-black/35 px-3 py-1.5 text-xs font-bold">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
-                </span>
-                {acabouDeAtualizar ? 'Atualizado agora' : `Atualizado às ${horaCurta(encarte.publicadoEm)}`}
+      <header className="bg-black/30 text-white backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 pb-3 pt-[max(.75rem,env(safe-area-inset-top))]">
+          <div className="flex min-w-0 items-center gap-3">
+            <Logo h={40} chip />
+            <div className="min-w-0">
+              <div className="truncate text-base font-black uppercase sm:text-lg">{tema.titulo} {tema.destaque}</div>
+              {encarte?.periodoDe && <div className="text-xs font-bold text-white/85 sm:text-sm">Válido de {formatData(encarte.periodoDe)} a {formatData(encarte.periodoAte)}</div>}
+            </div>
+          </div>
+          {encarte?.publicadoEm && (
+            <span className="flex shrink-0 items-center gap-2 rounded-full bg-black/35 px-3 py-1.5 text-xs font-bold">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
               </span>
-            )}
-          </div>
-          <div className="mt-4 text-center sm:mt-6">
-            <div className="text-[13vw] font-black uppercase italic leading-[0.9] tracking-tight sm:text-7xl" style={{ color: tema.corTitulo, textShadow: contorno }}>
-              {tema.titulo}
-            </div>
-            <div className="text-[11vw] font-black uppercase italic leading-[0.95] tracking-tight sm:text-6xl" style={{ color: tema.corDestaque, textShadow: contorno }}>
-              {tema.destaque}
-            </div>
-            <p className="mt-3 text-lg font-extrabold drop-shadow sm:text-xl">{tema.chamada}</p>
-          </div>
-          {encarte?.periodoDe && (
-            <div className="mx-auto mt-4 w-fit rounded-xl px-4 py-2 text-center text-sm font-black uppercase" style={{ background: tema.faixa, color: tema.faixaTexto }}>
-              Ofertas válidas de {formatData(encarte.periodoDe)} a {formatData(encarte.periodoAte)}
-              <span className="block text-[11px] font-bold normal-case">ou enquanto durarem os estoques</span>
-            </div>
+              <span className="hidden sm:inline">{acabouDeAtualizar ? 'Atualizado agora' : `Atualizado às ${horaCurta(encarte.publicadoEm)}`}</span>
+              <span className="sm:hidden">{acabouDeAtualizar ? 'Agora' : horaCurta(encarte.publicadoEm)}</span>
+            </span>
           )}
         </div>
       </header>
 
-      {setoresPresentes.length > 1 && (
+      {itens.length > 0 && (
         <nav className="sticky top-0 z-20 border-b-2 border-navy/10 bg-white/95 backdrop-blur" aria-label="Seções do mercado">
           <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 py-3">
+            <div className="flex shrink-0 overflow-hidden rounded-full border-2 border-navy" role="group" aria-label="Modo de visualização">
+              {[['encarte', 'Encarte'], ['lista', 'Lista']].map(([id, rotulo]) => (
+                <button key={id} type="button" onClick={() => setModo(id)} aria-pressed={modo === id} className={`px-4 py-2 text-sm font-black ${modo === id ? 'bg-navy text-white' : 'bg-white text-navy'}`}>
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+            <span className="w-px shrink-0 bg-navy/15" />
             <button
               type="button"
               onClick={() => setSetorFiltro('todos')}
@@ -238,7 +241,7 @@ export default function EncarteDigital() {
         </nav>
       )}
 
-      <main className="mx-auto max-w-6xl px-4 py-5">
+      <main className="mx-auto max-w-6xl px-3 py-5 sm:px-4">
         {carregando ? (
           <p className="py-20 text-center text-lg font-bold text-white">Carregando ofertas…</p>
         ) : !itens.length ? (
@@ -246,6 +249,16 @@ export default function EncarteDigital() {
             <Icon name="Newspaper" size={48} className="mx-auto text-navy" />
             <p className="mt-3 text-xl font-black text-navy">Nenhuma oferta publicada ainda.</p>
             <p className="mt-1 text-base text-ink-soft">Assim que o mercado publicar, as ofertas aparecem aqui.</p>
+          </div>
+        ) : modo === 'encarte' ? (
+          <div className="grid gap-6 lg:grid-cols-2">
+            {paginas.map((pagina, i) => (
+              <div key={i} className="min-w-0 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-black/10">
+                <Escalado>
+                  <PaginaTemplate tema={tema} itens={pagina} encarte={encarte} loja={loja} fundo={encarte?.fundo} layout={layout} numero={i + 1} total={paginas.length} onAbrir={setAberto} />
+                </Escalado>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="space-y-8">

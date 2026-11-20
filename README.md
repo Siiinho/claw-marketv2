@@ -190,3 +190,27 @@ Guia de operação do dia a dia em [docs/GUIA-DE-USO.md](docs/GUIA-DE-USO.md).
 
 - **Export PDF/PNG:** `html2canvas` 1.4.1 **não** entende cores `color-mix()`/`oklch`. Por isso, dentro de qualquer pôster/cartaz exportável usamos **cores sólidas** (hex/rgba inline) e evitamos classes Tailwind com opacidade (ex.: `text-cream/80`). Manter esse cuidado ao editar o Jornal e os Cartazes.
 - **Jornal oficial / CORS:** o navegador bloqueia ler o site da Bengala direto. Hoje o admin cola a edição/URLs novas. Detecção automática exige backend/proxy.
+
+---
+
+## 🖼️ Imagens por código de barras (EAN Images)
+
+A chave fica **só no servidor**, nunca no navegador. No PC onde o app roda, crie o
+arquivo `.env` na pasta do projeto (ele já está no `.gitignore`) com:
+
+```
+EANIMAGES_API_KEY=sua_chave_aqui
+EANIMAGES_COM_DADOS=1
+```
+
+Depois rode `npm run dev` (ou `npm run build` + `npm run preview`). O app chama
+`/api/eanimages?ean=...` e o servidor fala com a EAN Images. Na Vercel, cadastre a
+mesma variável em *Environment Variables*. Nunca use o prefixo `VITE_` nessa chave.
+
+## 📰 Encarte digital (link da tag NFC)
+
+- Página pública: `#/encarte` (sem login), no formato de post de supermercado
+  (topo da campanha + grade 3×3 ou 1 destaque + 7), responsiva no celular e no PC.
+- No Jornal: escolha tema, layout e, se quiser, envie o **fundo do template**
+  (arte 1080 × 1350 exportada sem produtos, logo e validade). Clique **Publicar agora**.
+- A validade dos produtos nunca aparece no encarte.

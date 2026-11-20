@@ -15,7 +15,7 @@ const CANAL = 'clawmarket-encarte'
 
 const CAMPOS_PUBLICOS = [
   'id', 'nome', 'marca', 'gramagem', 'setor', 'codigoBarras', 'seloOferta',
-  'precoNormal', 'precoJornal', 'descontoJornal', 'origemFila',
+  'unidade', 'precoNormal', 'precoJornal', 'descontoJornal', 'origemFila',
   'imagem', 'imagemCachePermanente', 'imagemTratamento',
 ]
 
@@ -27,7 +27,7 @@ const soPublico = (item) => {
   return limpo
 }
 
-export function publicarEncarte({ titulo, mercado, periodoDe, periodoAte, tema, itens }) {
+export function publicarEncarte({ titulo, mercado, periodoDe, periodoAte, tema, layout, fundo, loja, itens }) {
   const encarte = {
     versao: Date.now(),
     publicadoEm: new Date().toISOString(),
@@ -36,6 +36,9 @@ export function publicarEncarte({ titulo, mercado, periodoDe, periodoAte, tema, 
     periodoDe,
     periodoAte,
     tema: tema || null,
+    layout: layout || 'grade',
+    fundo: fundo || null,
+    loja: loja ? { nome: loja.nome, endereco: loja.endereco, cidade: loja.cidade, whatsapp: loja.whatsapp } : null,
     itens: (itens || []).map(soPublico),
   }
   try {
@@ -84,4 +87,43 @@ export function assinarEncarte(aoMudar) {
     document.removeEventListener('visibilitychange', aoVoltar)
     canal?.close()
   }
+}
+
+// Fundo do template por tema (imagem exportada do template SEM os produtos).
+const chaveFundo = (temaId) => `clawmarket:fundo-template:${temaId}`
+export function lerFundoTemplate(temaId) {
+  try { return localStorage.getItem(chaveFundo(temaId)) || null } catch (_) { return null }
+}
+export function salvarFundoTemplate(temaId, dataUrl) {
+  try {
+    if (dataUrl) localStorage.setItem(chaveFundo(temaId), dataUrl)
+    else localStorage.removeItem(chaveFundo(temaId))
+    return true
+  } catch (_) {
+    return false
+  }
+}
+// Reduz a imagem para 1080 × 1350 (formato do post) em JPEG, para caber no aparelho.
+export function prepararFundoTemplate(arquivo) {
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader()
+    leitor.onerror = () => reject(new Error('Não foi possível ler a imagem.'))
+    leitor.onload = () => {
+      const img = new Image()
+      img.onerror = () => reject(new Error('Arquivo de imagem inválido.'))
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = 1080
+        canvas.height = 1350
+        const ctx = canvas.getContext('2d')
+        const escala = Math.max(1080 / img.width, 1350 / img.height)
+        const w = img.width * escala
+        const h = img.height * escala
+        ctx.drawImage(img, (1080 - w) / 2, (1350 - h) / 2, w, h)
+        resolve(canvas.toDataURL('image/jpeg', 0.85))
+      }
+      img.src = leitor.result
+    }
+    leitor.readAsDataURL(arquivo)
+  })
 }
