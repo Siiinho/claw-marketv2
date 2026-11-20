@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
 import { Icon, ProdutoThumb, EmptyState, Botao, PrecoVarejo, Campo, inputCls, Pill, Logo, SeloDesconto, Modal } from '../components/ui'
 import ScannerJornal from '../components/ScannerJornal'
+import CentralArtes from '../components/CentralArtes'
 import {
   SETORES, setorById, formatBRL, formatData,
   percentDesc, dataISOmaisDias, diaSemana, SELOS_OFERTA, seloDoProduto,
@@ -242,6 +243,13 @@ export default function Jornal() {
     }
   }
 
+  const lojaAtual = (store.lojas || []).find((l) => l.id === store.lojaAtiva) || (store.lojas || [])[0]
+  const itensParaArte = () => itensJornal.map((p) => ({
+    ...p,
+    precoJornal: precoJornal(p),
+    descontoJornal: descJornal(p),
+  }))
+
   const publicarDigital = () => {
     if (!itensJornal.length) return toast('Adicione ao menos um produto ao jornal.', 'erro')
     const publicado = publicarEncarte({
@@ -252,12 +260,8 @@ export default function Jornal() {
       tema: temaDigital,
       layout: layoutDigital,
       fundo: fundoDigital,
-      loja: (store.lojas || []).find((l) => l.id === store.lojaAtiva) || (store.lojas || [])[0],
-      itens: itensJornal.map((p) => ({
-        ...p,
-        precoJornal: precoJornal(p),
-        descontoJornal: descJornal(p),
-      })),
+      loja: lojaAtual,
+      itens: itensParaArte(),
     })
     setPublicadoEm(publicado.publicadoEm)
     toast('Encarte digital publicado. Quem estiver com o link aberto já vê a nova versão.')
@@ -305,7 +309,7 @@ export default function Jornal() {
   }
 
   const Tab = ({ id, icone, children, badge }) => (
-    <button onClick={() => setAba(id)} className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition ${aba === id ? 'border-bengala text-bengala' : 'border-transparent text-ink-soft hover:text-ink'}`}>
+    <button onClick={() => setAba(id)} className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition ${aba === id ? 'border-bengala text-bengala' : 'border-transparent text-ink-soft hover:text-ink'}`}>
       <Icon name={icone} size={16} /> {children}
       {badge > 0 && <span className="rounded-full bg-coral px-1.5 text-xs font-bold text-white">{badge}</span>}
     </button>
@@ -347,8 +351,9 @@ export default function Jornal() {
 
       <ScannerJornal />
 
-      <div className="flex gap-1 border-b border-ink-soft/10">
+      <div className="flex gap-1 overflow-x-auto border-b border-ink-soft/10">
         <Tab id="gerar" icone="LayoutTemplate">Montar jornal</Tab>
+        <Tab id="artes" icone="Images">Baixar artes</Tab>
         <Tab id="fila" icone="ListChecks" badge={fila.length}>Produtos escaneados</Tab>
         <Tab id="historico" icone="History" badge={jornais.length}>Histórico</Tab>
         <Tab id="oficial" icone="Globe">Modelo oficial</Tab>
@@ -693,6 +698,22 @@ export default function Jornal() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ============ ARTES (Feed, Stories, TV, post, cartaz, etiqueta) ============ */}
+      {aba === 'artes' && (
+        <CentralArtes
+          itens={itensParaArte()}
+          titulo={titulo}
+          encarte={{ periodoDe: validadeDe, periodoAte: validadeAte }}
+          loja={lojaAtual}
+          temaId={temaDigital}
+          setTemaId={setTemaDigital}
+          layout={layoutDigital}
+          setLayout={setLayoutDigital}
+          fundo={fundoDigital}
+          toast={toast}
+        />
       )}
 
       {/* ============ FILA ============ */}

@@ -214,3 +214,21 @@ mesma variável em *Environment Variables*. Nunca use o prefixo `VITE_` nessa ch
 - No Jornal: escolha tema, layout e, se quiser, envie o **fundo do template**
   (arte 1080 × 1350 exportada sem produtos, logo e validade). Clique **Publicar agora**.
 - A validade dos produtos nunca aparece no encarte.
+
+## Baixar artes (várias saídas da mesma lista)
+
+Em **Jornal › Baixar artes**, a mesma lista de ofertas bipadas vira:
+
+| Saída | Tamanho | Uso |
+| --- | --- | --- |
+| Feed | 1080 × 1350 (4:5) | Instagram e Facebook |
+| Stories | 1080 × 1920 (9:16) | Status do WhatsApp e Stories |
+| TV | 1920 × 1080 (16:9) | TV da loja e telão |
+| Post por oferta | 1080 × 1080 (1:1) | uma arte para cada produto |
+| Cartaz | folha A4 com 1 A4, 2 A5, 4 A6 ou 8 A7 | impressão, com linha de corte |
+| Etiquetas | 24 por folha A4 | preço de gôndola |
+
+As artes de rede social saem em PNG no tamanho exato; no celular o botão
+**Compartilhar** manda direto para WhatsApp ou Instagram. Cartazes e etiquetas
+saem em PDF A4 de alta resolução. A validade dos produtos nunca aparece, só o
+período da campanha.
