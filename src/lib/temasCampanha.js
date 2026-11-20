@@ -40,7 +40,6 @@ const ARTE_X = {
   'acougue-fds': [400, 1060],
   'pascoa': [360, 1080],
   'hortifruti': [470, 1060],
-  'peixe': [460, 1080],
   'so-aqui': [440, 1070],
   'economia-verdade': [0, 645],
   'fire': [0, 500],
@@ -51,7 +50,7 @@ const t = (id, nome, grupo, paleta, logo, titulo, destaque, chamada) => ({
   id, nome, grupo, arte: id, arteX: ARTE_X[id], logo, titulo, destaque, chamada, ...P[paleta],
 })
 
-export const GRUPOS_TEMA = ['Açougue', 'Hortifruti', 'Peixaria', 'Semana', 'Fim de semana', 'Fim de mês', 'Datas', 'Geral']
+export const GRUPOS_TEMA = ['Açougue', 'Hortifruti', 'Semana', 'Fim de semana', 'Fim de mês', 'Datas', 'Geral']
 
 export const TEMAS_CAMPANHA = [
   t('acougue', 'Açougue Nota 10', 'Açougue', 'vermelho', 'e', 'Açougue', 'Nota 10', 'Carnes selecionadas'),
@@ -59,7 +58,6 @@ export const TEMAS_CAMPANHA = [
   t('hortifruti', 'Hortifruti Imbatível', 'Hortifruti', 'verde', 'e', 'Hortifruti', 'Imbatível', 'Hoje é dia de feira!'),
   t('hortifruti-nota10', 'Hortifruti Nota 10', 'Hortifruti', 'verde', 'e', 'Hortifruti', 'Nota 10', 'Direto do campo'),
   t('ofertas-hortifruti', 'Ofertas do Hortifruti', 'Hortifruti', 'verde', 'd', 'Ofertas do', 'Hortifruti', 'Sabor e saúde com economia'),
-  t('peixe', 'Dia do Peixe', 'Peixaria', 'azul', 'e', 'Dia do', 'Peixe', 'Hoje é dia de pescado!'),
   t('ofertao', 'Ofertão da Semana', 'Semana', 'azul', 'e', 'Ofertão', 'da Semana', 'Preço baixo todo dia!'),
   t('semana-maluca', 'Semana Maluca', 'Semana', 'rosa', 'd', 'Semana', 'Maluca', 'Abaixou tudo!'),
   t('segunda-fire', 'Segunda Fire', 'Semana', 'laranja', 'e', 'Segunda', 'Fire!', 'Comece a semana economizando!'),

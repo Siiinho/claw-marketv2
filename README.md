@@ -268,7 +268,7 @@ período da campanha.
   **Antes de vender o ClawMarket para outros mercados, confirme que a licença desses
   templates permite esse uso, ou troque por artes próprias.**
 - Os temas ficam em `src/lib/temasCampanha.js`, separados por seção (Açougue, Hortifruti,
-  Peixaria, Semana, Fim de semana, Fim de mês, Datas, Geral).
+  Semana, Fim de semana, Fim de mês, Datas, Geral).
 - Os selos (Oferta, Imperdível, Queima de estoque, Super oferta, Preço baixo, Leve mais,
   Só hoje, Exclusivo) são desenhados em `src/components/SeloArte.jsx` com a fonte livre
   Bangers (OFL, pacote `@fontsource/bangers`).
