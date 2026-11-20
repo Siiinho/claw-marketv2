@@ -40,7 +40,7 @@ const CANAL = 'clawmarket-encarte'
 const CAMPOS_PUBLICOS = [
   'id', 'nome', 'marca', 'gramagem', 'setor', 'codigoBarras', 'seloOferta',
   'unidade', 'precoNormal', 'precoJornal', 'descontoJornal', 'origemFila',
-  'imagem', 'imagemCachePermanente', 'imagemTratamento',
+  'imagem', 'imagemCachePermanente', 'imagemTratamento', 'ajusteArte',
 ]
 
 const soPublico = (item) => {
@@ -51,7 +51,15 @@ const soPublico = (item) => {
   return limpo
 }
 
-export function publicarEncarte({ titulo, mercado, periodoDe, periodoAte, tema, layout, fundo, loja, itens }) {
+// Template de cada setor, tamanho do logo e fundos por template também vão para o site:
+// sem isso cada aba de setor caía no template padrão.
+const extrasDoJornal = ({ temasSetor, escalaLogo, fundos }) => ({
+  temasSetor: temasSetor && typeof temasSetor === 'object' ? temasSetor : {},
+  escalaLogo: Number(escalaLogo) || 1,
+  fundos: fundos && typeof fundos === 'object' ? fundos : {},
+})
+
+export function publicarEncarte({ titulo, mercado, periodoDe, periodoAte, tema, layout, fundo, loja, itens, ...resto }) {
   const encarte = {
     versao: Date.now(),
     publicadoEm: new Date().toISOString(),
@@ -62,6 +70,7 @@ export function publicarEncarte({ titulo, mercado, periodoDe, periodoAte, tema, 
     tema: tema || null,
     layout: layout || 'grade',
     fundo: fundo || null,
+    ...extrasDoJornal(resto),
     loja: loja ? { nome: loja.nome, endereco: loja.endereco, cidade: loja.cidade, whatsapp: loja.whatsapp } : null,
     itens: (itens || []).map(soPublico),
   }
@@ -115,10 +124,11 @@ export function linkDoEncarte(enderecos = []) {
 }
 
 // Manda o encarte (com as fotos) para o servidor. Devolve { versao, publicadoEm, itens }.
-export async function enviarEncarteAoSite({ titulo, mercado, periodoDe, periodoAte, tema, layout, fundo, loja, itens }) {
+export async function enviarEncarteAoSite({ titulo, mercado, periodoDe, periodoAte, tema, layout, fundo, loja, itens, ...resto }) {
   const comFotos = await restaurarImagensSalvas(itens || [])
   const corpo = {
     titulo, mercado, periodoDe, periodoAte, tema, layout, fundo: fundo || null,
+    ...extrasDoJornal(resto),
     loja: loja ? { nome: loja.nome, endereco: loja.endereco, cidade: loja.cidade, whatsapp: loja.whatsapp } : null,
     itens: comFotos.map((item) => {
       const limpo = soPublico({ ...item, imagemCachePermanente: false })

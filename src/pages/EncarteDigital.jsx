@@ -396,6 +396,8 @@ export default function EncarteDigital() {
   // Cada setor tem o seu jornal, com o template escolhido para ele no Jornal.
   const temaDoSetor = (id) => temaCampanhaById(encarte?.temasSetor?.[id] || temasDoSetor(id)[0]?.id || encarte?.tema)
   const tema = setorFiltro !== 'todos' && setorFiltro !== 'compras' ? temaDoSetor(setorFiltro) : temaGeral
+  // Fundo enviado no Jornal vale só para o template dele.
+  const fundoDoTema = encarte?.fundos?.[tema.id] || (tema.id === encarte?.tema ? encarte?.fundo || null : null)
   const setoresPresentes = useMemo(
     () => SETORES.filter((s) => itens.some((p) => p.setor === s.id)),
     [itens]
@@ -452,42 +454,50 @@ export default function EncarteDigital() {
       </header>
 
       {itens.length > 0 && (
-        <nav className="sticky top-0 z-20 border-b-2 border-navy/10 bg-white/95 backdrop-blur" aria-label="Seções do mercado">
-          <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 py-3">
+        <nav className="sticky top-0 z-20 border-b-2 border-navy/10 bg-white/95 backdrop-blur" aria-label="Jornais do mercado">
+          {/* 1ª linha: um jornal para cada setor, mais o Geral com tudo */}
+          <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 pb-2 pt-3">
+            <button
+              type="button"
+              onClick={() => setSetorFiltro('todos')}
+              aria-pressed={setorFiltro === 'todos'}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 px-4 py-2 text-sm font-black ${setorFiltro === 'todos' ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}
+            >
+              <Icon name="Store" size={16} /> Geral ({itens.length})
+            </button>
+            {setoresPresentes.map((s) => {
+              const n = itens.filter((p) => p.setor === s.id).length
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setSetorFiltro(s.id)}
+                  aria-pressed={setorFiltro === s.id}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full border-2 px-4 py-2 text-sm font-black"
+                  style={setorFiltro === s.id ? { background: s.cor, borderColor: s.cor, color: '#fff' } : { borderColor: `${s.cor}66`, color: s.corTag, background: '#fff' }}
+                >
+                  <Icon name={s.icone} size={16} /> {s.nome} ({n})
+                </button>
+              )
+            })}
+          </div>
+          {/* 2ª linha: jeito de ver e a lista de compras */}
+          <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 pb-3">
             <div className="flex shrink-0 overflow-hidden rounded-full border-2 border-navy" role="group" aria-label="Modo de visualização">
               {[['encarte', 'Encarte'], ['lista', 'Produtos']].map(([id, rotulo]) => (
-                <button key={id} type="button" onClick={() => setModo(id)} aria-pressed={modo === id} className={`px-4 py-2 text-sm font-black ${modo === id ? 'bg-navy text-white' : 'bg-white text-navy'}`}>
+                <button key={id} type="button" onClick={() => { setModo(id); if (setorFiltro === 'compras') setSetorFiltro('todos') }} aria-pressed={modo === id && setorFiltro !== 'compras'} className={`px-3 py-1.5 text-sm font-black ${modo === id && setorFiltro !== 'compras' ? 'bg-navy text-white' : 'bg-white text-navy'}`}>
                   {rotulo}
                 </button>
               ))}
             </div>
-            <span className="w-px shrink-0 bg-navy/15" />
             <button
               type="button"
               onClick={() => setSetorFiltro('compras')}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 px-4 py-2 text-sm font-black ${setorFiltro === 'compras' ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-[#128c4a]/50 bg-white text-[#128c4a]'}`}
+              aria-pressed={setorFiltro === 'compras'}
+              className={`ml-auto flex shrink-0 items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-sm font-black ${setorFiltro === 'compras' ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-[#128c4a]/50 bg-white text-[#128c4a]'}`}
             >
               <Icon name="ShoppingCart" size={16} /> Minha lista{compras.lista.length ? ` (${compras.lista.length})` : ''}
             </button>
-            <button
-              type="button"
-              onClick={() => setSetorFiltro('todos')}
-              className={`shrink-0 rounded-full border-2 px-4 py-2 text-sm font-black ${setorFiltro === 'todos' ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}
-            >
-              Geral ({itens.length})
-            </button>
-            {setoresPresentes.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setSetorFiltro(s.id)}
-                className="shrink-0 rounded-full border-2 px-4 py-2 text-sm font-black"
-                style={setorFiltro === s.id ? { background: s.cor, borderColor: s.cor, color: '#fff' } : { borderColor: `${s.cor}66`, color: s.corTag, background: '#fff' }}
-              >
-                {s.nome}
-              </button>
-            ))}
-
           </div>
         </nav>
       )}
@@ -509,7 +519,7 @@ export default function EncarteDigital() {
               <div key={`${encarte.versao}-${setorFiltro}-${i}`} className="min-w-0 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-black/10">
                 <PaginaViva>
                   <Escalado>
-                    <PaginaTemplate animado tema={tema} itens={pagina} encarte={encarte} loja={loja} fundo={encarte?.fundo} layout={layout} numero={i + 1} total={paginas.length} onAbrir={abrir} />
+                    <PaginaTemplate animado tema={tema} itens={pagina} encarte={encarte} loja={loja} fundo={fundoDoTema} layout={layout} numero={i + 1} total={paginas.length} onAbrir={abrir} />
                   </Escalado>
                 </PaginaViva>
               </div>

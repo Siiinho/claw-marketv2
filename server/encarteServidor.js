@@ -52,6 +52,20 @@ async function guardarImagem(valor) {
   return `/api/encarte/img/${nome}`
 }
 
+// Ajuste da arte de um produto: { nome|foto|preco: { x, y, s } }, só números dentro do limite.
+function limparAjuste(ajuste) {
+  if (!ajuste || typeof ajuste !== 'object') return null
+  const limite = (v, min, max, padrao) => (Number.isFinite(Number(v)) ? Math.min(max, Math.max(min, Number(v))) : padrao)
+  const saida = {}
+  for (const parte of ['nome', 'foto', 'preco']) {
+    const a = ajuste[parte]
+    if (a && typeof a === 'object') saida[parte] = { x: limite(a.x, -0.8, 0.8, 0), y: limite(a.y, -0.8, 0.8, 0), s: limite(a.s, 0.4, 2.5, 1) }
+  }
+  return Object.keys(saida).length ? saida : null
+}
+
+const idValido = (v) => typeof v === 'string' && /^[a-z0-9-]{1,40}$/.test(v)
+
 async function limparEncarte(corpo) {
   const itens = Array.isArray(corpo?.itens) ? corpo.itens.slice(0, 600) : []
   const limpos = []
@@ -62,6 +76,8 @@ async function limparEncarte(corpo) {
       novo[campo] = ['precoNormal', 'precoJornal', 'descontoJornal'].includes(campo) ? numero(item[campo]) : texto(item[campo], campo === 'imagem' ? 12_000_000 : 300)
     }
     novo.imagem = item?.imagem ? await guardarImagem(item.imagem) : null
+    const ajuste = limparAjuste(item?.ajusteArte)
+    if (ajuste) novo.ajusteArte = ajuste
     limpos.push(novo)
   }
   const loja = corpo?.loja ? Object.fromEntries(CAMPOS_LOJA.map((c) => [c, texto(corpo.loja[c], 200)]).filter(([, v]) => v)) : null
@@ -75,6 +91,10 @@ async function limparEncarte(corpo) {
     tema: texto(corpo?.tema, 60),
     layout: corpo?.layout === 'destaque' ? 'destaque' : 'grade',
     fundo: corpo?.fundo ? await guardarImagem(corpo.fundo) : null,
+    temasSetor: Object.fromEntries(Object.entries(corpo?.temasSetor || {}).filter(([k, v]) => idValido(k) && idValido(v)).slice(0, 40)),
+    escalaLogo: Math.min(1.3, Math.max(0.4, Number(corpo?.escalaLogo) || 1)),
+    fundos: Object.fromEntries((await Promise.all(Object.entries(corpo?.fundos || {}).filter(([k]) => idValido(k)).slice(0, 20)
+      .map(async ([k, v]) => [k, await guardarImagem(v)]))).filter(([, v]) => v)),
     loja,
     itens: limpos,
   }

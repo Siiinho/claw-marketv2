@@ -5,7 +5,7 @@ import { Icon, ProdutoThumb, EmptyState, Botao, Campo, inputCls, Pill, Modal } f
 import ScannerJornal from '../components/ScannerJornal'
 import CentralArtes from '../components/CentralArtes'
 import {
-  SETORES, setorById, formatBRL, formatData,
+  SETORES, setorById, formatBRL,
   percentDesc, dataISOmaisDias, SELOS_OFERTA,
 } from '../lib/utils'
 import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
@@ -37,23 +37,26 @@ function paginasDoHistorico(jornal) {
   return paginarTemplate(itens, jornal?.layoutArte || 'grade', 'feed')
 }
 
-const TEMAS = {
-  diaB: { nome: 'Dia B', cor: '#e23a2e', selo: 'ESPECIAL · DIA B', sub: 'Válido AMANHÃ', acento: '#f47b36' },
-  copa: { nome: 'Copa', cor: '#1c6e48', selo: 'ESQUENTA DA COPA', sub: 'Ofertas da seleção', acento: '#ffd23f' },
-  feijoada: { nome: 'Festival da Feijoada', cor: '#7c2230', selo: 'FESTIVAL DA FEIJOADA', sub: 'Sabor de casa', acento: '#f2a93b' },
-  junina: { nome: 'Festa Junina', cor: '#d9641f', selo: 'ARRAIÁ BENGALA', sub: 'É chegada a quadrilha', acento: '#ffd23f' },
+// Escolhas do painel (jornal aberto e template de cada jornal) guardadas neste aparelho,
+// para não se perderem ao recarregar antes de publicar.
+const CHAVE_RASCUNHO = 'clawmarket:jornal-rascunho:v1'
+function lerRascunho() {
+  try { return JSON.parse(localStorage.getItem(CHAVE_RASCUNHO) || '{}') || {} } catch (_) { return {} }
+}
+function salvarRascunho(dados) {
+  try { localStorage.setItem(CHAVE_RASCUNHO, JSON.stringify(dados)) } catch (_) { /* sem espaço: segue sem guardar */ }
 }
 
 export default function Jornal() {
   const navigate = useNavigate()
   const store = useStore()
-  const { fila, config, jornais, jornalOficial, ofertaDoProduto, salvarProduto, salvarJornal, excluirJornal, removerDaFila, atualizarJornalOficial, toast } = store
+  const { fila, config, jornais, ofertaDoProduto, salvarProduto, salvarJornal, excluirJornal, removerDaFila, toast } = store
   const [aba, setAba] = useState('gerar')
 
   // ---- config de geração ----
-  const [tipo, setTipo] = useState('geral') // setor | geral | sazonal
-  const [setorSel, setSetorSel] = useState('frios')
-  const [temaSel, setTemaSel] = useState('diaB')
+  // Jornal aberto no painel: 'geral' (todos os produtos) ou o id de um setor (só os dele).
+  const [jornalSel, setJornalSel] = useState(() => lerRascunho().jornal || 'geral')
+  const ehSetor = jornalSel !== 'geral'
   const [titulo, setTitulo] = useState('Jornal de Ofertas - Bengala Supermercado')
   const [excluidos, setExcluidos] = useState(() => new Set())
   const [exportando, setExportando] = useState(false)
@@ -79,12 +82,19 @@ export default function Jornal() {
   const [periodoDe, setPeriodoDe] = useState(() => dataISOmaisDias(0))
   const [periodoAte, setPeriodoAte] = useState(() => dataISOmaisDias(6))
   const [publicadoEm, setPublicadoEm] = useState(() => lerEncartePublicado()?.publicadoEm || null)
-  const [temaDigital, setTemaDigital] = useState(() => lerEncartePublicado()?.tema || 'ofertao')
+  const [temaDigital, setTemaDigital] = useState(() => lerRascunho().tema || lerEncartePublicado()?.tema || 'ofertao')
   const [layoutDigital, setLayoutDigital] = useState(() => lerEncartePublicado()?.layout || 'grade')
   // Tamanho do logo no jornal (0,4 a 1,3) e o template de cada setor (jornal de cada setor).
   const [escalaLogo, setEscalaLogo] = useState(() => Number(lerEncartePublicado()?.escalaLogo) || 1)
-  const [temasSetor, setTemasSetor] = useState(() => lerEncartePublicado()?.temasSetor || {})
-  const temaDoSetor = (id) => temasSetor[id] || temasDoSetor(id)[0]?.id || temaDigital
+  const [temasSetor, setTemasSetor] = useState(() => ({ ...(lerEncartePublicado()?.temasSetor || {}), ...(lerRascunho().temasSetor || {}) }))
+  const temaDoSetor = (id) => temasSetor[id] || temasDoSetor(id)[0]?.id || 'mercado'
+  // Template do jornal aberto. Trocar aqui muda só este jornal; os outros continuam como estão.
+  const temaAtualId = ehSetor ? temaDoSetor(jornalSel) : temaDigital
+  const escolherTema = (id) => {
+    if (ehSetor) setTemasSetor((atual) => ({ ...atual, [jornalSel]: id }))
+    else setTemaDigital(id)
+  }
+  useEffect(() => { salvarRascunho({ jornal: jornalSel, tema: temaDigital, temasSetor }) }, [jornalSel, temaDigital, temasSetor])
   const [publicando, setPublicando] = useState(false)
   const [site, setSite] = useState({ online: null, protegido: false, erro: null })
   const [senhaPublicacao, setSenhaPublicacao] = useState(lerSenhaPublicacao)
@@ -99,20 +109,18 @@ export default function Jornal() {
     try { await navigator.clipboard.writeText(linkEncarte); setLinkCopiado(true); setTimeout(() => setLinkCopiado(false), 2500) } catch (_) { window.prompt('Copie o link da tag NFC:', linkEncarte) }
   }
   const [fundoDigital, setFundoDigital] = useState(null)
-  useEffect(() => { setFundoDigital(lerFundoTemplate(temaDigital)) }, [temaDigital])
+  useEffect(() => { setFundoDigital(lerFundoTemplate(temaAtualId)) }, [temaAtualId])
   const trocarFundo = async (arquivo) => {
     if (!arquivo) return
     try {
       const dataUrl = await prepararFundoTemplate(arquivo)
-      if (!salvarFundoTemplate(temaDigital, dataUrl)) return toast('Imagem grande demais para guardar neste aparelho.', 'erro')
+      if (!salvarFundoTemplate(temaAtualId, dataUrl)) return toast('Imagem grande demais para guardar neste aparelho.', 'erro')
       setFundoDigital(dataUrl)
       toast('Fundo do template salvo para este tema.')
     } catch (erro) {
       toast(erro.message, 'erro')
     }
   }
-
-  const tema = TEMAS[temaSel]
 
   // Garante que nenhuma fotografia crua de celular chegue à arte final.
   // Cada foto é tentada uma vez por sessão: sem isso, uma foto que não vira packshot era salva
@@ -168,10 +176,9 @@ export default function Jornal() {
 
   // ---- montagem do conteúdo ----
   const ativos = fila.filter((p) => incluir(p.id))
-  const ativosDoModelo = tipo === 'setor' ? ativos.filter((p) => p.setor === setorSel) : ativos
+  const ativosDoModelo = ehSetor ? ativos.filter((p) => p.setor === jornalSel) : ativos
   const vencimento = ativosDoModelo.filter((p) => p.origemFila === 'vencimento')
   const regulares = ativosDoModelo.filter((p) => p.origemFila !== 'vencimento')
-  const selo = tipo === 'sazonal' ? tema.selo : tipo === 'setor' ? setorById(setorSel).nome.toUpperCase() : 'PRODUTOS VARIADOS'
 
   // Ordem do encarte: ofertas internas primeiro, depois por setor (ordem de SETORES).
   const ordemSetor = (p) => Math.max(0, SETORES.findIndex((s) => s.id === p.setor))
@@ -181,7 +188,10 @@ export default function Jornal() {
   ]
   const itensArte = itensJornal.map((p) => ({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
   const paginasJornal = paginarTemplate(itensArte, layoutDigital, 'feed')
-  const temaArte = temaCampanhaById(tipo === 'setor' ? temaDoSetor(setorSel) : temaDigital)
+  const temaArte = temaCampanhaById(temaAtualId)
+  const nomeJornal = ehSetor ? setorById(jornalSel).nome : 'Geral'
+  const contagemSetor = (id) => ativos.filter((p) => p.setor === id).length
+  const filaDoPainel = ehSetor ? fila.filter((p) => p.setor === jornalSel) : fila
   // O site do cliente sempre recebe todos os produtos; cada setor vira uma aba com o template dele.
   const ordenarParaJornal = (lista) => [
     ...lista.filter((p) => p.origemFila === 'vencimento'),
@@ -206,22 +216,16 @@ export default function Jornal() {
   ]
   const bloqueiosPDF = problemasPDF.filter((p) => p.nivel === 'erro')
 
-  const aplicarDiaB = () => {
-    setTipo('sazonal'); setTemaSel('diaB')
-    setTitulo('Jornal de Ofertas — DIA B')
-    toast('Modelo Dia B aplicado.')
-  }
 
   const criarSnapshot = () => ({
     titulo,
-    tipo,
-    tema: tipo === 'sazonal' ? temaSel : null,
-    setor: tipo === 'setor' ? setorSel : null,
+    tipo: ehSetor ? 'setor' : 'geral',
+    setor: ehSetor ? jornalSel : null,
     validadeDe,
     validadeAte,
     totalItens: itensJornal.length,
     totalPaginas: paginasJornal.length,
-    temaArte: tipo === 'setor' ? temaDoSetor(setorSel) : temaDigital,
+    temaArte: temaAtualId,
     escalaLogo,
     layoutArte: layoutDigital,
     fundoArte: fundoDigital,
@@ -269,8 +273,6 @@ export default function Jornal() {
     toast(`${seloEditando.nome}: ${promo ? `de ${formatBRL(normal)} por ${formatBRL(promo)}` : formatBRL(normal)}.`)
     setSeloEditando(null)
   }
-  const escolherSetor = (id) => setSetorSel(id)
-  const escolherTemaSetor = (id) => setTemasSetor((atual) => ({ ...atual, [setorSel]: id }))
   const trocarSelo = (produto, seloOferta) => {
     salvarProduto({ id: produto.id, seloOferta })
     const selo = SELOS_OFERTA.find((s) => s.id === seloOferta)
@@ -288,9 +290,12 @@ export default function Jornal() {
       periodoAte: validadeAte,
       tema: temaDigital,
       temasSetor: Object.fromEntries(setoresDoJornal.map((id) => [id, temaDoSetor(id)])),
+      // Fundo enviado só vale para o template dele (antes o fundo do Geral ia para todas as abas).
+      fundos: Object.fromEntries([temaDigital, ...setoresDoJornal.map(temaDoSetor)]
+        .map((id) => [id, lerFundoTemplate(id)]).filter(([, fundo]) => fundo)),
       escalaLogo,
       layout: layoutDigital,
-      fundo: fundoDigital,
+      fundo: lerFundoTemplate(temaDigital),
       loja: lojaAtual,
       itens: todos,
     }
@@ -359,88 +364,70 @@ export default function Jornal() {
 
   return (
     <div className="space-y-5">
-      <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-bengala text-white">
-            <Icon name="Newspaper" size={24} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-bold text-ink">Monte o jornal em 3 passos</h2>
-            <p className="mt-0.5 text-sm text-ink-soft">Escolha o modelo, bipe os produtos e baixe o jornal pronto.</p>
-          </div>
-          <Botao onClick={() => document.getElementById('scanner-jornal')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="shrink-0">
-            <Icon name="ScanLine" size={17} /> Começar a escanear
-          </Botao>
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-bengala text-white">
+          <Icon name="Newspaper" size={22} />
         </div>
-        <div className="grid border-t border-ink-soft/10 sm:grid-cols-3">
-          {[
-            ['1', 'Escolha o modelo', tipo === 'setor' ? setorById(setorSel).nome : tipo === 'sazonal' ? tema.nome : 'Produtos variados', 'LayoutTemplate'],
-            ['2', 'Escaneie os produtos', `${fila.length} ${fila.length === 1 ? 'produto na fila' : 'produtos na fila'}`, 'ScanBarcode'],
-            ['3', 'Gere e imprima', itensJornal.length ? `${itensJornal.length} ${itensJornal.length === 1 ? 'produto pronto' : 'produtos prontos'} para o jornal` : 'Aguardando produtos', 'FileDown'],
-          ].map(([n, t, sub, ic], i) => (
-            <div key={n} className={`flex items-center gap-3 px-5 py-3 ${i < 2 ? 'border-b border-ink-soft/10 sm:border-b-0 sm:border-r' : ''}`}>
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${i === 0 || (i === 1 && fila.length) || (i === 2 && itensJornal.length) ? 'bg-bengala text-white' : 'bg-cream-200 text-ink-soft'}`}>{n}</span>
-              <Icon name={ic} size={18} className="text-ink-soft" />
-              <div className="min-w-0">
-                <div className="text-sm font-bold text-ink">{t}</div>
-                <div className="truncate text-xs text-ink-soft">{sub}</div>
-              </div>
-            </div>
-          ))}
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-bold text-ink">Jornal de ofertas</h2>
+          <p className="text-sm text-ink-soft">Bipe os produtos. Cada setor tem o seu jornal, e o Geral junta todos.</p>
         </div>
+        <Botao onClick={() => document.getElementById('scanner-jornal')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="shrink-0">
+          <Icon name="ScanLine" size={17} /> Escanear
+        </Botao>
       </div>
 
       <ScannerJornal />
 
-      <div className="grid grid-cols-3 gap-1.5 sm:flex sm:gap-1 sm:overflow-x-auto sm:border-b sm:border-ink-soft/10">
-        <Tab id="gerar" icone="LayoutTemplate">Montar jornal</Tab>
+      <div className="grid grid-cols-2 gap-1.5 sm:flex sm:gap-1 sm:overflow-x-auto sm:border-b sm:border-ink-soft/10">
+        <Tab id="gerar" icone="LayoutTemplate">Montar jornais</Tab>
         <Tab id="artes" icone="Images">Baixar artes</Tab>
         <Tab id="fila" icone="ListChecks" badge={fila.length}>Produtos escaneados</Tab>
         <Tab id="historico" icone="History" badge={jornais.length}>Histórico</Tab>
-        <Tab id="oficial" icone="Globe">Modelo oficial</Tab>
       </div>
 
       {/* ============ GERAR ============ */}
       {aba === 'gerar' && (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[330px_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
           {/* controles */}
           <div className="min-w-0 space-y-4">
-            <div className="card-bengala space-y-3 p-4">
-              <div>
-                <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">1. Escolha o modelo</p>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[['geral', 'Geral', 'Store'], ['setor', 'Por setor', 'Grid3x3'], ['sazonal', 'Sazonal', 'PartyPopper']].map(([id, l, ic]) => (
-                    <button key={id} onClick={() => setTipo(id)} className={`flex flex-col items-center gap-1 rounded-lg border-2 py-2 text-xs font-medium ${tipo === id ? 'border-bengala text-bengala' : 'border-ink-soft/15 text-ink-soft hover:border-ink-soft/30'}`}>
-                      <Icon name={ic} size={18} /> {l}
+            <div className="card-bengala p-4">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">1. Qual jornal você vai montar?</p>
+              <button type="button" onClick={() => setJornalSel('geral')} aria-pressed={!ehSetor}
+                className={`flex w-full items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-left text-sm font-black ${!ehSetor ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}>
+                <Icon name="Store" size={18} />
+                <span className="flex-1">Jornal geral</span>
+                <span className="text-xs font-bold opacity-80">{ativos.length} {ativos.length === 1 ? 'produto' : 'produtos'}</span>
+              </button>
+              <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                {SETORES.map((s) => {
+                  const n = contagemSetor(s.id)
+                  const ativo = jornalSel === s.id
+                  return (
+                    <button key={s.id} type="button" onClick={() => setJornalSel(s.id)} aria-pressed={ativo}
+                      className={`flex min-w-0 items-center gap-1.5 rounded-lg border-2 px-2 py-2 text-left text-xs font-bold ${n ? '' : 'opacity-55'}`}
+                      style={ativo ? { background: s.cor, borderColor: s.cor, color: '#fff' } : { borderColor: `${s.cor}55`, color: s.corTag || s.cor, background: '#fff' }}>
+                      <Icon name={s.icone} size={15} />
+                      <span className="min-w-0 flex-1 truncate">{s.nome}</span>
+                      <span className="shrink-0 tabular-nums">{n}</span>
                     </button>
-                  ))}
-                </div>
+                  )
+                })}
               </div>
+              <p className="mt-2 text-[11px] leading-snug text-ink-soft">No site do cliente aparece a aba Geral e uma aba para cada setor que tiver produto, cada uma com o template dela.</p>
+            </div>
 
-              {tipo === 'geral' && (
-                <div>
-                  <p className="text-xs font-medium text-ink-soft">Produtos de vários setores no mesmo jornal. O visual vem do tema da campanha, logo abaixo.</p>
-                </div>
-              )}
-
-              {tipo === 'setor' && (
-                <div>
-                  <p className="mb-1.5 text-xs font-medium text-ink-soft">Qual setor você vai trabalhar?</p>
+            <div className="card-bengala p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">2. Template do jornal {nomeJornal}</p>
+              <p className="mb-2 mt-0.5 text-[11px] text-ink-soft">Muda só este jornal. Os outros continuam com o template deles.</p>
+              {ehSetor ? (
+                <>
                   <div className="grid grid-cols-2 gap-1.5">
-                    {SETORES.map((s) => (
-                      <button key={s.id} onClick={() => escolherSetor(s.id)} className={`flex items-center gap-2 rounded-lg border-2 px-2.5 py-2 text-left text-xs font-medium ${setorSel === s.id ? 'border-bengala bg-bengala/5 text-bengala' : 'border-ink-soft/15 text-ink-soft'}`}>
-                        <span className="h-3 w-3 rounded-full" style={{ background: s.cor }} />
-                        {s.nome}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mb-1.5 mt-3 text-xs font-medium text-ink-soft">Template do jornal de {setorById(setorSel).nome} (é o que o cliente vê na aba desse setor)</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {temasDoSetor(setorSel).map((t) => {
+                    {temasDoSetor(jornalSel).map((t) => {
                       const mini = caminhoArte(t, 'miniatura')
-                      const ativo = temaDoSetor(setorSel) === t.id
+                      const ativo = temaAtualId === t.id
                       return (
-                        <button key={t.id} type="button" onClick={() => escolherTemaSetor(t.id)} aria-pressed={ativo} title={t.nome}
+                        <button key={t.id} type="button" onClick={() => escolherTema(t.id)} aria-pressed={ativo} title={t.nome}
                           className={`relative flex aspect-[4/3] flex-col overflow-hidden rounded-lg text-left ${ativo ? 'ring-4 ring-offer ring-offset-1' : 'ring-1 ring-black/10'}`}
                           style={{ background: t.fundo }}>
                           {mini ? <img src={mini} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-contain p-1" /> : (
@@ -454,44 +441,57 @@ export default function Jornal() {
                       )
                     })}
                   </div>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs font-bold text-bengala">Usar outro template neste setor</summary>
+                    <div className="mt-2"><SeletorTema compacto value={temaAtualId} onChange={escolherTema} /></div>
+                  </details>
+                </>
+              ) : (
+                <SeletorTema compacto value={temaDigital} onChange={escolherTema} />
+              )}
+            </div>
+
+            <div className="card-bengala p-3">
+              <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">3. Produtos do jornal {nomeJornal} ({ativosDoModelo.length})</p>
+                <button onClick={() => document.getElementById('scanner-jornal')?.scrollIntoView({ behavior: 'smooth' })} className="flex items-center gap-1 text-xs font-bold text-bengala hover:underline">
+                  <Icon name="ScanLine" size={13} /> Escanear
+                </button>
+              </div>
+              {filaDoPainel.length === 0 ? (
+                <p className="px-1 py-3 text-sm text-ink-soft">{ehSetor ? `Nenhum produto de ${nomeJornal} na fila. Bipe um produto desse setor ou mude o setor dele no lápis.` : 'Fila vazia. Bipe os produtos acima.'}</p>
+              ) : (
+                <div className="max-h-72 space-y-1 overflow-y-auto">
+                  {filaDoPainel.map((p) => {
+                    const setorP = setorById(p.setor)
+                    return (
+                      <div key={p.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-cream-200">
+                        <input type="checkbox" checked={incluir(p.id)} onChange={() => toggleIncluir(p.id)} aria-label={`Incluir ${p.nome}`} className="h-4 w-4 shrink-0 accent-bengala" />
+                        <ProdutoThumb produto={p} size={28} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block whitespace-normal break-words text-sm leading-snug text-ink">{p.nome}</span>
+                          {!ehSetor && <span className="block text-[11px] font-bold" style={{ color: setorP.corTag || setorP.cor }}>{setorP.nome}</span>}
+                        </span>
+                        {p.origemFila === 'vencimento' && <Pill cor="#d9641f" bg="#f47b361a">interna</Pill>}
+                        <button onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="shrink-0 rounded p-1.5 text-info hover:bg-info/10"><Icon name="Pencil" size={15} /></button>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
+              <p className="mt-1 px-1 text-[11px] text-ink-soft">Selo, preço e posição na arte: toque no produto na prévia. Setor errado: use o lápis.</p>
+            </div>
 
-              {tipo === 'sazonal' && (
-                <div>
-                  <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">Tema</p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {Object.entries(TEMAS).map(([id, t]) => (
-                      <button key={id} onClick={() => setTemaSel(id)} className={`rounded-lg border-2 px-2 py-1.5 text-left text-xs font-medium ${temaSel === id ? 'border-bengala' : 'border-ink-soft/15'}`}>
-                        <span className="mr-1 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: t.cor }} /> {t.nome}
-                      </button>
-                    ))}
-                  </div>
-                  <button onClick={aplicarDiaB} className="mt-2 w-full rounded-lg bg-bengala/10 px-3 py-1.5 text-xs font-medium text-bengala hover:bg-bengala/15">
-                    <Icon name="Zap" size={13} className="mr-1 inline" /> Aplicar modelo Dia B (amanhã)
-                  </button>
-                </div>
-              )}
-
+            <div className="card-bengala space-y-3 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">4. Ajustes de todos os jornais</p>
               <Campo label="Título"><input className={inputCls} value={titulo} onChange={(e) => setTitulo(e.target.value)} /></Campo>
               <div className="grid grid-cols-2 gap-2">
                 <Campo label="Ofertas válidas de"><input type="date" className={inputCls} value={periodoDe} onChange={(e) => setPeriodoDe(e.target.value)} /></Campo>
                 <Campo label="até"><input type="date" className={inputCls} value={periodoAte} min={periodoDe} onChange={(e) => setPeriodoAte(e.target.value)} /></Campo>
               </div>
-              <p className="px-1 text-xs text-ink-soft">Período da campanha. A validade dos produtos não aparece no encarte.</p>
-              <div className="rounded-xl border-2 border-navy bg-white p-3">
-                <div className="flex items-center gap-2 text-sm font-black text-navy">
-                  <Icon name="Smartphone" size={16} /> Encarte digital (link da tag NFC)
-                </div>
-                <p className="mt-1 text-xs text-ink-soft">
-                  {publicadoEm
-                    ? `Última publicação: ${new Date(publicadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
-                    : 'Ainda não publicado.'}
-                </p>
-                <div className="mt-2 text-xs font-bold uppercase text-navy">Tema do jornal geral</div>
-                <p className="text-[11px] text-ink-soft">O cliente vê a aba Geral com este tema e uma aba para cada setor, com o template escolhido em "Por setor".</p>
-                <div className="mt-1"><SeletorTema compacto value={temaDigital} onChange={setTemaDigital} /></div>
-                <div className="mt-3 text-xs font-bold uppercase text-navy">Layout</div>
+              <p className="px-1 text-[11px] text-ink-soft">A validade dos produtos nunca aparece no encarte.</p>
+              <div>
+                <div className="text-xs font-bold uppercase text-navy">Layout</div>
                 <div className="mt-1 grid grid-cols-2 gap-1.5">
                   {[['grade', 'Grade 3×3 (9 produtos)'], ['destaque', '1 destaque + 7']].map(([id, rotulo]) => (
                     <button key={id} type="button" onClick={() => setLayoutDigital(id)} aria-pressed={layoutDigital === id}
@@ -500,7 +500,9 @@ export default function Jornal() {
                     </button>
                   ))}
                 </div>
-                <div className="mt-3 flex items-center justify-between text-xs font-bold uppercase text-navy">
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-xs font-bold uppercase text-navy">
                   <span>Tamanho do logo</span><span>{Math.round(escalaLogo * 100)}%</span>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
@@ -508,8 +510,10 @@ export default function Jornal() {
                   <input type="range" min="0.4" max="1.3" step="0.05" value={escalaLogo} onChange={(e) => setEscalaLogo(Number(e.target.value))} className="w-full accent-bengala" aria-label="Tamanho do logo" />
                   <button type="button" onClick={() => setEscalaLogo((v) => Math.min(1.3, Math.round((v + 0.1) * 10) / 10))} aria-label="Aumentar o logo" className="h-9 w-9 shrink-0 rounded-lg border-2 border-navy/20 bg-white text-lg font-black text-navy">+</button>
                 </div>
-                <div className="mt-3 text-xs font-bold uppercase text-navy">Fundo do template (opcional)</div>
-                <p className="text-[11px] text-ink-soft">Exporte a arte do template sem produtos, sem logo e sem texto de validade (1080 × 1350). O sistema coloca tudo por cima.</p>
+              </div>
+              <details>
+                <summary className="cursor-pointer text-xs font-bold text-navy">Fundo próprio para o template {temaArte.nome} (opcional)</summary>
+                <p className="mt-1 text-[11px] text-ink-soft">Arte 1080 × 1350 sem produtos, sem logo e sem validade. Vale só para este template.</p>
                 <div className="mt-1 flex items-center gap-2">
                   {fundoDigital && <img src={fundoDigital} alt="Fundo do template" className="h-14 w-11 rounded object-cover ring-1 ring-black/10" />}
                   <label className="cursor-pointer rounded-lg border-2 border-navy/20 bg-white px-3 py-2 text-xs font-black text-navy">
@@ -517,72 +521,51 @@ export default function Jornal() {
                     <input type="file" accept="image/*" className="sr-only" onChange={(e) => { trocarFundo(e.target.files?.[0]); e.target.value = '' }} />
                   </label>
                   {fundoDigital && (
-                    <button type="button" className="text-xs font-bold text-critical" onClick={() => { salvarFundoTemplate(temaDigital, null); setFundoDigital(null) }}>Remover</button>
+                    <button type="button" className="text-xs font-bold text-critical" onClick={() => { salvarFundoTemplate(temaAtualId, null); setFundoDigital(null) }}>Remover</button>
                   )}
                 </div>
-                {site.protegido && (
-                  <label className="mt-3 block">
-                    <span className="text-xs font-bold uppercase text-navy">Senha de publicação</span>
-                    <input type="password" autoComplete="current-password" className={inputCls} value={senhaPublicacao}
-                      onChange={(e) => { setSenhaPublicacao(e.target.value); salvarSenhaPublicacao(e.target.value) }} />
-                  </label>
-                )}
-                <div className={`mt-3 rounded-lg px-2 py-1.5 text-[11px] font-bold ${site.erro ? 'bg-critical/10 text-critical' : site.online ? 'bg-success/10 text-navy' : 'bg-navy/5 text-ink-soft'}`} role="status">
-                  {site.erro
-                    ? site.erro
-                    : site.online
-                      ? (
-                        <div className="flex items-center justify-between gap-2">
-                          <span>Site no ar. Link da tag NFC: <span className="break-all font-black">{linkEncarte}</span></span>
-                          <button type="button" onClick={copiarLink} className="shrink-0 rounded-md border-2 border-navy/30 bg-white px-2 py-1 text-[11px] font-black text-navy">{linkCopiado ? 'Copiado' : 'Copiar'}</button>
-                        </div>
-                      )
-                      : site.online === false
-                        ? 'Servidor do encarte não encontrado. Publique pelo PC do mercado para os clientes verem.'
-                        : 'Verificando o site…'}
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <button type="button" onClick={publicarDigital} disabled={publicando} className="rounded-lg bg-bengala px-3 py-3 text-sm font-black text-white disabled:opacity-60">
-                    {publicando ? 'Publicando…' : 'Publicar agora'}
-                  </button>
-                  <a href="#/encarte" target="_blank" rel="noreferrer" className="rounded-lg border-2 border-navy px-3 py-3 text-center text-sm font-black text-navy">
-                    Abrir encarte
-                  </a>
-                </div>
-              </div>
+              </details>
             </div>
 
-            {/* seleção da fila */}
-            <div className="card-bengala p-3">
-              <div className="mb-2 flex items-center justify-between gap-2 px-1">
-                <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">2. Produtos do jornal ({ativos.length})</p>
-                <button onClick={() => document.getElementById('scanner-jornal')?.scrollIntoView({ behavior: 'smooth' })} className="flex items-center gap-1 text-xs font-bold text-bengala hover:underline">
-                  <Icon name="ScanLine" size={13} /> Escanear
-                </button>
+            <div className="rounded-xl border-2 border-navy bg-white p-4">
+              <div className="flex items-center gap-2 text-sm font-black text-navy">
+                <Icon name="Smartphone" size={16} /> 5. Publicar no site do cliente (tag NFC)
               </div>
-              {fila.length === 0 ? (
-                <p className="px-1 py-3 text-sm text-ink-soft">Fila vazia. Adicione produtos em Produtos ou Ofertas.</p>
-              ) : (
-                <div className="max-h-64 space-y-1 overflow-y-auto">
-                  {fila.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-cream-200">
-                      <input type="checkbox" checked={incluir(p.id)} onChange={() => toggleIncluir(p.id)} className="h-4 w-4 accent-bengala" />
-                      <ProdutoThumb produto={p} size={28} />
-                      <span className="min-w-0 flex-1 whitespace-normal break-words text-sm leading-snug text-ink">{p.nome}</span>
-                      {p.origemFila === 'vencimento' && <Pill cor="#d9641f" bg="#f47b361a">interna</Pill>}
-                      <select
-                        value={p.seloOferta || 'oferta'}
-                        onChange={(e) => trocarSelo(p, e.target.value)}
-                        aria-label={`Selo de ${p.nome}`}
-                        className="w-[104px] shrink-0 rounded-md border border-ink-soft/25 bg-white px-1 py-1 text-xs font-bold text-ink"
-                      >
-                        {SELOS_OFERTA.map((s) => <option key={s.id} value={s.id}>{s.texto}</option>)}
-                      </select>
-                      <button onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="rounded p-1 text-info hover:bg-info/10"><Icon name="Pencil" size={14} /></button>
-                    </div>
-                  ))}
-                </div>
+              <p className="mt-1 text-xs text-ink-soft">
+                Publica de uma vez o Geral e o jornal de cada setor.{' '}
+                {publicadoEm
+                  ? `Última publicação: ${new Date(publicadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.`
+                  : 'Ainda não publicado.'}
+              </p>
+              {site.protegido && (
+                <label className="mt-3 block">
+                  <span className="text-xs font-bold uppercase text-navy">Senha de publicação</span>
+                  <input type="password" autoComplete="current-password" className={inputCls} value={senhaPublicacao}
+                    onChange={(e) => { setSenhaPublicacao(e.target.value); salvarSenhaPublicacao(e.target.value) }} />
+                </label>
               )}
+              <div className={`mt-2 rounded-lg px-2 py-1.5 text-[11px] font-bold ${site.erro ? 'bg-critical/10 text-critical' : site.online ? 'bg-success/10 text-navy' : 'bg-navy/5 text-ink-soft'}`} role="status">
+                {site.erro
+                  ? site.erro
+                  : site.online
+                    ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span>Site no ar. Link da tag NFC: <span className="break-all font-black">{linkEncarte}</span></span>
+                        <button type="button" onClick={copiarLink} className="shrink-0 rounded-md border-2 border-navy/30 bg-white px-2 py-1 text-[11px] font-black text-navy">{linkCopiado ? 'Copiado' : 'Copiar'}</button>
+                      </div>
+                    )
+                    : site.online === false
+                      ? 'Servidor do encarte não encontrado. Publique pelo PC do mercado para os clientes verem.'
+                      : 'Verificando o site…'}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button type="button" onClick={publicarDigital} disabled={publicando} className="rounded-lg bg-bengala px-3 py-3 text-sm font-black text-white disabled:opacity-60">
+                  {publicando ? 'Publicando…' : 'Publicar agora'}
+                </button>
+                <a href="#/encarte" target="_blank" rel="noreferrer" className="rounded-lg border-2 border-navy px-3 py-3 text-center text-sm font-black text-navy">
+                  Abrir encarte
+                </a>
+              </div>
             </div>
 
             {itensJornal.length > 0 && (
@@ -700,8 +683,8 @@ export default function Jornal() {
           titulo={titulo}
           encarte={{ periodoDe: validadeDe, periodoAte: validadeAte }}
           loja={lojaAtual}
-          temaId={temaDigital}
-          setTemaId={setTemaDigital}
+          temaId={temaAtualId}
+          setTemaId={escolherTema}
           escalaLogo={escalaLogo}
           layout={layoutDigital}
           setLayout={setLayoutDigital}
@@ -739,8 +722,6 @@ export default function Jornal() {
         </div>
       )}
 
-      {/* ============ OFICIAL ============ */}
-      {aba === 'oficial' && <OficialView jornal={jornalOficial} atualizar={atualizarJornalOficial} url={config.jornalUrl} toast={toast} />}
 
       {historicoParaAbrir ? (
         <div className="pointer-events-none fixed top-0" style={{ left: -20000 }} aria-hidden="true">
@@ -822,6 +803,7 @@ export default function Jornal() {
             <div className="col-span-2"><Campo label="Nome"><input className={inputCls} value={produtoEditandoGerador.nome || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, nome: e.target.value }))} /></Campo></div>
             <Campo label="Marca"><input className={inputCls} value={produtoEditandoGerador.marca || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, marca: e.target.value }))} /></Campo>
             <Campo label="Gramagem"><input className={inputCls} value={produtoEditandoGerador.gramagem || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, gramagem: e.target.value }))} /></Campo>
+            <div className="col-span-2"><Campo label="Setor (em qual jornal ele entra)"><SeletorSetor value={produtoEditandoGerador.setor} onChange={(setor) => setProdutoEditandoGerador((p) => ({ ...p, setor }))} /></Campo></div>
             <Campo label="Selo da oferta"><SeletorSelo value={produtoEditandoGerador.seloOferta} onChange={(seloOferta) => setProdutoEditandoGerador((p) => ({ ...p, seloOferta }))} /></Campo>
             <Campo label="Vendido por"><SeletorUnidade value={produtoEditandoGerador.unidade} setor={produtoEditandoGerador.setor} onChange={(unidade) => setProdutoEditandoGerador((p) => ({ ...p, unidade }))} /></Campo>
             <Campo label="Quantidade"><input type="number" min="0" className={inputCls} value={produtoEditandoGerador.estoque ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, estoque: e.target.value }))} /></Campo>
@@ -835,6 +817,14 @@ export default function Jornal() {
 }
 
 // ---- célula de vencimento (grande ideia) — estilo encarte escuro ----
+function SeletorSetor({ value, onChange }) {
+  return (
+    <select value={value || 'mercearia'} onChange={(e) => onChange(e.target.value)} className={inputCls}>
+      {SETORES.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+    </select>
+  )
+}
+
 function SeletorSelo({ value, onChange }) {
   const atual = value || 'oferta'
   return (
@@ -948,6 +938,7 @@ function FilaView({ fila, vencimento, remover, salvarProduto, toast }) {
             <Campo label="Marca"><input className={inputCls} value={editando.marca || ''} onChange={(e) => setEditando((p) => ({ ...p, marca: e.target.value }))} /></Campo>
             <Campo label="Gramagem"><input className={inputCls} value={editando.gramagem || ''} onChange={(e) => setEditando((p) => ({ ...p, gramagem: e.target.value }))} /></Campo>
             <Campo label="Validade (uso interno)"><input type="date" className={inputCls} value={editando.validade || ''} onChange={(e) => setEditando((p) => ({ ...p, validade: e.target.value }))} /></Campo>
+            <div className="col-span-2"><Campo label="Setor (em qual jornal ele entra)"><SeletorSetor value={editando.setor} onChange={(setor) => setEditando((p) => ({ ...p, setor }))} /></Campo></div>
             <Campo label="Selo da oferta"><SeletorSelo value={editando.seloOferta} onChange={(seloOferta) => setEditando((p) => ({ ...p, seloOferta }))} /></Campo>
             <Campo label="Vendido por"><SeletorUnidade value={editando.unidade} setor={editando.setor} onChange={(unidade) => setEditando((p) => ({ ...p, unidade }))} /></Campo>
             <Campo label="Quantidade"><input type="number" min="0" className={inputCls} value={editando.estoque ?? ''} onChange={(e) => setEditando((p) => ({ ...p, estoque: e.target.value }))} /></Campo>
@@ -960,121 +951,4 @@ function FilaView({ fila, vencimento, remover, salvarProduto, toast }) {
   )
 }
 
-// ---- sub-aba jornal oficial ----
-function OficialView({ jornal, atualizar, url, toast }) {
-  const [edicao, setEdicao] = useState('')
-  const [capa, setCapa] = useState('')
-  const [contracapa, setContracapa] = useState('')
-  const [syncing, setSyncing] = useState(false)
-  const [statusAuto, setStatusAuto] = useState('idle') // idle | ok | erro | indisponivel
 
-  // busca a edição mais recente no backend (/api/jornal-oficial)
-  const sincronizarAuto = async (silencioso = false) => {
-    setSyncing(true)
-    try {
-      const r = await fetch('/api/jornal-oficial', { headers: { Accept: 'application/json' } })
-      if (!r.ok) throw new Error('http ' + r.status)
-      const d = await r.json()
-      if (d.error || !d.capa) throw new Error(d.error || 'sem capa')
-      // só troca quando a edição encontrada é ESTRITAMENTE mais nova (ano+mês).
-      // sem ym salvo, tratamos como igual — nunca sobrescreve o seed à toa.
-      const conhecido = jornal.ym ?? d.ym
-      const novaEdicao = d.ym && d.ym > conhecido
-      if (novaEdicao) {
-        atualizar({ edicao: d.edicao, titulo: d.titulo, data: d.data, ym: d.ym, capa: d.capa, contracapa: d.contracapa, pdf: d.pdf, atualizadoEm: d.atualizadoEm })
-        toast(`Nova edição encontrada: ${d.edicao}`)
-      } else {
-        atualizar({ atualizadoEm: d.atualizadoEm, ym: jornal.ym || d.ym })
-        if (!silencioso) toast('Já está na edição mais recente.', 'info')
-      }
-      setStatusAuto('ok')
-    } catch (e) {
-      // em build estático sem /api o fetch falha — modo manual continua valendo
-      setStatusAuto(silencioso ? 'indisponivel' : 'erro')
-      if (!silencioso) toast('Não consegui buscar automático. Use o modo manual.', 'erro')
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  // tentativa automática e silenciosa ao abrir a aba
-  useEffect(() => { sincronizarAuto(true) }, [])
-
-  const sincronizarManual = () => {
-    if (!capa) return toast('Informe ao menos a URL da capa.', 'erro')
-    atualizar({ edicao: edicao || jornal.edicao, capa, contracapa, data: dataISOmaisDias(0), titulo: 'Jornal de Ofertas SEMANA B!' })
-    toast('Jornal oficial atualizado!')
-  }
-
-  const Img = ({ src, label }) =>
-    src ? (
-      <a href={src} target="_blank" rel="noreferrer" className="group block overflow-hidden rounded-xl border border-ink-soft/15 bg-white">
-        <img src={src} alt={label} className="h-64 w-full object-cover object-top transition group-hover:scale-[1.02]" onError={(e) => (e.currentTarget.style.display = 'none')} />
-        <div className="px-3 py-2 text-center text-sm font-medium text-ink">{label} <Icon name="ExternalLink" size={12} className="ml-1 inline text-ink-soft" /></div>
-      </a>
-    ) : null
-
-  return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-bold text-ink">{jornal.titulo}</h2>
-            <p className="text-sm text-ink-soft">Edição {jornal.edicao} · {formatData(jornal.data)}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {jornal.pdf && (
-              <a href={jornal.pdf} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-ink-soft/20 bg-white px-3 py-1.5 text-sm font-medium text-info hover:bg-cream-200">
-                <Icon name="FileText" size={15} /> Ver PDF completo
-              </a>
-            )}
-            {jornal.novo && <Pill cor="#2e9e6b" bg="#e2f3ea">NOVO</Pill>}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Img src={jornal.capa} label="Capa" />
-          <Img src={jornal.contracapa} label="Contracapa" />
-        </div>
-        {jornal.historico?.length > 0 && (
-          <div className="card-bengala p-3">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-soft">Edições anteriores</p>
-            <div className="flex flex-wrap gap-2">
-              {jornal.historico.map((h, i) => (
-                <a key={i} href={h.capa} target="_blank" rel="noreferrer" className="rounded-lg bg-cream-200 px-2.5 py-1 text-xs text-ink hover:bg-coral/15">Edição {h.edicao}</a>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="card-bengala h-fit space-y-3 p-4">
-        <div className="flex items-center gap-2"><Icon name="RefreshCw" size={16} className="text-bengala" /><h3 className="font-bold text-ink">Sincronizar jornal oficial</h3></div>
-
-        <Botao className="w-full" onClick={() => sincronizarAuto(false)} disabled={syncing}>
-          <Icon name={syncing ? 'Loader' : 'RefreshCw'} size={15} className={syncing ? 'animate-spin' : ''} />
-          {syncing ? 'Buscando no site...' : 'Buscar edição mais recente'}
-        </Botao>
-
-        {statusAuto === 'ok' && jornal.atualizadoEm && (
-          <p className="flex items-center gap-1 text-[11px] text-success"><Icon name="CheckCircle2" size={12} /> Sincronizado {new Date(jornal.atualizadoEm).toLocaleString('pt-BR')}</p>
-        )}
-        {statusAuto === 'erro' && <p className="text-[11px] text-critical">Não consegui buscar agora. Use o modo manual abaixo.</p>}
-        {statusAuto === 'indisponivel' && (
-          <p className="rounded-lg bg-cream-200 p-2 text-[11px] leading-snug text-ink-soft">
-            <Icon name="Info" size={12} className="mr-1 inline" /> Auto disponível ao rodar o app com servidor (<code>npm run dev</code>) ou hospedado com a função <code>/api</code>. Sem servidor, use o modo manual.
-          </p>
-        )}
-
-        <div className="space-y-2.5 border-t border-ink-soft/10 pt-3">
-          <p className="text-xs text-ink-soft">
-            Ou informe manualmente (de <a href={url} target="_blank" rel="noreferrer" className="text-info underline">{url}</a>):
-          </p>
-          <Campo label="Edição"><input className={inputCls} value={edicao} onChange={(e) => setEdicao(e.target.value)} placeholder="B · 02.07–08.07" /></Campo>
-          <Campo label="URL da capa"><input className={inputCls} value={capa} onChange={(e) => setCapa(e.target.value)} placeholder="https://...capa-scaled.jpg" /></Campo>
-          <Campo label="URL da contracapa"><input className={inputCls} value={contracapa} onChange={(e) => setContracapa(e.target.value)} placeholder="https://...contra-scaled.jpg" /></Campo>
-          <Botao variante="contorno" className="w-full" onClick={sincronizarManual}><Icon name="Save" size={15} /> Salvar manual</Botao>
-        </div>
-      </div>
-    </div>
-  )
-}
