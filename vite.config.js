@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { buscarJornalOficial } from './server/jornalOficial.js'
+import { responderEanImages } from './server/eanImages.js'
 
 // Middleware de dev: expõe /api/jornal-oficial rodando no servidor (sem CORS).
 // Em produção, a mesma lógica vive em api/jornal-oficial.js (função serverless).
@@ -24,6 +25,23 @@ function jornalOficialApi() {
   }
 }
 
+// /api/eanimages no PC da loja: funciona em `npm run dev` e em `npm run preview`.
+// Mantém a chave da EAN Images fora do navegador na chamada à API.
+function eanImagesApi() {
+  const middleware = async (req, res) => {
+    const { status, corpo } = await responderEanImages(req.originalUrl || req.url, req.headers || {})
+    res.statusCode = status
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-store')
+    res.end(JSON.stringify(corpo))
+  }
+  return {
+    name: 'ean-images-api',
+    configureServer(server) { server.middlewares.use('/api/eanimages', middleware) },
+    configurePreviewServer(server) { server.middlewares.use('/api/eanimages', middleware) },
+  }
+}
+
 // base './' lets the production build (dist/index.html) open directly from file://
 export default defineConfig({
   base: './',
@@ -31,6 +49,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     jornalOficialApi(),
+    eanImagesApi(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
