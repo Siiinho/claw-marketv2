@@ -67,8 +67,16 @@ export default defineConfig(({ mode }) => {
   for (const nome of ['EANIMAGES_API_KEY', 'EANIMAGES_COM_DADOS', 'ENCARTE_TOKEN', 'ENCARTE_DIR', 'IMAGENS_PRODUTOS_DIR']) {
     if (env[nome] && !process.env[nome]) process.env[nome] = env[nome]
   }
+  // Supabase: a Vercel ligada ao Supabase cria NEXT_PUBLIC_SUPABASE_URL e _ANON_KEY. Só essas duas
+  // (públicas por natureza; quem protege os dados são as regras do banco) vão para o navegador.
+  const supabaseUrl = env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || env.SUPABASE_URL || ''
+  const supabaseAnon = env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || ''
   return {
   base: './',
+  define: {
+    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
+    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnon),
+  },
   // host: true deixa o celular do cliente abrir o encarte pelo IP do PC na rede da loja.
   server: { host: true },
   preview: { host: true },
