@@ -29,7 +29,7 @@ create index if not exists cm_itens_atualizado on public.cm_itens (atualizado_em
 
 -- Hora e autor de cada gravação vêm do banco, não do aparelho.
 create or replace function public.cm_carimbo() returns trigger
-language plpgsql as $$
+language plpgsql set search_path = public as $$
 begin
   new.atualizado_em := now();
   new.atualizado_por := auth.uid();
@@ -95,6 +95,11 @@ create policy "itens: cliente le o encarte" on public.cm_itens for select to ano
 grant select on public.cm_itens to anon;
 grant select, insert, update on public.cm_itens to authenticated;
 grant select, update on public.cm_perfis to authenticated;
+-- Funções internas: o cliente sem login não chama nenhuma; os logins só as que precisam.
+revoke execute on function public.cm_novo_usuario() from public, anon, authenticated;
+revoke execute on function public.cm_eh_admin() from public, anon;
+revoke execute on function public.cm_senha_trocada() from public, anon;
+grant execute on function public.cm_eh_admin() to authenticated;
 grant execute on function public.cm_senha_trocada() to authenticated;
 
 -- Atualização ao vivo: todo aparelho aberto recebe as mudanças na hora.
