@@ -32,6 +32,8 @@
   --color-setor-petshop: #8a4fa0;
 
   --font-sans: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  /* letra de encarte: condensada e pesada (Barlow Condensed, licença OFL) */
+  --font-encarte: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
   --font-display: "Arial Narrow", "Roboto Condensed", "Segoe UI", sans-serif;
   --radius-bengala: 0.9rem;
 }

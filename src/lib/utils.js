@@ -10,6 +10,10 @@ export const SETORES = [
   { id: 'limpeza', nome: 'Limpeza', cor: '#178f86', corTag: '#0c5f58', icone: 'SprayCan' },
   { id: 'congelados', nome: 'Congelados', cor: '#2c84b0', corTag: '#1a597a', icone: 'Snowflake' },
   { id: 'petshop', nome: 'Pet Shop', cor: '#8a4fa0', corTag: '#5c3070', icone: 'PawPrint' },
+  { id: 'acougue', nome: 'Açougue', cor: '#a4161a', corTag: '#6e0d10', icone: 'Drumstick' },
+  { id: 'higiene', nome: 'Higiene e Beleza', cor: '#c2185b', corTag: '#87103f', icone: 'Bath' },
+  { id: 'utilidades', nome: 'Utilidades', cor: '#5c6b7a', corTag: '#3b4652', icone: 'House' },
+  { id: 'farmacia', nome: 'Farmácia', cor: '#2e6fb0', corTag: '#1d4a78', icone: 'Pill' },
 ]
 
 export const setorById = (id) => SETORES.find((s) => s.id === id) || SETORES[0]

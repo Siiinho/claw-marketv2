@@ -93,8 +93,8 @@ function SeloPrecoOval({ produto, tema, k, indice = 0 }) {
       >
         <span aria-hidden="true" className="cm-brilho absolute inset-y-0 left-0" style={{ width: '30%', background: 'linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent)' }} />
         <div className="flex items-end leading-none">
-          <PrecoVarejo valor={produto.precoJornal} style={{ fontSize: 46 * k }} cor={tema.precoCor} />
-          <span className="ml-1 font-black" style={{ marginBottom: 4 * k, fontSize: 15 * k, color: tema.precoCor }}>{unidadeDe(produto)}</span>
+          <PrecoVarejo valor={produto.precoJornal} style={{ fontSize: 60 * k, fontFamily: 'var(--font-encarte)', letterSpacing: '-0.01em', fontVariantNumeric: 'normal' }} cor={tema.precoCor} />
+          <span className="ml-1" style={{ marginBottom: 6 * k, fontSize: 18 * k, fontWeight: 900, fontFamily: 'var(--font-encarte)', color: tema.precoCor }}>{unidadeDe(produto)}</span>
         </div>
       </div>
     </div>
@@ -122,8 +122,8 @@ function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
       style={{ ...estilo, borderRadius: raio, background: tema.celula || '#ffffff', '--cm-i': indice }}
     >
       <div
-        className="absolute left-0 right-0 top-0 text-center font-black uppercase leading-[1.05]"
-        style={{ color: tema.nomeCor || '#111', fontSize: 20 * k, height: 52 * k, padding: `${12 * Math.min(k, 1.5)}px ${16 * k}px 0`, overflow: 'hidden' }}
+        className="absolute left-0 right-0 top-0 text-center uppercase leading-[0.95]"
+        style={{ color: tema.nomeCor || '#111', fontFamily: 'var(--font-encarte)', fontWeight: 800, letterSpacing: '0.005em', fontSize: 25 * k, height: 54 * k, padding: `${8 * Math.min(k, 1.5)}px ${12 * k}px 0`, overflow: 'hidden' }}
       >
         {produto.nome}
       </div>
@@ -140,8 +140,8 @@ function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
       <SeloArte produto={produto} largura={118 * k} className="cm-selo absolute" style={{ position: 'absolute', left: 2 * k, top: topoFoto - 4 * k, '--cm-i': indice }} />
       {k >= 1.2 && temDesconto(produto) && (
         <span
-          className="absolute rounded-md bg-white/90 font-black leading-none text-[#222]"
-          style={{ right: 20 * k, bottom: 112 * k, padding: `${3 * k}px ${8 * k}px`, fontSize: 16 * k }}
+          className="absolute rounded-md bg-white/90 uppercase leading-none text-[#222]"
+          style={{ right: 20 * k, bottom: 112 * k, padding: `${3 * k}px ${8 * k}px`, fontSize: 19 * k, fontWeight: 800, fontFamily: 'var(--font-encarte)' }}
         >
           De <span style={{ textDecoration: 'line-through' }}>{formatBRL(produto.precoNormal)}</span> por
         </span>
@@ -202,27 +202,30 @@ export function posicoesGrade(formatoId, layout, quantidade, topo) {
   return lista
 }
 
-function FaixaValidade({ encarte, tema, fonte = 24 }) {
+// Validade e endereço soltos na arte (sem caixas), em letra de encarte com contorno.
+const diaMes = (iso) => formatData(iso).slice(0, 5)
+
+function FaixaValidade({ encarte, tema, fonte = 24, alinhar = 'left' }) {
   if (!encarte?.periodoDe) return null
   return (
-    <div className="rounded-xl px-5 py-2.5 font-black uppercase leading-tight" style={{ background: tema.faixa, color: tema.faixaTexto, fontSize: fonte }}>
-      Ofertas válidas de {formatData(encarte.periodoDe)} a {formatData(encarte.periodoAte)}
-      <div style={{ fontSize: fonte * 0.7 }}>ou enquanto durarem os estoques</div>
+    <div className="uppercase leading-[0.92]" style={{ fontFamily: 'var(--font-encarte)', fontWeight: 900, textAlign: alinhar, textShadow: contornoTexto(tema.contorno, Math.max(2, Math.round(fonte / 11))) }}>
+      <div style={{ fontSize: fonte * 0.78, color: '#ffffff' }}>Ofertas válidas de</div>
+      <div style={{ fontSize: fonte * 1.55, color: tema.corDestaque, letterSpacing: '0.01em' }}>{diaMes(encarte.periodoDe)} a {diaMes(encarte.periodoAte)}</div>
+      <div style={{ fontSize: fonte * 0.62, color: '#ffffff', fontWeight: 700, marginTop: fonte * 0.12 }}>ou enquanto durarem os estoques</div>
     </div>
   )
 }
 
-function CaixaLoja({ loja, fonte = 20 }) {
+function CaixaLoja({ loja, tema, fonte = 20, alinhar = 'right' }) {
   if (!loja || !(loja.endereco || loja.whatsapp)) return null
   return (
-    <div className="rounded-xl bg-black/45 px-5 py-2.5 text-right font-bold leading-tight text-white" style={{ fontSize: fonte }}>
-      {loja.endereco && <div>{loja.endereco}{loja.cidade ? ` · ${loja.cidade}` : ''}</div>}
-      {loja.whatsapp && <div className="font-black" style={{ fontSize: fonte * 1.2 }}>WhatsApp {loja.whatsapp}</div>}
+    <div className="uppercase leading-[1]" style={{ fontFamily: 'var(--font-encarte)', textAlign: alinhar, color: '#ffffff', textShadow: contornoTexto(tema?.contorno || '#000', 2) }}>
+      {loja.whatsapp && <div style={{ fontSize: fonte * 1.3, fontWeight: 900 }}>WhatsApp {loja.whatsapp}</div>}
+      {loja.endereco && <div style={{ fontSize: fonte * 0.85, fontWeight: 700 }}>{loja.endereco}{loja.cidade ? ` · ${loja.cidade}` : ''}</div>}
     </div>
   )
 }
 
-// Coluna de informações ao lado da arte do título (temas com arte, formatos altos).
 function ColunaArte({ tema, encarte, loja, f, topo }) {
   const [ax0, ax1] = tema.arteX || [440, 1000]
   const direita = tema.logo === 'd'
@@ -230,7 +233,7 @@ function ColunaArte({ tema, encarte, loja, f, topo }) {
   const fim = direita ? f.largura - MARGEM : Math.min(Math.max(ax0 - 8, 340), 560)
   const largura = fim - esquerda
   const linhasChamada = String(tema.chamada || '').length > 16 ? 2 : 1
-  const fonteChamada = Math.min(48, (largura * linhasChamada) / (String(tema.chamada || '').length * 0.5))
+  const fonteChamada = Math.min(66, (largura * linhasChamada) / (String(tema.chamada || '').length * 0.46))
   return (
     <div className="absolute flex flex-col gap-3" style={{ left: esquerda, width: largura, top: f.id === 'stories' ? 40 : 24, height: topo - (f.id === 'stories' ? 56 : 36), alignItems: direita ? 'flex-end' : 'flex-start' }}>
       <div className="relative shrink-0" style={{ width: Math.min(largura, 300), height: 104 }}>
@@ -243,8 +246,8 @@ function ColunaArte({ tema, encarte, loja, f, topo }) {
         </div>
       )}
       <div className="mt-auto flex w-full flex-col gap-2" style={{ alignItems: direita ? 'flex-end' : 'flex-start' }}>
-        <FaixaValidade encarte={encarte} tema={tema} fonte={largura < 400 ? 19 : 22} />
-        <CaixaLoja loja={loja} fonte={largura < 400 ? 16 : 18} />
+        <FaixaValidade encarte={encarte} tema={tema} fonte={largura < 400 ? 30 : 34} alinhar={direita ? 'right' : 'left'} />
+        <CaixaLoja loja={loja} tema={tema} fonte={largura < 400 ? 19 : 21} alinhar={direita ? 'right' : 'left'} />
       </div>
     </div>
   )
@@ -299,11 +302,11 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
         )}
 
         {!colunaArte && <div className="absolute flex items-end justify-between gap-4" style={{ left: MARGEM, right: MARGEM, bottom: 18 }}>
-          <FaixaValidade encarte={encarte} tema={tema} fonte={f.id === 'stories' ? 28 : 24} />
+          <FaixaValidade encarte={encarte} tema={tema} fonte={f.id === 'tv' ? 34 : f.id === 'stories' ? 32 : 27} />
           {f.id === 'tv' && tema.chamada && !tema.arte && (
             <div className="self-center font-black uppercase italic text-white" style={{ fontSize: 40, textShadow: contornoTexto(tema.contorno, 3) }}>{tema.chamada}</div>
           )}
-          <CaixaLoja loja={loja} fonte={f.id === 'stories' ? 24 : 20} />
+          <CaixaLoja loja={loja} tema={tema} fonte={f.id === 'tv' ? 24 : f.id === 'stories' ? 24 : 20} />
         </div>}
       </div>
 

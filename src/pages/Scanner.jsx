@@ -75,10 +75,12 @@ export default function Scanner() {
 
       if (!p) {
         const catalogoLocal = await buscarProdutoBengala(c)
-        const automatizado = await buscarProdutoAutomatizado(c, catalogoLocal)
+        // com a foto do banco de imagens do mercado, não gasta crédito buscando foto fora
+        const fotoLocal = catalogoLocal?.imagem ? { imagem: catalogoLocal.imagem, origem: 'catalogo', origemNome: catalogoLocal.imagemOrigemNome, imagemAprovada: true } : null
+        const automatizado = fotoLocal ? null : await buscarProdutoAutomatizado(c, catalogoLocal)
         const catalogo = automatizado?.produto || catalogoLocal
         if (catalogo) {
-          const foto = automatizado?.foto || await buscarImagemProduto(catalogo, { ignorarBackend: true })
+          const foto = fotoLocal || automatizado?.foto || await buscarImagemProduto(catalogo, { ignorarBackend: true })
           p = {
             ...catalogo,
             id: `mercadologia-${catalogo.codigoInterno}`,

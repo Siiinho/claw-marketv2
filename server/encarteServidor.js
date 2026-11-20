@@ -39,7 +39,7 @@ const numero = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined)
 // Fotos em data: viram arquivos (nome = hash do conteúdo), e o JSON guarda só o endereço.
 async function guardarImagem(valor) {
   const s = String(valor || '')
-  if (/^\/api\/encarte\/img\/[a-f0-9]{32}\.(jpg|png|webp)$/.test(s) || /^https?:\/\/[^\s"'<>]+$/.test(s)) return s
+  if (/^\/api\/encarte\/img\/[a-f0-9]{32}\.(jpg|png|webp)$/.test(s) || /^\/api\/imagens-produtos\/\d{8,14}\.(jpe?g|png|webp)$/.test(s) || /^https?:\/\/[^\s"'<>]+$/.test(s)) return s
   // arquivos do próprio app (pasta public), sem subir de pasta
   if (/^(\.\/)?[\w-]+(\/[\w.-]+)*\.(png|jpe?g|webp|svg)$/i.test(s) && !s.includes('..')) return s
   const m = s.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/)
