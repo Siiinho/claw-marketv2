@@ -6,11 +6,33 @@
 //   2. neste aparelho (localStorage), como cópia de segurança se o servidor cair.
 // A página pública lê do servidor e ouve /api/encarte/eventos: quando sai uma
 // versão nova, ela troca sozinha, sem o cliente recarregar.
-// Quando o Supabase for ligado, só este arquivo muda. A página pública não precisa mudar.
+// Com o Supabase ligado (ver src/lib/nuvem.js), publica também na nuvem: o link funciona pela
+// Vercel e pelo 4G, e todo celular aberto recebe a versão nova na hora.
 //
 // Regra de negócio: a validade do produto NUNCA sai daqui. Só passam os campos
 // que o cliente pode ver.
 import { restaurarImagensSalvas } from './produtoApi'
+import { nuvemAtiva, publicarEncarteNuvem, lerEncarteNuvem, assinarNuvem } from './nuvem'
+
+// Fotos que só existem no PC da loja (/api/...) viram imagem embutida e menor antes de ir para a
+// nuvem, para abrir em qualquer celular.
+async function fotoPortatil(src) {
+  if (!src || typeof src !== 'string' || src.startsWith('data:') || /^https?:/i.test(src)) return src || null
+  try {
+    const r = await fetch(src)
+    if (!r.ok) return null
+    const bmp = await createImageBitmap(await r.blob())
+    const k = Math.min(1, 600 / Math.max(bmp.width, bmp.height))
+    const c = document.createElement('canvas')
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k)
+    const g = c.getContext('2d')
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height)
+    g.drawImage(bmp, 0, 0, c.width, c.height)
+    return c.toDataURL('image/jpeg', 0.82)
+  } catch (_) {
+    return null
+  }
+}
 
 const CHAVE = 'clawmarket:encarte-publicado:v1'
 const CANAL = 'clawmarket-encarte'
@@ -105,6 +127,26 @@ export async function enviarEncarteAoSite({ titulo, mercado, periodoDe, periodoA
       return limpo
     }),
   }
+  if (nuvemAtiva()) {
+    const encarte = {
+      ...corpo,
+      itens: await Promise.all(corpo.itens.map(async (i) => ({ ...i, imagem: await fotoPortatil(i.imagem) }))),
+      versao: Date.now(),
+      publicadoEm: new Date().toISOString(),
+    }
+    try {
+      await publicarEncarteNuvem(encarte)
+    } catch (_) {
+      throw Object.assign(new Error('Não foi possível publicar na nuvem. Confira a internet e tente de novo.'), { codigo: 'erro' })
+    }
+    // O servidor do PC, se estiver no ar, recebe também (rede da loja); sem ele, tudo bem.
+    try { await enviarAoServidor(corpo) } catch (_) {}
+    return { versao: encarte.versao, publicadoEm: encarte.publicadoEm, itens: encarte.itens.length, origem: 'nuvem' }
+  }
+  return enviarAoServidor(corpo)
+}
+
+async function enviarAoServidor(corpo) {
   const senha = lerSenhaPublicacao()
   let r
   try {
@@ -144,6 +186,10 @@ export function lerEncartePublicado() {
 
 // Lê do servidor; se ele não responder (ou ainda não tiver nada), usa a cópia deste aparelho.
 export async function carregarEncartePublicado() {
+  if (nuvemAtiva()) {
+    const daNuvem = await lerEncarteNuvem()
+    if (daNuvem) return daNuvem
+  }
   const doSite = await lerDoSite()
   if (doSite) return doSite
   const encarte = lerEncartePublicado()
@@ -170,6 +216,10 @@ export function assinarEncarte(aoMudar) {
     fonte = new EventSource(`${API}/eventos`)
     fonte.addEventListener('versao', (e) => aoMudar(Number(e.data) || undefined))
   } catch (_) {}
+  let pararNuvem = null
+  if (nuvemAtiva()) {
+    try { pararNuvem = assinarNuvem(() => aoMudar(), 'encarte') } catch (_) {}
+  }
   const reserva = setInterval(() => {
     if ((!fonte || fonte.readyState === 2) && document.visibilityState === 'visible') aoMudar()
   }, 30000)
@@ -178,6 +228,7 @@ export function assinarEncarte(aoMudar) {
     document.removeEventListener('visibilitychange', aoVoltar)
     canal?.close()
     fonte?.close()
+    pararNuvem?.()
     clearInterval(reserva)
   }
 }

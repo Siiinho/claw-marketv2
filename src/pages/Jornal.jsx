@@ -1,25 +1,20 @@
-import { useState, useRef, useEffect, forwardRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
-import { Icon, ProdutoThumb, EmptyState, Botao, PrecoVarejo, Campo, inputCls, Pill, Logo, SeloDesconto, Modal } from '../components/ui'
+import { Icon, ProdutoThumb, EmptyState, Botao, Campo, inputCls, Pill, Modal } from '../components/ui'
 import ScannerJornal from '../components/ScannerJornal'
 import CentralArtes from '../components/CentralArtes'
 import {
   SETORES, setorById, formatBRL, formatData,
-  percentDesc, dataISOmaisDias, diaSemana, SELOS_OFERTA, seloDoProduto,
+  percentDesc, dataISOmaisDias, SELOS_OFERTA,
 } from '../lib/utils'
 import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
 import SeletorTema from '../components/SeletorTema'
 import SeloArte from '../components/SeloArte'
+import PaginaTemplate, { Escalado, paginarTemplate, LARGURA, ALTURA } from '../components/PaginaTemplate'
+import { temaCampanhaById } from '../lib/temasCampanha'
 import { abrirJanelaPrevisualizacao, previsualizarImpressaoPaginas } from '../lib/exportar'
 import { imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
-
-const PRODUTOS_POR_PAGINA = 4
-const CORES_BENGALA = { primaria: '#e4232e', secundaria: '#082b4f', destaque: '#ffc928' }
-const assetPublico = (caminho) => `${import.meta.env.BASE_URL || '/'}${String(caminho).replace(/^\/+/, '')}`
-const CABECALHO_INTERNO = assetPublico('templates/cabecalho-ofertas-internas-bengala-v2.png')
-const RODAPE_OFICIAL = assetPublico('templates/rodape-oficial-bengala.png')
-const TEMPLATE_GERAL = assetPublico('templates/setores/oportunidades-bengala-geral.png')
 
 function imagemCompativelComPDF(src) {
   if (!src || typeof src !== 'string') return false
@@ -31,30 +26,14 @@ function imagemCompativelComPDF(src) {
   }
 }
 
-function paginar(itens, tamanho = PRODUTOS_POR_PAGINA) {
-  const paginas = []
-  for (let i = 0; i < itens.length; i += tamanho) paginas.push(itens.slice(i, i + tamanho))
-  return paginas.length ? paginas : [[]]
-}
-
-function estiloNomeCompleto(nome, tamanhoBase = 7, tamanhoMinimo = 4.8) {
-  const excesso = Math.max(0, String(nome || '').length - 28)
-  return {
-    fontSize: `${Math.max(tamanhoMinimo, tamanhoBase - excesso * 0.055)}px`,
-    lineHeight: 1.08,
-    overflowWrap: 'anywhere',
-    wordBreak: 'break-word',
-  }
-}
-
-function nomeLado(indice) {
-  const folha = Math.floor(indice / 2) + 1
-  const lado = indice % 2 === 0 ? 'Frente' : 'Verso'
-  return `Folha ${folha} · ${lado}`
-}
-
-function slugArquivo(texto) {
-  return String(texto || 'mercado').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+// Jornal salvo no histórico: reabre no encarte novo, com os preços daquele dia.
+function paginasDoHistorico(jornal) {
+  const itens = (jornal?.produtos || []).map((p) => ({
+    ...p,
+    precoJornal: p.precoJornalCalculado ?? p.precoPromo ?? p.precoNormal,
+    descontoJornal: p.descontoJornalCalculado ?? 0,
+  }))
+  return paginarTemplate(itens, jornal?.layoutArte || 'grade', 'feed')
 }
 
 const TEMAS = {
@@ -62,18 +41,6 @@ const TEMAS = {
   copa: { nome: 'Copa', cor: '#1c6e48', selo: 'ESQUENTA DA COPA', sub: 'Ofertas da seleção', acento: '#ffd23f' },
   feijoada: { nome: 'Festival da Feijoada', cor: '#7c2230', selo: 'FESTIVAL DA FEIJOADA', sub: 'Sabor de casa', acento: '#f2a93b' },
   junina: { nome: 'Festa Junina', cor: '#d9641f', selo: 'ARRAIÁ BENGALA', sub: 'É chegada a quadrilha', acento: '#ffd23f' },
-}
-
-const TEMPLATE_SETOR = {
-  padaria: assetPublico('templates/setores/oportunidades-bengala-padaria.png'),
-  laticinios: assetPublico('templates/setores/oportunidades-bengala-laticinios.png'),
-  frios: assetPublico('templates/setores/oportunidades-bengala-frios.png'),
-  hortifruti: assetPublico('templates/setores/oportunidades-bengala-hortifruti.png'),
-  bebidas: assetPublico('templates/setores/oportunidades-bengala-bebidas.png'),
-  mercearia: assetPublico('templates/setores/oportunidades-bengala-mercearia.png'),
-  limpeza: assetPublico('templates/setores/oportunidades-bengala-limpeza.png'),
-  congelados: assetPublico('templates/setores/oportunidades-bengala-congelados.png'),
-  petshop: assetPublico('templates/setores/oportunidades-bengala-pet-shop.png'),
 }
 
 export default function Jornal() {
@@ -97,6 +64,7 @@ export default function Jornal() {
   const ref = useRef(null)
   const [historicoParaAbrir, setHistoricoParaAbrir] = useState(null)
   const [produtoEditandoGerador, setProdutoEditandoGerador] = useState(null)
+  const [seloEditando, setSeloEditando] = useState(null)
   // Período da campanha: definido pelo operador, nunca calculado pela validade dos produtos.
   const [periodoDe, setPeriodoDe] = useState(() => dataISOmaisDias(0))
   const [periodoAte, setPeriodoAte] = useState(() => dataISOmaisDias(6))
@@ -133,15 +101,21 @@ export default function Jornal() {
   const tema = TEMAS[temaSel]
 
   // Garante que nenhuma fotografia crua de celular chegue à arte final.
+  // Cada foto é tentada uma vez por sessão: sem isso, uma foto que não vira packshot era salva
+  // de novo a cada renderização (laço infinito que enchia o histórico e travava o envio à nuvem).
+  const fotosTentadas = useRef(new Set())
   useEffect(() => {
     let ativo = true
-    const pendentes = fila.filter(imagemProdutoPrecisaTratamento)
+    const chaveFoto = (p) => `${p.id}|${String(p.imagem || '').slice(-64)}|${p.imagemFonteUrl || ''}`
+    const pendentes = fila.filter((p) => imagemProdutoPrecisaTratamento(p) && !fotosTentadas.current.has(chaveFoto(p)))
     if (!pendentes.length) return () => { ativo = false }
     ;(async () => {
       for (const produto of pendentes) {
+        fotosTentadas.current.add(chaveFoto(produto))
         const preparado = await prepararProdutoParaJornal(produto)
         if (!ativo) return
-        if (preparado.imagemTratada) salvarProduto(preparado)
+        const mudou = preparado !== produto && (preparado.imagem !== produto.imagem || preparado.imagemTratamento !== produto.imagemTratamento || preparado.imagemFonteUrl !== produto.imagemFonteUrl)
+        if (preparado.imagemTratada && mudou) salvarProduto(preparado)
       }
     })()
     return () => { ativo = false }
@@ -152,7 +126,7 @@ export default function Jornal() {
     let ativo = true
     const timer = requestAnimationFrame(async () => {
       try {
-        const paginas = historicoRefs.current.slice(0, paginar(historicoParaAbrir.jornal.produtos || []).length)
+        const paginas = historicoRefs.current.slice(0, paginasDoHistorico(historicoParaAbrir.jornal).length)
         await previsualizarImpressaoPaginas(paginas, historicoParaAbrir.jornal.titulo, historicoParaAbrir.janela)
       } catch (erro) {
         if (ativo) toast(erro?.message || 'Não foi possível abrir o jornal salvo.', 'erro')
@@ -190,7 +164,9 @@ export default function Jornal() {
     ...vencimento,
     ...[...regulares].sort((a, b) => ordemSetor(a) - ordemSetor(b)),
   ]
-  const paginasJornal = paginar(itensJornal)
+  const itensArte = itensJornal.map((p) => ({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
+  const paginasJornal = paginarTemplate(itensArte, layoutDigital, 'feed')
+  const temaArte = temaCampanhaById(temaDigital)
   const bandas = []
   const validadeDe = periodoDe
   const validadeAte = periodoAte && periodoAte >= periodoDe ? periodoAte : periodoDe
@@ -225,6 +201,9 @@ export default function Jornal() {
     validadeAte,
     totalItens: itensJornal.length,
     totalPaginas: paginasJornal.length,
+    temaArte: temaDigital,
+    layoutArte: layoutDigital,
+    fundoArte: fundoDigital,
     produtos: itensJornal.map((produto) => ({
       ...produto,
       precoJornalCalculado: precoJornal(produto),
@@ -258,11 +237,13 @@ export default function Jornal() {
   }
 
   const lojaAtual = (store.lojas || []).find((l) => l.id === store.lojaAtiva) || (store.lojas || [])[0]
-  const itensParaArte = () => itensJornal.map((p) => ({
-    ...p,
-    precoJornal: precoJornal(p),
-    descontoJornal: descJornal(p),
-  }))
+  const itensParaArte = () => itensArte
+  const encarteArte = { periodoDe: validadeDe, periodoAte: validadeAte }
+  const trocarSelo = (produto, seloOferta) => {
+    salvarProduto({ id: produto.id, seloOferta })
+    const selo = SELOS_OFERTA.find((s) => s.id === seloOferta)
+    toast(selo?.nenhum ? `${produto.nome}: sem selo.` : `${produto.nome}: selo "${selo?.texto}".`)
+  }
 
   const publicarDigital = async () => {
     if (!itensJornal.length) return toast('Adicione ao menos um produto ao jornal.', 'erro')
@@ -339,7 +320,6 @@ export default function Jornal() {
       {badge > 0 && <span className="rounded-full bg-coral px-1.5 text-xs font-bold text-white">{badge}</span>}
     </button>
   )
-  const PaginaModelo = PaginaJornalModeloAprovado
 
   return (
     <div className="space-y-5">
@@ -403,21 +383,7 @@ export default function Jornal() {
 
               {tipo === 'geral' && (
                 <div>
-                  <p className="mb-1.5 text-xs font-medium text-ink-soft">Produtos de vários setores no mesmo jornal</p>
-                  <div className="overflow-hidden rounded-xl border border-navy/10" style={{ background: CORES_BENGALA.secundaria }}>
-                    <div className="flex items-center justify-between px-3 py-2 text-white">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Prévia do modelo</span>
-                      <span className="rounded-full px-2 py-0.5 text-[9px] font-extrabold" style={{ background: CORES_BENGALA.destaque, color: CORES_BENGALA.secundaria }}>A4 proporcional</span>
-                    </div>
-                    <div className="flex h-40 items-center gap-3 bg-white p-4">
-                      <Logo h={54} chip />
-                      <div>
-                        <div className="display-bengala text-2xl uppercase leading-none" style={{ color: CORES_BENGALA.secundaria }}>Ofertas internas</div>
-                        <div className="mt-1 text-xs font-bold" style={{ color: CORES_BENGALA.primaria }}>Bengala Supermercado</div>
-                        <div className="mt-3 h-2 w-36 rounded-full" style={{ background: CORES_BENGALA.destaque }} />
-                      </div>
-                    </div>
-                  </div>
+                  <p className="text-xs font-medium text-ink-soft">Produtos de vários setores no mesmo jornal. O visual vem do tema da campanha, logo abaixo.</p>
                 </div>
               )}
 
@@ -431,21 +397,6 @@ export default function Jornal() {
                         {s.nome}
                       </button>
                     ))}
-                  </div>
-                  <div className="mt-2.5 overflow-hidden rounded-xl border border-navy/10" style={{ background: CORES_BENGALA.secundaria }}>
-                    <div className="flex items-center justify-between px-3 py-2 text-white">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.1em]">Prévia do modelo</span>
-                      <span className="rounded-full bg-offer px-2 py-0.5 text-[9px] font-extrabold text-navy">
-                        {setorById(setorSel).nome}
-                      </span>
-                    </div>
-                    <div className="flex h-40 items-center justify-center bg-white p-4 text-center">
-                      <div>
-                        <Logo h={48} chip />
-                        <div className="display-bengala mt-2 text-xl uppercase" style={{ color: CORES_BENGALA.secundaria }}>{setorById(setorSel).nome}</div>
-                        <div className="mx-auto mt-2 h-2 w-28 rounded-full" style={{ background: CORES_BENGALA.primaria }} />
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
@@ -554,6 +505,14 @@ export default function Jornal() {
                       <ProdutoThumb produto={p} size={28} />
                       <span className="min-w-0 flex-1 whitespace-normal break-words text-sm leading-snug text-ink">{p.nome}</span>
                       {p.origemFila === 'vencimento' && <Pill cor="#d9641f" bg="#f47b361a">interna</Pill>}
+                      <select
+                        value={p.seloOferta || 'oferta'}
+                        onChange={(e) => trocarSelo(p, e.target.value)}
+                        aria-label={`Selo de ${p.nome}`}
+                        className="w-[104px] shrink-0 rounded-md border border-ink-soft/25 bg-white px-1 py-1 text-xs font-bold text-ink"
+                      >
+                        {SELOS_OFERTA.map((s) => <option key={s.id} value={s.id}>{s.texto}</option>)}
+                      </select>
                       <button onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="rounded p-1 text-info hover:bg-info/10"><Icon name="Pencil" size={14} /></button>
                     </div>
                   ))}
@@ -565,16 +524,10 @@ export default function Jornal() {
               <div className="rounded-xl border border-info/20 bg-info/5 p-3 text-sm">
                 <div className="flex items-center gap-2 font-bold text-ink">
                   <Icon name="Files" size={16} className="text-info" />
-                  {paginasJornal.length} {paginasJornal.length === 1 ? 'página A4' : 'páginas A4'}
+                  {paginasJornal.length} {paginasJornal.length === 1 ? 'página no encarte' : 'páginas no encarte'}
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-ink-soft">
-                  {paginasJornal.length === 1
-                    ? itensJornal.length === 1
-                      ? 'O produto cabe em uma única frente.'
-                      : `Os ${itensJornal.length} produtos cabem em uma única frente.`
-                    : paginasJornal.length === 2
-                      ? `${itensJornal.length} produtos distribuídos automaticamente em frente e verso.`
-                      : `${itensJornal.length} produtos distribuídos em ${Math.ceil(paginasJornal.length / 2)} folhas, usando frente e verso.`}
+                  {layoutDigital === 'destaque' ? 'Até 8 produtos por página (1 destaque + 7).' : 'Até 9 produtos por página.'} Na impressão, cada página sai numa folha A4.
                 </p>
               </div>
             )}
@@ -633,109 +586,51 @@ export default function Jornal() {
             )}
           </div>
 
-          {/* preview A4 adaptável */}
-          <div className="space-y-5 overflow-x-auto pb-2">
-            {paginasJornal.map((itens, indice) => (
-              <div key={indice} className="space-y-1.5">
+          {/* prévia do encarte novo (o mesmo do link da tag NFC e das artes) */}
+          <div className="min-w-0 space-y-4 pb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-ink-soft">
+              <span className="font-bold text-ink">Prévia do encarte · {temaArte.nome}</span>
+              {itensJornal.length > 0 && <span>Toque num produto para escolher o selo dele</span>}
+            </div>
+            {!itensJornal.length ? (
+              <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border-2 border-dashed border-bengala/40 bg-white p-6 text-center">
+                <Icon name="ScanBarcode" size={30} className="text-bengala" />
+                <div className="mt-2 text-lg font-black text-navy">Escaneie para começar</div>
+                <div className="mt-1 text-sm text-ink-soft">Os produtos aparecem aqui no encarte, do jeito que o cliente vai ver.</div>
+              </div>
+            ) : paginasJornal.map((itens, indice) => (
+              <div key={indice} className="mx-auto w-full max-w-[680px] space-y-1.5">
                 <div className="flex items-center justify-between px-1 text-xs text-ink-soft">
-                  <span className="font-bold text-ink">{nomeLado(indice)}</span>
+                  <span className="font-bold text-ink">Página {indice + 1} de {paginasJornal.length}</span>
                   <span>{itens.length} {itens.length === 1 ? 'produto' : 'produtos'}</span>
                 </div>
-                <PaginaModelo
-                  ref={(el) => { pageRefs.current[indice] = el }}
-                  itens={itens}
-                  precoJornal={precoJornal}
-                  descJornal={descJornal}
-                   selo={selo}
-                   tipo={tipo}
-                   temaSel={temaSel}
-                   setorSel={setorSel}
-                   validadeDe={validadeDe}
-                  validadeAte={validadeAte}
-                  numero={indice + 1}
-                  total={paginasJornal.length}
-                  config={config}
-                />
+                <div className="overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5">
+                  <Escalado largura={LARGURA} altura={ALTURA}>
+                    <PaginaTemplate tema={temaArte} itens={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutDigital} numero={indice + 1} total={paginasJornal.length} onAbrir={setSeloEditando} />
+                  </Escalado>
+                </div>
               </div>
             ))}
           </div>
 
-          {/* preview legado mantido oculto durante a migração visual */}
-          <div className="hidden">
-            <div ref={ref} className="w-[440px] shrink-0 overflow-hidden rounded-xl" style={{ background: '#141414', border: '1.5px solid #d4a94e' }}>
-              {/* cabeçalho estilo encarte oficial (preto + dourado) */}
-              <div className="px-4 pb-3 pt-4">
-                <div className="flex items-start justify-between gap-2">
-                  <Logo h={46} chip />
-                  <div className="rounded-xl px-3 py-1.5 text-center" style={{ background: '#000', border: '1.5px solid #d4a94e' }}>
-                    <div className="text-[8px] font-bold tracking-[2px]" style={{ color: '#ffd23f' }}>ESPECIAL</div>
-                    <div className="text-[13px] font-extrabold italic leading-none" style={{ color: '#ff4436' }}>{selo}</div>
-                    <div className="mt-1 text-[8px]" style={{ color: '#cfc3ba' }}>
-                      Válido {formatData(validadeDe)} a {formatData(validadeAte)}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-1.5 text-center">
-                  <div className="text-[12px] italic text-white">A semana mais barata do mês chegou cheia de...</div>
-                  <div className="text-[31px] font-extrabold italic leading-none tracking-tight" style={{ color: '#ffd23f', textShadow: '2.5px 2.5px 0 #c42b2b' }}>
-                    SUPER OFERTAS!
-                  </div>
-                </div>
-              </div>
-
-              {/* faixa temática (sazonal) */}
-              {tipo === 'sazonal' && <BandaTema temaId={temaSel} />}
-
-              {/* GRANDE IDEIA · vencimento (painel com moldura dourada) */}
-              {vencimento.length > 0 && (
-                <div className="mx-3 mb-3 overflow-hidden rounded-xl" style={{ border: '2px solid #d4a94e', background: '#1b1712' }}>
-                  <div className="px-3 py-1.5 text-center" style={{ background: 'linear-gradient(90deg, #9e1f14, #e23a2e, #9e1f14)' }}>
-                    <span className="text-[12px] font-extrabold tracking-wide text-white">GRANDE IDEIA · OFERTAS INTERNAS</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 p-2.5">
-                    {vencimento.map((p) => (
-                      <CelulaVenc key={p.id} p={p} preco={precoJornal(p)} desc={descJornal(p)} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* painéis por setor */}
-              {bandas.map((b) => (
-                <div key={b.setor.id} className="mx-3 mb-3 overflow-hidden rounded-xl" style={{ border: '1.5px solid #d4a94e', background: '#1b1712' }}>
-                  <div className="flex items-center justify-center gap-2 px-3 py-1.5" style={{ background: b.setor.cor }}>
-                    <Icon name={b.setor.icone} size={14} className="text-white" />
-                    <span className="text-[12px] font-extrabold tracking-wide text-white">{b.setor.nome.toUpperCase()}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 p-2.5">
-                    {b.itens.map((p) => (
-                      <CelulaSetor key={p.id} p={p} preco={precoJornal(p)} desc={descJornal(p)} />
-                    ))}
-                  </div>
+          {/* cópias em tamanho real, fora da tela, usadas para imprimir e salvar em PDF */}
+          {itensJornal.length > 0 && (
+            <div className="pointer-events-none fixed top-0" style={{ left: -20000 }} aria-hidden="true">
+              {paginasJornal.map((itens, indice) => (
+                <div key={indice} ref={(el) => { pageRefs.current[indice] = el }} style={{ width: LARGURA, height: ALTURA }}>
+                  <PaginaTemplate tema={temaArte} itens={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutDigital} numero={indice + 1} total={paginasJornal.length} />
                 </div>
               ))}
-
-              {vencimento.length === 0 && bandas.length === 0 && (
-                <div className="p-8 text-center text-sm" style={{ color: '#b8a99f' }}>
-                  Marque produtos na fila para montar o jornal.<br />Os de vencimento entram como “grande ideia”.
-                </div>
-              )}
-
-              {/* rodapé */}
-              <div className="flex items-center justify-between px-4 py-2.5" style={{ background: '#000', borderTop: '1px solid #d4a94e' }}>
-                <div className="text-[8px] leading-tight" style={{ color: '#b8a99f' }}>
-                  Ofertas válidas enquanto durar o estoque.<br />Reservamo-nos o direito de limitar 3 un/cliente.
-                </div>
-                <div className="flex h-8 w-8 items-center justify-center rounded bg-white" style={{ color: '#141414' }}><Icon name="QrCode" size={20} /></div>
-              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* ============ ARTES (Feed, Stories, TV, post, cartaz, etiqueta) ============ */}
       {aba === 'artes' && (
         <CentralArtes
+          saidas={['feed', 'stories', 'tv', 'post']}
+          subtitulo="Cartazes e etiquetas para imprimir ficam na aba Cartazes."
           itens={itensParaArte()}
           titulo={titulo}
           encarte={{ periodoDe: validadeDe, periodoAte: validadeAte }}
@@ -782,22 +677,40 @@ export default function Jornal() {
       {aba === 'oficial' && <OficialView jornal={jornalOficial} atualizar={atualizarJornalOficial} url={config.jornalUrl} toast={toast} />}
 
       {historicoParaAbrir ? (
-        <div className="pointer-events-none fixed left-[-12000px] top-0 opacity-0" aria-hidden="true">
-          {paginar(historicoParaAbrir.jornal.produtos || []).map((itens, indice) => (
-            <PaginaModelo
-              key={`${historicoParaAbrir.jornal.id}-${indice}`}
-              ref={(elemento) => { historicoRefs.current[indice] = elemento }}
-              itens={itens}
-              precoJornal={(produto) => produto.precoJornalCalculado ?? produto.precoPromo ?? produto.precoNormal}
-              descJornal={(produto) => produto.descontoJornalCalculado ?? 0}
-              validadeDe={historicoParaAbrir.jornal.validadeDe}
-              validadeAte={historicoParaAbrir.jornal.validadeAte}
-              numero={indice + 1}
-              total={paginar(historicoParaAbrir.jornal.produtos || []).length}
-            />
+        <div className="pointer-events-none fixed top-0" style={{ left: -20000 }} aria-hidden="true">
+          {paginasDoHistorico(historicoParaAbrir.jornal).map((itens, indice, todas) => (
+            <div key={`${historicoParaAbrir.jornal.id}-${indice}`} ref={(elemento) => { historicoRefs.current[indice] = elemento }} style={{ width: LARGURA, height: ALTURA }}>
+              <PaginaTemplate
+                tema={temaCampanhaById(historicoParaAbrir.jornal.temaArte || temaDigital)}
+                itens={itens}
+                encarte={{ periodoDe: historicoParaAbrir.jornal.validadeDe, periodoAte: historicoParaAbrir.jornal.validadeAte }}
+                loja={lojaAtual}
+                fundo={historicoParaAbrir.jornal.fundoArte || null}
+                layout={historicoParaAbrir.jornal.layoutArte || 'grade'}
+                numero={indice + 1}
+                total={todas.length}
+              />
+            </div>
           ))}
         </div>
       ) : null}
+
+      <Modal
+        open={Boolean(seloEditando)}
+        onClose={() => setSeloEditando(null)}
+        titulo={seloEditando ? `Selo de ${seloEditando.nome}` : 'Selo do produto'}
+        footer={<Botao variante="contorno" onClick={() => setSeloEditando(null)}>Fechar</Botao>}
+      >
+        {seloEditando && (
+          <div className="space-y-2">
+            <p className="text-sm text-ink-soft">Escolha o selo que aparece só neste produto no encarte, nas artes e nos cartazes.</p>
+            <SeletorSelo
+              value={(fila.find((f) => f.id === seloEditando.id) || seloEditando).seloOferta}
+              onChange={(id) => { trocarSelo(seloEditando, id); setSeloEditando(null) }}
+            />
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={Boolean(produtoEditandoGerador)}
@@ -835,266 +748,6 @@ export default function Jornal() {
 }
 
 // ---- célula de vencimento (grande ideia) — estilo encarte escuro ----
-function FotoEncarte({ produto, className = '' }) {
-  if (!produto?.imagem) return null
-  return (
-    <img
-      src={produto.imagem}
-      alt={produto.nome}
-      className={`absolute object-contain ${className}`}
-      style={{ filter: 'drop-shadow(0 5px 5px rgba(8,43,79,.18))' }}
-    />
-  )
-}
-
-function CirculoPreco({ valor, pequeno = false, cores }) {
-  return (
-    <div
-      className="absolute inset-0 flex items-center justify-center rounded-full text-center"
-      style={{
-        background: cores.primaria,
-        border: `${pequeno ? 2 : 3}px solid ${cores.destaque}`,
-        boxShadow: '0 5px 12px rgba(89,0,7,.22)',
-      }}
-    >
-      <div>
-        <div className={`${pequeno ? 'text-[6px]' : 'text-[8px]'} font-black uppercase leading-none text-white`}>POR:</div>
-        <PrecoVarejo valor={valor} className={pequeno ? 'text-[22px]' : 'text-[40px]'} cor="#ffffff" />
-      </div>
-    </div>
-  )
-}
-
-function OfertaDestaqueModelo({ produto, preco, cores }) {
-  const selo = seloDoProduto(produto)
-  return (
-    <div className="absolute left-[14px] top-[120px] h-[160px] w-[412px] overflow-hidden rounded-[10px] bg-white shadow-sm">
-      <FotoEncarte produto={produto} className="left-[16px] top-[6px] h-[128px] w-[120px]" />
-      <div className="display-bengala absolute left-[145px] top-[16px] w-[137px] uppercase leading-[1.04]" style={{ ...estiloNomeCompleto(produto.nome, 14, 9.5), color: cores.secundaria }}>
-        {produto.nome}
-      </div>
-      <div className="absolute left-[145px] top-[83px] text-[8px] font-black uppercase" style={{ color: 'rgba(8,43,79,.85)' }}>
-        DE: <span className="text-[12px] text-[#777] line-through decoration-critical decoration-2">{formatBRL(produto.precoNormal)}</span>
-      </div>
-      <div className="absolute left-[286px] top-[8px] h-[112px] w-[112px]">
-        <CirculoPreco valor={preco} cores={cores} />
-      </div>
-      <div className="display-bengala absolute bottom-[6px] left-[145px] flex h-[25px] w-[137px] items-center justify-center rounded-md px-2 text-[10px] uppercase" style={{ background: selo.fundo, color: selo.cor }}>
-        {selo.texto}
-      </div>
-      <div className="display-bengala absolute bottom-[6px] right-[14px] flex h-[25px] w-[112px] items-center justify-center rounded-md px-2 text-[10px] uppercase text-white" style={{ background: cores.secundaria }}>
-        {Number(produto.estoque || 0)} UNIDADES
-      </div>
-    </div>
-  )
-}
-
-function OfertaMenorModelo({ produto, preco, indice, cores }) {
-  const selo = seloDoProduto(produto)
-  const posicoes = [14, 153, 289]
-  const larguras = [133, 132, 137]
-  return (
-    <div
-      className="absolute top-[290px] h-[188px] overflow-hidden rounded-[9px] bg-white shadow-sm"
-      style={{ left: posicoes[indice], width: larguras[indice] }}
-    >
-      <FotoEncarte produto={produto} className="left-[5px] top-[10px] h-[120px] w-[61px]" />
-      <div className="display-bengala absolute left-[65px] top-[12px] w-[63px] uppercase leading-[1.04]" style={{ ...estiloNomeCompleto(produto.nome, 8.2, 5.4), color: cores.secundaria }}>
-        {produto.nome}
-      </div>
-      <div className="absolute left-[65px] top-[60px] text-[5.5px] font-black uppercase" style={{ color: 'rgba(8,43,79,.8)' }}>
-        DE: <span className="text-[7.5px] text-[#777] line-through decoration-critical">{formatBRL(produto.precoNormal)}</span>
-      </div>
-      <div className="absolute left-[68px] top-[75px] h-[58px] w-[58px]">
-        <CirculoPreco valor={preco} pequeno cores={cores} />
-      </div>
-      <div className="display-bengala absolute bottom-[6px] left-[5px] flex h-[17px] w-[61px] items-center justify-center rounded px-1 text-center text-[5.5px] uppercase leading-none" style={{ background: selo.fundo, color: selo.cor }}>
-        {selo.texto}
-      </div>
-      <div className="display-bengala absolute bottom-[6px] right-[5px] flex h-[17px] w-[60px] items-center justify-center rounded px-1 text-center text-[5.5px] uppercase leading-none text-white" style={{ background: cores.secundaria }}>
-        {Number(produto.estoque || 0)} UNIDADES
-      </div>
-    </div>
-  )
-}
-
-const PaginaJornalModeloAprovado = forwardRef(function PaginaJornalModeloAprovado(
-  { itens, precoJornal, validadeDe, validadeAte, numero, total },
-  ref
-) {
-  const hero = itens[0]
-  const menores = itens.slice(1, 4)
-  const cores = CORES_BENGALA
-  return (
-    <div
-      ref={ref}
-      data-pdf-page="a4"
-      className="relative mx-auto h-[622px] w-[440px] shrink-0 overflow-hidden rounded-xl bg-white"
-      style={{ boxShadow: '0 14px 34px rgba(8,43,79,.16)' }}
-    >
-      <div className="absolute inset-0 bg-[#f3f6f8]" />
-      <div className="absolute inset-x-0 top-0 h-[108px] overflow-hidden text-white" style={{ background: cores.secundaria }}>
-        <span className="absolute -right-10 -top-16 h-40 w-40 rounded-full border-[22px] opacity-20" style={{ borderColor: cores.destaque }} />
-        <span className="absolute inset-x-0 bottom-0 h-[7px]" style={{ background: cores.primaria }} />
-        <div className="absolute left-[15px] top-[14px] flex items-center gap-3">
-          <Logo h={52} chip />
-          <div className="max-w-[205px]">
-            <div className="display-bengala text-[28px] uppercase leading-[.86]">OFERTAS<br /><span style={{ color: cores.destaque }}>INTERNAS</span></div>
-            <div className="mt-2 truncate text-[8px] font-bold uppercase tracking-[.14em] opacity-90">Bengala Supermercado</div>
-          </div>
-        </div>
-        <div className="absolute right-[18px] top-[18px] w-[115px] rounded-lg border border-white/25 bg-black/15 px-3 py-2 text-center">
-          <div className="text-[7px] font-black uppercase tracking-[.12em]" style={{ color: cores.destaque }}>Ofertas válidas</div>
-          <div className="mt-1 text-[8px] font-bold">{formatData(validadeDe)} a {formatData(validadeAte)}</div>
-        </div>
-      </div>
-      {hero && <OfertaDestaqueModelo produto={hero} preco={precoJornal(hero)} cores={cores} />}
-      {menores.map((produto, indice) => (
-        <OfertaMenorModelo key={produto.id} produto={produto} preco={precoJornal(produto)} indice={indice} cores={cores} />
-      ))}
-      <div className="absolute inset-x-0 bottom-0 h-[132px] border-t-[6px] bg-white px-4 py-3" style={{ borderColor: cores.primaria }}>
-        <div className="flex items-center gap-3">
-          <Logo h={35} />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[9px] font-black uppercase" style={{ color: cores.secundaria }}>Bengala Supermercado</div>
-            <div className="mt-0.5 truncate text-[7px] font-bold" style={{ color: cores.primaria }}>Ofertas internas · Loja 3</div>
-          </div>
-          <div className="rounded px-2 py-1 text-[7px] font-black text-white" style={{ background: cores.secundaria }}>Página {numero}/{total}</div>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-[6px] leading-[1.35] text-[#59636d]">
-          <div><strong style={{ color: cores.secundaria }}>OFERTA RESPONSÁVEL</strong><br />Produtos identificados por código e vinculados ao estoque.</div>
-          <div><strong style={{ color: cores.secundaria }}>CONSULTE A LOJA</strong><br />Ofertas válidas enquanto durarem os estoques.</div>
-          <div><strong style={{ color: cores.secundaria }}>ECONOMIA E CONSUMO</strong><br />Compre apenas o necessário e evite desperdícios.</div>
-        </div>
-      </div>
-    </div>
-  )
-})
-
-const PaginaJornalAdaptavel = forwardRef(function PaginaJornalAdaptavel(
-  { itens, precoJornal, descJornal, selo, tipo, temaSel, setorSel, validadeDe, validadeAte, numero, total },
-  ref
-) {
-  const hero = itens[0]
-  const demais = itens.slice(1)
-  const poucos = itens.length <= 3
-  const colunas = demais.length <= 2 ? Math.max(demais.length, 1) : 3
-  const template = `url('${TEMPLATE_GERAL}')`
-  const setorConfig = setorById(setorSel)
-  const temaConfig = TEMAS[temaSel] || TEMAS.diaB
-  const acento = tipo === 'sazonal' ? temaConfig.acento : tipo === 'setor' ? setorConfig.cor : '#ffc928'
-  const campanha = tipo === 'sazonal' ? temaConfig.nome : tipo === 'setor' ? setorConfig.nome : 'Produtos variados'
-  const heroSetor = hero ? setorById(hero.setor) : setorConfig
-  const alturaHero = demais.length === 0 ? 'flex-1' : poucos ? 'h-[142px]' : 'h-[118px]'
-
-  return (
-    <div
-      ref={ref}
-      className="relative mx-auto h-[622px] w-[440px] shrink-0 overflow-hidden rounded-xl"
-      style={{ background: '#fff8ed', border: '1.5px solid #ffc928', boxShadow: '0 14px 34px rgba(8,43,79,.16)' }}
-    >
-      <div
-        className="relative h-[96px]"
-        style={{ backgroundImage: template, backgroundSize: '440px 660px', backgroundPosition: 'top center' }}
-      >
-        <div className="absolute right-[28px] top-[45px] text-center text-[7px] font-bold leading-tight" style={{ color: '#ffffff' }}>
-          {formatData(validadeDe)}<br />a {formatData(validadeAte)}
-        </div>
-      </div>
-
-      <div
-        className="relative flex h-[336px] flex-col gap-2 overflow-hidden p-2.5"
-        style={{
-          background:
-            'radial-gradient(circle at 96% 3%, rgba(255,201,40,.22) 0 3px, transparent 4px), linear-gradient(180deg,#fff8ed 0%,#ffffff 100%)',
-        }}
-      >
-        <div className="pointer-events-none absolute -right-12 -top-14 h-36 w-36 rounded-full border-[22px] border-bengala/5" />
-        <div
-          className="relative z-10 flex h-[46px] shrink-0 items-center justify-between overflow-hidden rounded-xl px-3 text-white"
-          style={{
-            background: `linear-gradient(118deg,#082b4f 0 57%,#123f6b 57% 66%,${tipo === 'setor' ? acento : '#e4232e'} 66% 100%)`,
-            boxShadow: '0 5px 13px rgba(8,43,79,.16)',
-          }}
-        >
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="rounded-full px-2 py-0.5 text-[6.5px] font-black uppercase tracking-[.12em]" style={{ background: '#ffc928', color: '#082b4f' }}>
-                {tipo === 'sazonal' ? 'Oferta especial' : 'Oferta interna'}
-              </span>
-              <span className="truncate text-[7px] font-bold text-white/70">{campanha}</span>
-            </div>
-            <div className="display-bengala mt-0.5 truncate text-[17px] uppercase leading-none">{selo}</div>
-          </div>
-          <div className="ml-2 shrink-0 text-right">
-            <div className="text-[6.5px] font-bold uppercase tracking-[.08em]" style={{ color: '#ffc928' }}>Economize hoje</div>
-            <div className="text-[7px] font-semibold text-white/85">e evite desperdício</div>
-          </div>
-        </div>
-
-        {!hero ? (
-          <div className="relative z-10 flex flex-1 flex-col items-center justify-center rounded-xl text-center" style={{ border: '1.5px dashed #ffc928', background: '#ffffff', color: '#6b5a54' }}>
-            <Icon name="ScanBarcode" size={26} style={{ color: '#e4232e' }} />
-            <div className="display-bengala mt-2 text-base text-navy">ESCANEIE PARA COMEÇAR</div>
-            <div className="mt-1 text-[8px]">Os produtos preencherão o jornal automaticamente.</div>
-          </div>
-        ) : (
-          <>
-            <div className={`relative z-10 flex overflow-hidden rounded-xl ${alturaHero}`} style={{ border: '2px solid #e4232e', background: '#ffffff', boxShadow: '0 7px 16px rgba(8,43,79,.12)' }}>
-              <div
-                className="relative flex w-[82px] shrink-0 flex-col items-center justify-center overflow-hidden px-2 text-center text-white"
-                style={{ background: 'linear-gradient(150deg,#e4232e,#bf1721)' }}
-              >
-                <div className="absolute -bottom-6 -left-5 h-16 w-16 rounded-full border-[10px] border-offer/20" />
-                <span className="rounded-full bg-offer px-2 py-0.5 text-[6px] font-black uppercase tracking-wide text-navy">Destaque</span>
-                <Icon name={heroSetor.icone} size={19} className="mt-2" />
-                <div className="display-bengala mt-1 text-[11px] uppercase leading-none">{heroSetor.nome}</div>
-                <div className="mt-1 text-[6.5px] font-bold text-offer">ÚLTIMAS UNIDADES</div>
-              </div>
-              <div className="flex min-w-0 flex-1 items-center gap-2 p-2">
-                <div className={`flex shrink-0 items-center justify-center rounded-xl ${poucos ? 'h-[102px] w-[102px]' : 'h-[78px] w-[78px]'}`} style={{ background: 'linear-gradient(145deg,#ffffff,#fff5df)', border: '1px solid rgba(255,201,40,.45)' }}>
-                  <ProdutoThumb produto={hero} size={poucos ? 94 : 72} />
-                </div>
-                <div className="relative min-w-0 flex-1">
-                  {descJornal(hero) > 0 && <SeloDesconto texto={`-${descJornal(hero)}%`} size={36} className="absolute -right-1 -top-2 z-10" />}
-                  <div className={`${poucos ? 'text-[13px]' : 'text-[10.5px]'} display-bengala pr-7 uppercase leading-tight`} style={{ color: '#082b4f' }}>{hero.nome}</div>
-                  <div className="mt-1 text-[7px] font-bold uppercase" style={{ color: '#6b5a54' }}>De <span className="line-through">{formatBRL(hero.precoNormal)}</span></div>
-                  <div className="mt-1 inline-block rounded-lg px-3 py-1.5" style={{ background: '#ffc928', color: '#bf1721', boxShadow: '3px 3px 0 #e4232e' }}>
-                    <span className="mr-1 align-middle text-[6px] font-black uppercase">Por</span>
-                    <PrecoVarejo valor={precoJornal(hero)} className={poucos ? 'text-[27px]' : 'text-[22px]'} cor="#bf1721" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {demais.length > 0 && (
-              <div className="relative z-10 grid flex-1 gap-2" style={{ gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))` }}>
-                {demais.map((p) => (
-                  <ProdutoJornalCard
-                    key={p.id}
-                    produto={p}
-                    preco={precoJornal(p)}
-                    desconto={descJornal(p)}
-                    expandido={poucos}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      <div
-        className="absolute bottom-0 left-0 h-[190px] w-full"
-        style={{ backgroundImage: template, backgroundSize: '440px 660px', backgroundPosition: 'bottom center' }}
-      />
-      <div className="absolute bottom-1 right-2 rounded px-1.5 py-0.5 text-[6px] font-bold" style={{ background: '#101b3f', color: '#ffffff' }}>
-        Página {numero}/{total}
-      </div>
-    </div>
-  )
-})
-
 function SeletorSelo({ value, onChange }) {
   const atual = value || 'oferta'
   return (
@@ -1102,7 +755,7 @@ function SeletorSelo({ value, onChange }) {
       {SELOS_OFERTA.map((s) => (
         <button key={s.id} type="button" onClick={() => onChange(s.id)} aria-pressed={atual === s.id} title={s.texto}
           className={`flex h-16 items-center justify-center rounded-lg border-2 bg-white ${atual === s.id ? 'border-bengala ring-2 ring-bengala/30' : 'border-ink-soft/15'}`}>
-          <SeloArte selo={s} largura={104} girar={-4} />
+          {s.nenhum ? <span className="text-sm font-black uppercase text-ink-soft">Sem selo</span> : <SeloArte selo={s} largura={104} girar={-4} />}
         </button>
       ))}
     </div>
@@ -1118,246 +771,6 @@ function SeletorUnidade({ value, setor, onChange }) {
   )
 }
 
-function TagSelo({ produto, className = '', style = {} }) {
-  const selo = seloDoProduto(produto)
-  return (
-    <span className={`rounded px-1 py-0.5 font-black uppercase leading-none ${className}`} style={{ background: selo.fundo, color: selo.cor, ...style }}>
-      {selo.texto}
-    </span>
-  )
-}
-
-function ProdutoJornalCard({ produto, preco, desconto, expandido }) {
-  const setor = setorById(produto.setor)
-
-  return (
-    <div
-      className="relative flex min-h-0 flex-col items-center justify-center overflow-hidden rounded-lg px-1.5 pb-1.5 pt-2 text-center"
-      style={{ background: '#ffffff', border: '1px solid rgba(8,43,79,.13)', boxShadow: '0 3px 9px rgba(8,43,79,.08)' }}
-    >
-      <div className="absolute left-0 top-0 h-1 w-full" style={{ background: setor.cor }} />
-      <span className="absolute left-1 top-1.5 rounded-full px-1.5 py-0.5 text-[5.5px] font-black uppercase text-white" style={{ background: setor.cor }}>
-        {setor.nome}
-      </span>
-      {desconto > 0 && <SeloDesconto texto={`-${desconto}%`} size={26} className="absolute right-0.5 top-1 z-10" />}
-      <ProdutoThumb produto={produto} size={expandido ? 64 : 42} />
-      <div className="mt-0.5 w-full font-black uppercase" style={{ color: '#082b4f', ...estiloNomeCompleto(produto.nome, 6.5, 4.7) }}>{produto.nome}</div>
-      <TagSelo produto={produto} className="mt-0.5 text-[5.5px]" />
-      <div className="mt-0.5 rounded-md px-2 py-0.5" style={{ background: '#ffc928', color: '#bf1721', boxShadow: '2px 2px 0 #e4232e' }}>
-        <PrecoVarejo valor={preco} className={expandido ? 'text-[18px]' : 'text-[14px]'} cor="#bf1721" />
-      </div>
-    </div>
-  )
-}
-
-const PaginaJornalInterno = forwardRef(function PaginaJornalInterno(
-  { itens, precoJornal, descJornal, selo, tipo, temaSel, setorSel, validadeDe, validadeAte, numero, total },
-  ref
-) {
-  const setorConfig = setorById(setorSel)
-  const temaConfig = TEMAS[temaSel] || TEMAS.diaB
-  const campanha = tipo === 'sazonal' ? temaConfig.nome : tipo === 'setor' ? setorConfig.nome : 'Produtos variados'
-  const destaques = itens.slice(0, 4)
-  const grade = itens.slice(4)
-  const poucos = itens.length <= 4
-
-  return (
-    <div
-      ref={ref}
-      className="relative mx-auto h-[622px] w-[440px] shrink-0 overflow-hidden rounded-xl bg-white"
-      style={{ border: '2px solid #e4232e', boxShadow: '0 14px 34px rgba(8,43,79,.16)' }}
-    >
-      <img
-        src={CABECALHO_INTERNO}
-        alt="Ofertas internas do estabelecimento"
-        className="block h-[130px] w-full object-cover"
-      />
-
-      <div className="flex h-[24px] items-center justify-between px-3 text-[7px] font-black uppercase tracking-[.08em] text-white" style={{ background: '#082b4f' }}>
-        <span className="truncate">{selo} · {campanha}</span>
-        <span className="ml-3 shrink-0" style={{ color: '#ffc928' }}>
-          Válidas de {formatData(validadeDe)} a {formatData(validadeAte)}
-        </span>
-      </div>
-
-      <div className="h-[388px] overflow-hidden bg-white p-2">
-        {!itens.length ? (
-          <div className="flex h-full flex-col items-center justify-center rounded-xl text-center" style={{ border: '1.5px dashed #e4232e', color: '#6b5a54' }}>
-            <Icon name="ScanBarcode" size={26} style={{ color: '#e4232e' }} />
-            <div className="display-bengala mt-2 text-base text-navy">ESCANEIE PARA COMEÇAR</div>
-            <div className="mt-1 text-[8px]">Os produtos preencherão o jornal automaticamente.</div>
-          </div>
-        ) : poucos ? (
-          <div className="grid h-full grid-cols-2 gap-2">
-            {itens.map((p) => (
-              <ProdutoOfertaInterna
-                key={p.id}
-                produto={p}
-                preco={precoJornal(p)}
-                desconto={descJornal(p)}
-                amplo
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="grid h-full grid-cols-[128px_1fr] gap-2">
-            <div
-              className="grid min-h-0 gap-1.5 overflow-hidden rounded-xl p-1.5"
-              style={{ background: '#e4232e', gridTemplateRows: `repeat(${destaques.length}, minmax(0, 1fr))` }}
-            >
-              {destaques.map((p) => (
-                <ProdutoDestaqueInterno key={p.id} produto={p} preco={precoJornal(p)} />
-              ))}
-            </div>
-            <div
-              className="grid min-h-0 grid-cols-2 gap-1.5"
-              style={{ gridTemplateRows: `repeat(${Math.ceil(grade.length / 2)}, minmax(0, 1fr))` }}
-            >
-              {grade.map((p) => (
-                <ProdutoOfertaInterna
-                  key={p.id}
-                  produto={p}
-                  preco={precoJornal(p)}
-                  desconto={descJornal(p)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="h-[80px] border-t-2 border-bengala bg-white">
-        <img src={RODAPE_OFICIAL} alt="Informações oficiais do estabelecimento" className="h-full w-full object-contain" />
-      </div>
-
-      <div className="absolute bottom-[82px] right-2 rounded px-1.5 py-0.5 text-[6px] font-bold text-white" style={{ background: '#082b4f' }}>
-        Página {numero}/{total}
-      </div>
-    </div>
-  )
-})
-
-function ProdutoDestaqueInterno({ produto, preco }) {
-
-  return (
-    <div className="relative flex min-h-0 items-center gap-1 overflow-hidden rounded-lg border border-white/35 px-1.5 py-1 text-white">
-      <TagSelo produto={produto} className="absolute right-1 top-1 text-[4.5px]" />
-      <div className="flex h-full w-[48px] shrink-0 items-center justify-center rounded-md bg-white">
-        <ProdutoThumb produto={produto} size={44} />
-      </div>
-      <div className="min-w-0 flex-1 self-end pb-0.5">
-        <div className="font-black uppercase" style={estiloNomeCompleto(produto.nome, 6.5, 4.6)}>
-          {produto.nome}
-        </div>
-        <div className="mt-0.5 inline-block rounded-md px-1.5 py-0.5" style={{ background: '#ffc928', color: '#bf1721' }}>
-          <PrecoVarejo valor={preco} className="text-[13px]" cor="#bf1721" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ProdutoOfertaInterna({ produto, preco, desconto, amplo = false }) {
-
-  return (
-    <div className="relative flex min-h-0 items-center overflow-hidden rounded-lg bg-white px-1.5 pb-1 pt-4" style={{ border: '1px solid rgba(8,43,79,.18)' }}>
-      <TagSelo produto={produto} className="absolute right-1 top-1 text-[4.5px]" />
-      <div className={`flex shrink-0 items-center justify-center ${amplo ? 'h-[96px] w-[88px]' : 'h-[58px] w-[58px]'}`}>
-        <ProdutoThumb produto={produto} size={amplo ? 84 : 54} />
-      </div>
-      <div className="min-w-0 flex-1 text-left">
-        <div
-          className="font-black uppercase"
-          style={{ color: '#111111', ...estiloNomeCompleto(produto.nome, amplo ? 10 : 7, amplo ? 6.2 : 4.8) }}
-        >
-          {produto.nome}
-        </div>
-        {desconto > 0 && <div className="mt-0.5 text-[5px] font-bold text-ink-soft">De <span className="line-through">{formatBRL(produto.precoNormal)}</span></div>}
-        <div className="mt-1 inline-block rounded-md px-2 py-1" style={{ background: '#bf1721', color: '#ffc928' }}>
-          <PrecoVarejo valor={preco} className={amplo ? 'text-[23px]' : 'text-[17px]'} cor="#ffc928" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function CelulaVenc({ p, preco, desc }) {
-  return (
-    <div className="relative rounded-lg px-2 pb-2.5 pt-3 text-center" style={{ background: '#211c15', border: '1px solid #4a3f2c' }}>
-      <span className="absolute -left-1 -top-1.5 z-10 rotate-[-8deg] rounded-full px-2 py-0.5 text-[7px] font-extrabold" style={{ background: '#000', border: '1px solid #d4a94e', color: '#ffd23f' }}>OFERTA INTERNA</span>
-      {desc > 0 && <SeloDesconto texto={`-${desc}%`} size={46} className="absolute -right-2 -top-2.5 z-10" />}
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-lg bg-white p-1">
-        <ProdutoThumb produto={p} size={56} />
-      </div>
-      <div className="mt-1 min-h-[22px] text-[8.5px] font-semibold uppercase leading-tight text-white">{p.nome}</div>
-      <div className="text-[9px] line-through" style={{ color: '#9b8b83' }}>{formatBRL(p.precoNormal)}</div>
-      <div className="mt-0.5 inline-block rotate-[-2deg] rounded-md bg-white px-2.5 py-0.5" style={{ boxShadow: '2px 2px 0 #c42b2b' }}>
-        <PrecoVarejo valor={preco} className="text-2xl" cor="#c42b2b" />
-      </div>
-    </div>
-  )
-}
-
-// ---- célula normal por setor — estilo encarte escuro ----
-function CelulaSetor({ p, preco, desc }) {
-  return (
-    <div className="relative rounded-lg px-1.5 pb-2 pt-2.5 text-center" style={{ background: '#1d1a15', border: '1px solid #3a332a' }}>
-      {desc > 0 && <SeloDesconto texto={`-${desc}%`} size={32} className="absolute -right-1.5 -top-2 z-10" />}
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md bg-white p-0.5">
-        <ProdutoThumb produto={p} size={44} />
-      </div>
-      <div className="mt-1 min-h-[18px] text-[7.5px] font-semibold uppercase leading-tight text-white">{p.nome}</div>
-      <div className="mt-0.5 inline-block rotate-[-2deg] rounded bg-white px-1.5 py-0.5">
-        <PrecoVarejo valor={preco} className="text-base" cor="#c42b2b" />
-      </div>
-    </div>
-  )
-}
-
-// ---- bandeirinhas de festa junina (SVG, export-safe) ----
-function Bandeirinhas() {
-  const cores = ['#e23a2e', '#f2a93b', '#2e9e6b', '#2e6fb0', '#f47b36']
-  const n = 16
-  return (
-    <svg viewBox={`0 0 ${n * 20} 20`} preserveAspectRatio="none" style={{ display: 'block', width: '100%', height: '16px', background: '#141414' }}>
-      <line x1="0" y1="1" x2={n * 20} y2="1" stroke="#fbf6ee" strokeWidth="1" />
-      {Array.from({ length: n }).map((_, i) => (
-        <polygon key={i} points={`${i * 20},1 ${i * 20 + 20},1 ${i * 20 + 10},15`} fill={cores[i % cores.length]} />
-      ))}
-    </svg>
-  )
-}
-
-// ---- faixa temática por evento sazonal ----
-function BandaTema({ temaId }) {
-  if (temaId === 'junina') {
-    return (
-      <div>
-        <Bandeirinhas />
-        <div className="flex items-center justify-center gap-2 px-4 py-1.5" style={{ background: '#d9641f' }}>
-          <Icon name="Flame" size={14} className="text-cream" />
-          <span className="text-[12px] font-bold tracking-wide text-cream">ARRAIÁ BENGALA · É CHEGADA A QUADRILHA</span>
-          <Icon name="Wheat" size={14} className="text-cream" />
-        </div>
-      </div>
-    )
-  }
-  const cfg = {
-    copa: { bg: '#1c6e48', ic: ['Trophy', 'Star'], txt: 'ESQUENTA DA COPA · VAI, BRASIL!' },
-    feijoada: { bg: '#7c2230', ic: ['Soup', 'Flame'], txt: 'FESTIVAL DA FEIJOADA · SABOR DE CASA' },
-    diaB: { bg: '#e23a2e', ic: ['Zap', 'Star'], txt: 'DIA B · A SEXTA MAIS BARATA DO MÊS' },
-  }[temaId]
-  if (!cfg) return null
-  return (
-    <div className="flex items-center justify-center gap-2 px-4 py-1.5" style={{ background: cfg.bg }}>
-      <Icon name={cfg.ic[0]} size={14} className="text-cream" />
-      <span className="text-[12px] font-bold tracking-wide text-cream">{cfg.txt}</span>
-      <Icon name={cfg.ic[1]} size={14} className="text-cream" />
-    </div>
-  )
-}
-
-// ---- sub-aba fila ----
 function FilaView({ fila, vencimento, remover, salvarProduto, toast }) {
   const [editando, setEditando] = useState(null)
   if (fila.length === 0) {

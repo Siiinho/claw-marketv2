@@ -5,6 +5,9 @@ import App from './App.jsx'
 import { StoreProvider } from './store/StoreContext.jsx'
 import { registerSW } from 'virtual:pwa-register'
 import '@fontsource/bangers'
+import '@fontsource/barlow-condensed/700.css'
+import '@fontsource/barlow-condensed/800.css'
+import '@fontsource/barlow-condensed/900.css'
 import './index.css'
 
 // registra o service worker (offline + atualização automática)

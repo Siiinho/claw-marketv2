@@ -241,6 +241,16 @@ do PC; o app pede a "Senha de publicação" e a guarda só naquele aparelho.
   (menu do celular ou copia o link) e **WhatsApp** da loja. Deslize para o lado (ou use as
   setas) para ver a próxima oferta. Cada produto tem link próprio: `#/encarte?p=<id>`.
 
+## Base de 28 mil produtos e fotos do HD
+
+- `public/catalogo/base-produtos.json`: 28.080 produtos (código de barras, nome, seção e preço
+  sugerido) da base enviada pelo mercado. Ao bipar, o app procura primeiro na mercadologia do
+  Bengala (preço e estoque reais) e depois nessa base. O arquivo só é baixado quando precisa.
+- Fotos: no `.env` do PC, `IMAGENS_PRODUTOS_DIR=A:\imagens` (pasta com `<código>.jpg`). O app
+  pega a foto em `/api/imagens-produtos/<código>.jpg` e não gasta crédito da EAN Images.
+  Fora do PC (Vercel), defina `VITE_IMAGENS_BASE_URL` com o endereço público das fotos.
+- Novas seções: Açougue, Higiene e Beleza, Utilidades e Farmácia.
+
 ## Baixar artes (várias saídas da mesma lista)
 
 Em **Jornal › Baixar artes**, a mesma lista de ofertas bipadas vira:

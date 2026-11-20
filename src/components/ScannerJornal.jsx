@@ -85,9 +85,11 @@ export default function ScannerJornal() {
       }
 
       const local = await buscarProdutoBengala(c)
-      const automatizado = await buscarProdutoAutomatizado(c, local)
+      // com a foto do banco de imagens do mercado, não gasta crédito buscando foto fora
+      const fotoLocal = local?.imagem ? { imagem: local.imagem, origem: 'catalogo', origemNome: local.imagemOrigemNome } : null
+      const automatizado = fotoLocal ? null : await buscarProdutoAutomatizado(c, local)
       const base = automatizado?.produto || local
-      const foto = automatizado?.foto || (base ? await buscarImagemProduto(base, { ignorarBackend: true }) : null)
+      const foto = fotoLocal || automatizado?.foto || (base ? await buscarImagemProduto(base, { ignorarBackend: true }) : null)
       setRascunho({
         ...rascunhoVazio(c),
         ...(base || {}),

@@ -19,8 +19,11 @@ const SAIDAS = [
 const slug = (t) => String(t || 'arte').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'arte'
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
 
-export default function CentralArtes({ itens, titulo, encarte, loja, temaId, setTemaId, layout, setLayout, fundo, toast }) {
-  const [saida, setSaida] = useState('feed')
+// `saidas` limita as opções: o Jornal mostra só as artes de rede social e a aba Cartazes,
+// só cartazes e etiquetas para imprimir.
+export default function CentralArtes({ itens, titulo, encarte, loja, temaId, setTemaId, layout, setLayout, fundo, toast, saidas: idsSaidas, saidaInicial, subtitulo }) {
+  const opcoes = idsSaidas ? SAIDAS.filter((s) => idsSaidas.includes(s.id)) : SAIDAS
+  const [saida, setSaida] = useState(saidaInicial || opcoes[0].id)
   const [tamanho, setTamanho] = useState('A5')
   const [excluidos, setExcluidos] = useState(() => new Set())
   const [ocupado, setOcupado] = useState(null)
@@ -113,8 +116,9 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
       {/* 1. formato */}
       <div className="card-bengala p-4">
         <p className="mb-2 text-sm font-black uppercase tracking-wide text-ink">1. O que você quer gerar?</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          {SAIDAS.map((s) => (
+        {subtitulo && <p className="-mt-1 mb-2 text-xs text-ink-soft">{subtitulo}</p>}
+        <div className={`grid grid-cols-2 gap-2 ${opcoes.length > 3 ? 'sm:grid-cols-3 lg:grid-cols-6' : 'sm:grid-cols-4'}`}>
+          {opcoes.map((s) => (
             <button
               key={s.id}
               type="button"

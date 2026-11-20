@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useStore, podeVer } from './store/StoreContext'
 import { Icon, Toasts } from './components/ui'
@@ -27,22 +27,58 @@ function Carregando() {
 }
 
 function Protegida({ chave, children }) {
-  const { usuario } = useStore()
+  const { usuario, carregandoSessao } = useStore()
   const location = useLocation()
+  if (carregandoSessao) return <Carregando />
   if (!usuario) return <Navigate to="/login" replace state={{ from: location }} />
+  // Login master no primeiro acesso: troca a senha antes de liberar o resto.
+  if (usuario.trocarSenha) return <TrocarSenhaObrigatoria />
   if (chave && !podeVer(usuario.papel, chave)) return <Navigate to="/" replace />
   return children
 }
 
+function TrocarSenhaObrigatoria() {
+  const { trocarSenha, logout, toast } = useStore()
+  const [nova, setNova] = useState('')
+  const [repetir, setRepetir] = useState('')
+  const [erro, setErro] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const enviar = async (e) => {
+    e.preventDefault()
+    if (nova !== repetir) return setErro('As duas senhas não são iguais.')
+    setEnviando(true)
+    const r = await trocarSenha(nova)
+    setEnviando(false)
+    if (!r.ok) return setErro(r.erro)
+    toast('Senha do administrador trocada.')
+  }
+  const cls = 'w-full rounded-lg border border-ink-soft/20 bg-white px-3 py-2.5 text-sm outline-none focus:border-bengala focus:ring-2 focus:ring-bengala/20'
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-cream p-4">
+      <form onSubmit={enviar} className="w-full max-w-sm space-y-3 rounded-2xl bg-white p-6 shadow-lg">
+        <h1 className="text-xl font-black text-ink">Crie a senha do administrador</h1>
+        <p className="text-sm text-ink-soft">Este é o primeiro acesso do login master. Troque a senha "admin" por uma só sua, com pelo menos 6 caracteres.</p>
+        <label className="block text-sm font-medium" htmlFor="nova-senha">Senha nova</label>
+        <input id="nova-senha" type="password" autoComplete="new-password" className={cls} value={nova} onChange={(e) => setNova(e.target.value)} />
+        <label className="block text-sm font-medium" htmlFor="repetir-senha">Repita a senha nova</label>
+        <input id="repetir-senha" type="password" autoComplete="new-password" className={cls} value={repetir} onChange={(e) => setRepetir(e.target.value)} />
+        {erro && <p className="text-sm font-bold text-critical" role="alert">{erro}</p>}
+        <button type="submit" disabled={enviando} className="w-full rounded-lg bg-bengala py-2.5 text-sm font-black text-white disabled:opacity-60">{enviando ? 'Salvando…' : 'Salvar senha e entrar'}</button>
+        <button type="button" onClick={logout} className="w-full text-sm font-bold text-ink-soft">Sair</button>
+      </form>
+    </div>
+  )
+}
+
 export default function App() {
-  const { usuario } = useStore()
+  const { usuario, carregandoSessao } = useStore()
   return (
     <>
       <Suspense fallback={<Carregando />}>
         <Routes>
           {/* público: o link da tag NFC abre aqui, sem login */}
           <Route path="/encarte" element={<EncarteDigital />} />
-          <Route path="/login" element={usuario ? <Navigate to="/" replace /> : <Login />} />
+          <Route path="/login" element={carregandoSessao ? <Carregando /> : usuario ? <Navigate to="/" replace /> : <Login />} />
           <Route element={<Protegida><Layout /></Protegida>}>
             <Route index element={<Dashboard />} />
             <Route path="produtos" element={<Protegida chave="produtos"><Produtos /></Protegida>} />
