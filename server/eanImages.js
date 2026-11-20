@@ -66,7 +66,7 @@ async function baixarComoDataUrl(url) {
 export const codigoValido = (ean) => /^\d{8,14}$/.test(String(ean || ''))
 
 export async function buscarProdutoEanImages(ean, chave, { comDados = true } = {}) {
-  if (!chave) throw new ErroEanImages(401, 'SEM_CHAVE', 'Cadastre a chave da EAN Images nas Configurações.')
+  if (!chave) throw new ErroEanImages(401, 'SEM_CHAVE', 'Chave da EAN Images não configurada no servidor (EANIMAGES_API_KEY no .env).')
   const c = String(ean || '').replace(/\D/g, '')
   if (!codigoValido(c)) throw new ErroEanImages(400, 'INVALID_EAN')
 
@@ -126,18 +126,19 @@ export async function consultarContaEanImages(chave) {
 }
 
 // Invólucro HTTP compartilhado pelo Vite (dev/preview) e pela função serverless.
-// GET /api/eanimages?ean=789...      → produto (imagem + nome + descrição)
-// GET /api/eanimages?conta=1         → testa a chave e mostra a conta
-// A chave vem da variável de ambiente EANIMAGES_API_KEY ou do cabeçalho X-EanImages-Key.
-export async function responderEanImages(url, cabecalhos) {
-  const chave = process.env.EANIMAGES_API_KEY || cabecalhos['x-eanimages-key'] || ''
+// GET /api/eanimages?ean=789...   → { encontrado, nome, descricao, imagem }
+// GET /api/eanimages?status=1     → { configurada } (só diz se há chave; nunca a mostra)
+// A chave vem SOMENTE da variável de ambiente EANIMAGES_API_KEY (arquivo .env no PC
+// ou variável da hospedagem). O navegador nunca recebe nem envia a chave.
+// EANIMAGES_COM_DADOS=0 desliga nome/descrição (economiza 1 crédito por produto novo).
+export async function responderEanImages(url) {
+  const chave = process.env.EANIMAGES_API_KEY || ''
   const params = new URL(url, 'http://localhost').searchParams
   try {
-    if (params.get('conta')) {
-      return { status: 200, corpo: { ok: true, chaveDoServidor: Boolean(process.env.EANIMAGES_API_KEY), conta: await consultarContaEanImages(chave) } }
-    }
-    const dados = await buscarProdutoEanImages(params.get('ean'), chave, { comDados: params.get('dados') !== '0' })
-    return { status: dados.encontrado ? 200 : 404, corpo: dados }
+    if (params.get('status')) return { status: 200, corpo: { configurada: Boolean(chave) } }
+    const dados = await buscarProdutoEanImages(params.get('ean'), chave, { comDados: process.env.EANIMAGES_COM_DADOS !== '0' })
+    const { saldo: _saldo, ...publico } = dados
+    return { status: dados.encontrado ? 200 : 404, corpo: publico }
   } catch (erro) {
     return { status: erro.status || 502, corpo: { erro: erro.message, codigo: erro.codigo || 'ERRO' } }
   }

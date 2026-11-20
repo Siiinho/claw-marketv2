@@ -3,7 +3,7 @@
 import { responderEanImages } from '../server/eanImages.js'
 
 export default async function handler(req, res) {
-  const { status, corpo } = await responderEanImages(req.url, req.headers || {})
+  const { status, corpo } = await responderEanImages(req.url)
   res.setHeader('Cache-Control', 'no-store')
   res.status(status).json(corpo)
 }
