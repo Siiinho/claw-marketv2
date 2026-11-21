@@ -152,6 +152,46 @@ export async function enviarFotoNuvem(ean, urlLocal) {
   }
 }
 
+// Códigos que já têm foto na nuvem (para o envio em lote não repetir o que já subiu).
+async function fotosJaNaNuvem() {
+  const pasta = cliente()?.storage?.from(PASTA_FOTOS)
+  const nomes = new Set()
+  if (!pasta) return nomes
+  for (let inicio = 0; inicio < 100000; inicio += 1000) {
+    const { data, error } = await pasta.list('', { limit: 1000, offset: inicio, sortBy: { column: 'name', order: 'asc' } })
+    if (error || !data?.length) break
+    data.forEach((arquivo) => nomes.add(String(arquivo.name).replace(/\.[a-z]+$/i, '')))
+    if (data.length < 1000) break
+  }
+  return nomes
+}
+
+// Envia de uma vez as fotos da pasta do PC (A:\imagens) dos produtos da mercadologia, para
+// que o celular e a Vercel achem a foto ao bipar. Só funciona no PC da loja (logado), que é
+// quem tem /api/imagens-produtos. `aoProgresso({ feitos, total, enviados, semFoto })`.
+export async function enviarFotosCatalogoNuvem(codigos, aoProgresso = () => {}, sinal = {}) {
+  if (!nuvemAtiva()) throw new Error('A nuvem não está ligada neste aparelho.')
+  const { data } = await cliente().auth.getSession()
+  if (!data?.session) throw new Error('Entre com um login para enviar as fotos.')
+  const jaTem = await fotosJaNaNuvem()
+  const fila = codigos.filter((c) => !jaTem.has(c))
+  const estado = { feitos: codigos.length - fila.length, total: codigos.length, enviados: 0, semFoto: 0, jaNaNuvem: codigos.length - fila.length }
+  aoProgresso({ ...estado })
+  let i = 0
+  const trabalhador = async () => {
+    while (i < fila.length && !sinal.parar) {
+      const ean = fila[i++]
+      const url = await enviarFotoNuvem(ean, `/api/imagens-produtos/${ean}.jpg`)
+      if (url) estado.enviados += 1
+      else estado.semFoto += 1
+      estado.feitos += 1
+      aoProgresso({ ...estado })
+    }
+  }
+  await Promise.all([trabalhador(), trabalhador(), trabalhador(), trabalhador(), trabalhador(), trabalhador()])
+  return estado
+}
+
 // ---------- encarte publicado (o cliente lê sem login) ----------
 export async function publicarEncarteNuvem(encarte) {
   await gravarNuvem([{ colecao: 'encarte', id: 'publicado', dados: encarte, excluido: false }])

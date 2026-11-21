@@ -8,7 +8,7 @@ export default function SeletorTema({ value, onChange, compacto = false }) {
   const lista = grupo === 'Todos' ? TEMAS_CAMPANHA : TEMAS_CAMPANHA.filter((t) => t.grupo === grupo)
   return (
     <div className="min-w-0">
-      <div className="-mx-1 mb-2 flex gap-1 overflow-x-auto px-1 pb-1">
+      <div className="mb-2 flex flex-wrap gap-1">
         {['Todos', ...GRUPOS_TEMA].map((g) => (
           <button key={g} type="button" onClick={() => setGrupo(g)} aria-pressed={grupo === g}
             className={`shrink-0 whitespace-nowrap rounded-full border-2 px-3 py-1 text-xs font-black ${grupo === g ? 'border-navy bg-navy text-white' : 'border-navy/15 bg-white text-navy'}`}>

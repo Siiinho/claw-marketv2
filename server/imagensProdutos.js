@@ -15,12 +15,18 @@ const pasta = () => process.env.IMAGENS_PRODUTOS_DIR || ''
 async function acharArquivo(ean) {
   const dir = pasta()
   if (!dir) return null
-  for (const ext of ['jpg', 'jpeg', 'png', 'webp', 'JPG', 'PNG']) {
-    const arquivo = path.join(dir, `${ean}.${ext}`)
-    try {
-      const info = await fs.stat(arquivo)
-      if (info.isFile()) return { arquivo, tipo: MIME[ext.toLowerCase()], tamanho: info.size }
-    } catch (_) { /* tenta a próxima extensão */ }
+  // A mercadologia guarda alguns códigos com zero na frente (0751320708991), mas a foto
+  // pode estar sem ele (751320708991.jpg), ou o contrário: tenta as formas do código.
+  const semZeros = ean.replace(/^0+/, '')
+  const nomes = [...new Set([ean, semZeros, semZeros.padStart(13, '0'), semZeros.padStart(12, '0')])].filter((n) => n.length >= 8)
+  for (const nome of nomes) {
+    for (const ext of ['jpg', 'jpeg', 'png', 'webp', 'JPG', 'PNG']) {
+      const arquivo = path.join(dir, `${nome}.${ext}`)
+      try {
+        const info = await fs.stat(arquivo)
+        if (info.isFile()) return { arquivo, tipo: MIME[ext.toLowerCase()], tamanho: info.size }
+      } catch (_) { /* tenta a próxima forma */ }
+    }
   }
   return null
 }

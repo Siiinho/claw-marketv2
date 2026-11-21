@@ -1,7 +1,9 @@
 // Catálogos usados ao bipar um código de barras:
-//  1. Mercadologia do Bengala (preço, estoque e setor reais da loja).
-//  2. Base de produtos (28 mil itens com nome, seção e preço sugerido), carregada só quando
-//     o código não está no catálogo da loja. Fica em public/catalogo/base-produtos.json.
+//  1. Mercadologia do Bengala (preço, estoque e setor reais da loja). Os produtos que também
+//     estão na base de 28 mil ganharam a descrição completa e a foto dela (`foto: 1`); o preço
+//     continua sempre o da loja. Gerado por scripts/mesclar-mercadologia.py.
+//  2. Base de produtos (descrição, seção e foto, SEM preço), carregada só quando o código não
+//     está no catálogo da loja. Fica em public/catalogo/base-produtos.json.
 // A foto vem da pasta de imagens do PC da loja (/api/imagens-produtos/<ean>.jpg) ou de
 // VITE_IMAGENS_BASE_URL (ex.: um bucket público), quando a foto existir lá.
 let catalogoPromise
@@ -77,7 +79,7 @@ async function buscarNaBase(codigoBarras) {
   const { mapa, categorias } = await carregarBase()
   const linha = mapa.get(codigoBarras) || mapa.get(codigoBarras.replace(/^0+/, ''))
   if (!linha) return null
-  const [ean, nome, setor, preco, cat] = linha
+  const [ean, nome, setor, , cat] = linha
   return {
     codigoInterno: ean,
     codigoBarras: ean,
@@ -85,7 +87,8 @@ async function buscarNaBase(codigoBarras) {
     setor,
     categoria: categorias[cat] || '',
     unidade: 'UN',
-    precoNormal: preco,
+    // O preço é sempre o da loja: produto fora da mercadologia pede o preço na hora de bipar.
+    precoNormal: '',
     estoque: 0,
     origemCatalogo: 'base-produtos',
   }
@@ -99,6 +102,13 @@ export async function buscarProdutoBengala(codigo) {
   if (!produto) return null
   const imagem = await fotoDoCatalogo(produto.codigoBarras || codigoBarras)
   return imagem ? { ...produto, imagem, imagemOrigem: 'catalogo', imagemOrigemNome: 'Banco de imagens do mercado', imagemAprovada: true } : produto
+}
+
+// Códigos da mercadologia da loja que têm foto na base: são as fotos que o PC envia à nuvem
+// para aparecerem em qualquer celular (a base inteira passaria do espaço grátis).
+export async function codigosComFotoDaLoja() {
+  const catalogo = await carregarCatalogo()
+  return [...catalogo.values()].filter((p) => p.foto).map((p) => p.codigoBarras)
 }
 
 export async function totalProdutosBengala() {
