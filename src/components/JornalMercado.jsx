@@ -1,7 +1,7 @@
 import { Icon, PrecoVarejo } from './ui'
 import { SETORES, setorById, formatData } from '../lib/utils'
 import { caminhoArte } from '../lib/temasCampanha'
-import PaginaTemplate, { unidadeDe, paginarTemplate, fonteQueCabe, contornoTexto, FaixaValidade, LogoEncarte, LARGURA, ALTURA } from './PaginaTemplate'
+import PaginaTemplate, { unidadeDe, paginarTemplate, fonteQueCabe, contornoTexto, FaixaValidade, LogoEncarte, RodapeOficial, LARGURA, ALTURA } from './PaginaTemplate'
 
 // Formato "Jornal do mercado", como o jornal impresso do Bengala: página A4 em pé, topo com a
 // campanha, blocos "Ofertas válidas somente <dia>" com uma grade cheia de produtos e rodapé com
@@ -16,8 +16,7 @@ export const JORNAL_H = 1527 // proporção A4
 const COLS = 7
 const PAD = 20
 const TOPO = 330
-const RODAPE = 192 // rodapé oficial (3188x567) na largura da página
-const RODAPE_OFICIAL = `${import.meta.env.BASE_URL}templates/rodape-oficial-bengala.webp`
+const RODAPE = 192 // rodapé oficial (2160x384) na largura da página
 const CAB = 48 // faixa do bloco
 const GAP = 8
 const BORDA = 6 // moldura do bloco
@@ -189,7 +188,7 @@ export default function PaginaJornalMercado({ tema, blocos, encarte, loja, fundo
       </div>
 
       {/* rodapé oficial do jornal impresso do Bengala (QR, WhatsApp, lojas, cartões e avisos) */}
-      <img src={RODAPE_OFICIAL} alt="Lojas, WhatsApp, redes sociais e cartões aceitos do Bengala" className="absolute inset-x-0 bottom-0 block w-full bg-white" style={{ height: RODAPE }} />
+      <RodapeOficial altura={RODAPE} />
 
       {numero && total > 1 && (
         <div className="absolute rounded-full bg-black/60 px-3 py-1 text-[18px] font-black text-white" style={{ right: 12, bottom: RODAPE + 6 }}>{numero}/{total}</div>
