@@ -1,7 +1,6 @@
 import { PrecoVarejo } from './ui'
 import { SETORES, setorById, formatData } from '../lib/utils'
-import { caminhoArte } from '../lib/temasCampanha'
-import PaginaTemplate, { unidadeDe, paginarTemplate, LARGURA, ALTURA } from './PaginaTemplate'
+import PaginaTemplate, { unidadeDe, paginarTemplate, fonteQueCabe, LARGURA, ALTURA } from './PaginaTemplate'
 import logoTransparente from '../assets/logo-bengala-transparente.png'
 
 // Formato "Jornal do mercado", como o jornal impresso do Bengala: página A4 em pé, topo com a
@@ -14,7 +13,7 @@ export const JORNAL_W = 1080
 export const JORNAL_H = 1527 // proporção A4
 const COLS = 7
 const PAD = 20
-const TOPO = 250
+const TOPO = 300
 const RODAPE = 150
 const CAB = 48 // faixa do bloco
 const GAP = 8
@@ -61,7 +60,7 @@ export function paginarJornal(itens) {
     for (let i = 0; i < bloco.itens.length; i += COLS) linhas.push(bloco.itens.slice(i, i + COLS))
     let parte = null
     for (const linha of linhas) {
-      const precisa = (parte ? 0 : CAB + BORDA * 2 + INTERNO + GAP) + CELULA_H + 4
+      const precisa = (parte ? 0 : CAB + BORDA * 2 + INTERNO * 1.5 + GAP) + CELULA_H + 4
       if (precisa > livre) {
         novaPagina()
         parte = null
@@ -69,7 +68,7 @@ export function paginarJornal(itens) {
       if (!parte) {
         parte = { ...bloco, continua: atual.length === 0 && paginas.some((p) => p.some((b) => b.id === bloco.id)), linhas: [] }
         atual.push(parte)
-        livre -= CAB + BORDA * 2 + INTERNO + GAP
+        livre -= CAB + BORDA * 2 + INTERNO * 1.5 + GAP
       }
       parte.linhas.push(linha)
       livre -= CELULA_H + 4
@@ -81,7 +80,16 @@ export function paginarJornal(itens) {
 
 // Altura que a página usa de fato (no site do cliente a página encolhe quando tem poucos produtos).
 export const alturaUsada = (blocos) => Math.min(JORNAL_H, Math.max(TOPO + RODAPE + 260,
-  TOPO + 6 + blocos.reduce((t, b) => t + CAB + BORDA * 2 + INTERNO + GAP + b.linhas.length * (CELULA_H + 4), 0) + RODAPE + PAD))
+  TOPO + 6 + blocos.reduce((t, b) => t + CAB + BORDA * 2 + INTERNO * 1.5 + GAP + b.linhas.length * (CELULA_H + 4), 0) + RODAPE + PAD))
+
+// Fita de aviso na diagonal com o nome do tema repetido.
+function Fita({ texto, bg, cor, style }) {
+  return (
+    <div aria-hidden="true" className="absolute overflow-hidden whitespace-nowrap uppercase" style={{ height: 40, lineHeight: '40px', background: bg, color: cor, fontFamily: 'Bangers, var(--font-sans)', fontSize: 28, letterSpacing: '0.06em', boxShadow: '0 4px 0 rgba(0,0,0,.35)', ...style }}>
+      {Array.from({ length: 6 }, () => `${texto} ★ `).join('')}
+    </div>
+  )
+}
 
 function Celula({ produto, tema, onAbrir, indice }) {
   const nome = String(produto.nome || '')
@@ -109,36 +117,41 @@ function Celula({ produto, tema, onAbrir, indice }) {
 }
 
 export default function PaginaJornalMercado({ tema, blocos, encarte, loja, numero, total, onAbrir, animado = false, escalaLogo = 1, altura = JORNAL_H }) {
-  const arte = caminhoArte(tema, 'tv')
+  // Texto das fitas: o nome do tema (no impresso era "BLACK FRIDAY").
+  const fita = `${tema.titulo} ${tema.destaque}`.trim()
   const logo = Math.min(1.3, Math.max(0.4, Number(escalaLogo ?? encarte?.escalaLogo ?? 1) || 1))
   const contorno = `0 3px 0 ${tema.contorno}, 2px 2px 0 ${tema.contorno}, -2px 2px 0 ${tema.contorno}`
   let indice = 0
   return (
     <div className={`relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: JORNAL_W, height: altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
-      {/* topo da campanha com as cores (ou a arte) do template */}
-      <div className="cm-topo absolute inset-x-0 top-0 overflow-hidden" style={{ height: TOPO }}>
-        {arte && <img src={arte} alt="" className="absolute right-0 top-0 h-full w-auto object-contain" style={{ maxWidth: '62%' }} />}
-        <div className="absolute flex items-center" style={{ left: PAD, top: 18, height: 150 }}>
-          <img src={logoTransparente} alt="Bengala Supermercado" className="block w-auto object-contain" style={{ height: 140 * logo }} />
+      {/* big idea, como no jornal impresso: fitas na diagonal pelos cantos e o tema centralizado */}
+      <div className="cm-topo absolute inset-x-0 top-0" style={{ height: TOPO }}>
+        <Fita texto={fita} bg={tema.corDestaque} cor={tema.contorno} style={{ left: -70, top: 34, width: 470, transform: 'rotate(-14deg)' }} />
+        <Fita texto={fita} bg={tema.contorno} cor={tema.corDestaque} style={{ left: -40, top: 92, width: 330, transform: 'rotate(-14deg)' }} />
+        <Fita texto={fita} bg={tema.corDestaque} cor={tema.contorno} style={{ right: -70, top: 34, width: 470, transform: 'rotate(14deg)' }} />
+        <Fita texto={fita} bg={tema.contorno} cor={tema.corDestaque} style={{ right: -40, top: 92, width: 330, transform: 'rotate(14deg)' }} />
+        <div className="absolute inset-x-0 top-0 flex flex-col items-center text-center" style={{ paddingTop: 12 }}>
+          <img src={logoTransparente} alt="Bengala Supermercado" className="block w-auto object-contain" style={{ height: 92 * logo }} />
+          <div className="flex items-baseline justify-center whitespace-nowrap font-black uppercase italic leading-[0.95] tracking-tight" style={{ gap: '0.22em', marginTop: 2, fontSize: fonteQueCabe(`${tema.titulo} ${tema.destaque}`, 640, 84) }}>
+            <span style={{ color: tema.corTitulo, textShadow: contorno }}>{tema.titulo}</span>
+            <span style={{ color: tema.corDestaque, textShadow: contorno }}>{tema.destaque}</span>
+          </div>
+          {tema.chamada && (
+            <div className="uppercase leading-none text-white" style={{ marginTop: 4, fontFamily: 'Bangers, var(--font-sans)', fontSize: 34, letterSpacing: '0.03em', textShadow: contorno }}>{tema.chamada}</div>
+          )}
+          {encarte?.periodoDe && (
+            <div className="rounded-full uppercase" style={{ marginTop: 8, padding: '4px 20px 3px', fontFamily: 'var(--font-encarte)', fontWeight: 900, fontSize: 24, background: tema.corDestaque, color: tema.contorno }}>
+              {encarte.periodoAte && encarte.periodoAte !== encarte.periodoDe ? `Ofertas de ${formatData(encarte.periodoDe).slice(0, 5)} a ${formatData(encarte.periodoAte).slice(0, 5)}` : `Ofertas de ${formatData(encarte.periodoDe).slice(0, 5)}`} · enquanto durarem os estoques
+            </div>
+          )}
         </div>
-        {!arte && (
-          <div className="absolute text-right italic" style={{ right: PAD, top: 26, left: 330 }}>
-            <div className="whitespace-nowrap font-black uppercase leading-[0.9]" style={{ fontSize: 86, color: tema.corTitulo, textShadow: contorno }}>{tema.titulo}</div>
-            <div className="whitespace-nowrap font-black uppercase leading-[0.95]" style={{ fontSize: 76, color: tema.corDestaque, textShadow: contorno }}>{tema.destaque}</div>
-          </div>
-        )}
-        {encarte?.periodoDe && (
-          <div className="absolute rounded-full font-black uppercase" style={{ left: PAD, bottom: 14, padding: '6px 18px', fontSize: 24, background: tema.corDestaque, color: tema.contorno }}>
-            {encarte.periodoAte && encarte.periodoAte !== encarte.periodoDe ? `Ofertas de ${formatData(encarte.periodoDe).slice(0, 5)} a ${formatData(encarte.periodoAte).slice(0, 5)}` : `Ofertas de ${formatData(encarte.periodoDe).slice(0, 5)}`} · enquanto durarem os estoques
-          </div>
-        )}
       </div>
 
       {/* blocos do dia (ou do setor) com a grade de produtos */}
       <div className="absolute flex flex-col" style={{ left: PAD, right: PAD, top: TOPO + 6, gap: GAP }}>
         {blocos.map((bloco) => (
           <section key={bloco.id} className="overflow-hidden" style={{ borderRadius: 20, border: `${BORDA}px solid ${tema.corDestaque}`, background: '#ffffff', paddingBottom: INTERNO }}>
-            <div className="flex items-center justify-center text-center font-black uppercase" style={{ height: CAB, margin: `0 0 ${INTERNO / 2}px`, background: `linear-gradient(90deg, ${tema.contorno}, ${tema.precoCor} 18%, ${tema.precoCor} 82%, ${tema.contorno})`, color: '#fff', fontSize: 28, letterSpacing: '0.02em', textShadow: `0 2px 0 ${tema.contorno}` }}>
+            <div className="flex items-center justify-center text-center uppercase" style={{ height: CAB, margin: `${INTERNO / 2}px ${INTERNO}px ${INTERNO / 2}px`, clipPath: 'polygon(0 50%, 2.6% 0, 97.4% 0, 100% 50%, 97.4% 100%, 2.6% 100%)', background: `linear-gradient(90deg, ${tema.contorno}, ${tema.precoCor} 12%, ${tema.precoCor} 88%, ${tema.contorno})`, color: '#fff', fontFamily: 'var(--font-encarte)', fontWeight: 900, fontSize: 30, letterSpacing: '0.03em', textShadow: `0 2px 0 ${tema.contorno}` }}>
               {bloco.titulo}{bloco.continua ? ' (continuação)' : ''}
             </div>
             <div className="flex flex-col" style={{ gap: 4, padding: `0 ${INTERNO}px` }}>
