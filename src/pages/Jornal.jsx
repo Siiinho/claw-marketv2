@@ -5,7 +5,7 @@ import { Icon, ProdutoThumb, EmptyState, Botao, Campo, inputCls, Pill, Modal } f
 import ScannerJornal from '../components/ScannerJornal'
 import CentralArtes from '../components/CentralArtes'
 import {
-  SETORES, setorById, formatBRL,
+  SETORES, setorById, formatBRL, MERCADO_ENCARTE, noMercadoEncarte,
   percentDesc, dataISOmaisDias, SELOS_OFERTA,
 } from '../lib/utils'
 import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
@@ -57,6 +57,7 @@ export default function Jornal() {
   // Jornal aberto no painel: 'geral' (todos os produtos) ou o id de um setor (só os dele).
   const [jornalSel, setJornalSel] = useState(() => lerRascunho().jornal || 'geral')
   const ehSetor = jornalSel !== 'geral'
+  const ehMercado = jornalSel === MERCADO_ENCARTE.id
   const [titulo, setTitulo] = useState('Jornal de Ofertas - Bengala Supermercado')
   const [excluidos, setExcluidos] = useState(() => new Set())
   const [exportando, setExportando] = useState(false)
@@ -176,7 +177,7 @@ export default function Jornal() {
 
   // ---- montagem do conteúdo ----
   const ativos = fila.filter((p) => incluir(p.id))
-  const ativosDoModelo = ehSetor ? ativos.filter((p) => p.setor === jornalSel) : ativos
+  const ativosDoModelo = ehMercado ? ativos.filter((p) => noMercadoEncarte(p)) : ehSetor ? ativos.filter((p) => p.setor === jornalSel) : ativos
   const vencimento = ativosDoModelo.filter((p) => p.origemFila === 'vencimento')
   const regulares = ativosDoModelo.filter((p) => p.origemFila !== 'vencimento')
 
@@ -189,9 +190,16 @@ export default function Jornal() {
   const itensArte = itensJornal.map((p) => ({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
   const paginasJornal = paginarTemplate(itensArte, layoutDigital, 'feed')
   const temaArte = temaCampanhaById(temaAtualId)
-  const nomeJornal = ehSetor ? setorById(jornalSel).nome : 'Geral'
+  const nomeJornal = ehMercado ? MERCADO_ENCARTE.nome : ehSetor ? setorById(jornalSel).nome : 'Geral'
   const contagemSetor = (id) => ativos.filter((p) => p.setor === id).length
-  const filaDoPainel = ehSetor ? fila.filter((p) => p.setor === jornalSel) : fila
+  // No Mercado Encarte a lista mostra a fila toda, para escolher na estrela o que entra hoje.
+  const filaDoPainel = ehSetor && !ehMercado ? fila.filter((p) => p.setor === jornalSel) : fila
+  const totalMercado = ativos.filter((p) => noMercadoEncarte(p)).length
+  const alternarMercado = (produto) => {
+    const entra = !noMercadoEncarte(produto)
+    salvarProduto({ id: produto.id, encarteMercadoDia: entra ? dataISOmaisDias(0) : null })
+    toast(entra ? `${produto.nome} entrou no Mercado Encarte de hoje.` : `${produto.nome} saiu do Mercado Encarte.`)
+  }
   // O site do cliente sempre recebe todos os produtos; cada setor vira uma aba com o template dele.
   const ordenarParaJornal = (lista) => [
     ...lista.filter((p) => p.origemFila === 'vencimento'),
@@ -263,7 +271,8 @@ export default function Jornal() {
 
   const lojaAtual = (store.lojas || []).find((l) => l.id === store.lojaAtiva) || (store.lojas || [])[0]
   const itensParaArte = () => itensArte
-  const encarteArte = { periodoDe: validadeDe, periodoAte: validadeAte }
+  // O Mercado Encarte vale só no dia.
+  const encarteArte = ehMercado ? { periodoDe: dataISOmaisDias(0), periodoAte: dataISOmaisDias(0) } : { periodoDe: validadeDe, periodoAte: validadeAte }
   const salvarPrecoDaPrevia = () => {
     const normal = Number(String(precoEditando.normal).replace(',', '.'))
     const promo = String(precoEditando.promo).trim() ? Number(String(precoEditando.promo).replace(',', '.')) : null
@@ -282,7 +291,7 @@ export default function Jornal() {
   const publicarDigital = async () => {
     if (!ativos.length) return toast('Adicione ao menos um produto ao jornal.', 'erro')
     const todos = ordenarParaJornal(ativos)
-    const setoresDoJornal = [...new Set(todos.map((p) => p.setor).filter(Boolean))]
+    const setoresDoJornal = [...new Set(todos.map((p) => p.setor).filter(Boolean)), ...(todos.some((p) => noMercadoEncarte(p)) ? [MERCADO_ENCARTE.id] : [])]
     const dados = {
       titulo,
       mercado: config.nomeMercado,
@@ -393,6 +402,13 @@ export default function Jornal() {
           <div className="min-w-0 space-y-4">
             <div className="card-bengala p-4">
               <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">1. Qual jornal você vai montar?</p>
+              <button type="button" onClick={() => setJornalSel(MERCADO_ENCARTE.id)} aria-pressed={ehMercado}
+                className={`mb-1.5 flex w-full items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-left text-sm font-black ${ehMercado ? 'border-[#c1121f] text-white' : 'border-[#c1121f]/40 bg-white text-[#c1121f]'}`}
+                style={ehMercado ? { background: 'linear-gradient(120deg,#c1121f,#fb5607)' } : undefined}>
+                <Icon name="Star" size={18} fill={ehMercado ? '#ffd60a' : 'none'} />
+                <span className="min-w-0 flex-1">Mercado Encarte <span className={`block text-[11px] font-bold ${ehMercado ? 'text-white/85' : 'text-ink-soft'}`}>Ofertas de hoje do próprio mercado</span></span>
+                <span className="text-xs font-bold opacity-80">{totalMercado} {totalMercado === 1 ? 'produto' : 'produtos'}</span>
+              </button>
               <button type="button" onClick={() => setJornalSel('geral')} aria-pressed={!ehSetor}
                 className={`flex w-full items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-left text-sm font-black ${!ehSetor ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}>
                 <Icon name="Store" size={18} />
@@ -414,7 +430,7 @@ export default function Jornal() {
                   )
                 })}
               </div>
-              <p className="mt-2 text-[11px] leading-snug text-ink-soft">No site do cliente aparece a aba Geral e uma aba para cada setor que tiver produto, cada uma com o template dela.</p>
+              <p className="mt-2 text-[11px] leading-snug text-ink-soft">No site do cliente aparece a aba especial Mercado Encarte (quando tiver oferta de hoje), a aba Geral e uma aba para cada setor com produto, cada uma com o template dela.</p>
             </div>
 
             <div className="card-bengala p-4">
@@ -459,7 +475,7 @@ export default function Jornal() {
                 </button>
               </div>
               {filaDoPainel.length === 0 ? (
-                <p className="px-1 py-3 text-sm text-ink-soft">{ehSetor ? `Nenhum produto de ${nomeJornal} na fila. Bipe um produto desse setor ou mude o setor dele no lápis.` : 'Fila vazia. Bipe os produtos acima.'}</p>
+                <p className="px-1 py-3 text-sm text-ink-soft">{ehMercado ? 'Fila vazia. Bipe os produtos e toque na estrela dos que entram no Mercado Encarte de hoje.' : ehSetor ? `Nenhum produto de ${nomeJornal} na fila. Bipe um produto desse setor ou mude o setor dele no lápis.` : 'Fila vazia. Bipe os produtos acima.'}</p>
               ) : (
                 <div className="max-h-72 space-y-1 overflow-y-auto">
                   {filaDoPainel.map((p) => {
@@ -470,16 +486,20 @@ export default function Jornal() {
                         <ProdutoThumb produto={p} size={28} />
                         <span className="min-w-0 flex-1">
                           <span className="block whitespace-normal break-words text-sm leading-snug text-ink">{p.nome}</span>
-                          {!ehSetor && <span className="block text-[11px] font-bold" style={{ color: setorP.corTag || setorP.cor }}>{setorP.nome}</span>}
+                          {(!ehSetor || ehMercado) && <span className="block text-[11px] font-bold" style={{ color: setorP.corTag || setorP.cor }}>{setorP.nome}</span>}
                         </span>
                         {p.origemFila === 'vencimento' && <Pill cor="#d9641f" bg="#f47b361a">interna</Pill>}
+                        <button type="button" onClick={() => alternarMercado(p)} aria-pressed={noMercadoEncarte(p)} aria-label={`${noMercadoEncarte(p) ? 'Tirar do' : 'Pôr no'} Mercado Encarte: ${p.nome}`} title="Mercado Encarte (oferta de hoje)"
+                          className={`shrink-0 rounded-lg p-1.5 ${noMercadoEncarte(p) ? 'bg-[#c1121f] text-[#ffd60a]' : 'text-ink-soft/60 hover:bg-[#c1121f]/10 hover:text-[#c1121f]'}`}>
+                          <Icon name="Star" size={15} fill={noMercadoEncarte(p) ? '#ffd60a' : 'none'} />
+                        </button>
                         <button onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="shrink-0 rounded p-1.5 text-info hover:bg-info/10"><Icon name="Pencil" size={15} /></button>
                       </div>
                     )
                   })}
                 </div>
               )}
-              <p className="mt-1 px-1 text-[11px] text-ink-soft">Selo, preço e posição na arte: toque no produto na prévia. Setor errado: use o lápis.</p>
+              <p className="mt-1 px-1 text-[11px] text-ink-soft">Estrela: entra no Mercado Encarte de hoje e sai sozinho amanhã. Selo, preço e posição na arte: toque no produto na prévia. Setor errado: use o lápis.</p>
             </div>
 
             <div className="card-bengala space-y-3 p-4">
@@ -768,6 +788,18 @@ export default function Jornal() {
                 onChange={setAjusteEditando}
               />
             </div>
+            {(() => {
+              const atual = fila.find((f) => f.id === seloEditando.id) || seloEditando
+              const dentro = noMercadoEncarte(atual)
+              return (
+                <button type="button" onClick={() => alternarMercado(atual)} aria-pressed={dentro}
+                  className={`flex w-full items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-left text-sm font-black ${dentro ? 'border-[#c1121f] bg-[#c1121f] text-white' : 'border-[#c1121f]/40 bg-white text-[#c1121f]'}`}>
+                  <Icon name="Star" size={18} fill={dentro ? '#ffd60a' : 'none'} />
+                  <span className="flex-1">{dentro ? 'No Mercado Encarte de hoje' : 'Pôr no Mercado Encarte de hoje'}</span>
+                  <span className="text-xs font-bold opacity-80">{dentro ? 'tocar para tirar' : 'oferta do dia'}</span>
+                </button>
+              )
+            })()}
             <div>
               <p className="mb-2 text-sm font-bold text-ink">Selo</p>
               <p className="mb-2 text-xs text-ink-soft">O selo aparece só neste produto no encarte, nas artes e nos cartazes. Muda na hora.</p>

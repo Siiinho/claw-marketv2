@@ -75,6 +75,8 @@ const TEMAS_SETOR = [
   s('higiene', 'rosa', 'Higiene e', 'Beleza', 'Cuidar de você custa pouco!', 'Bath'),
   s('utilidades', 'cinza', 'Ofertas de', 'Utilidades', 'Tudo para sua casa', 'House'),
   s('farmacia', 'azul', 'Ofertas da', 'Farmácia', 'Saúde e bem-estar', 'Pill'),
+  // Jornal especial com as ofertas do dia escolhidas pelo próprio mercado.
+  { id: 'mercado-encarte', nome: 'Mercado Encarte', grupo: 'Setores', setor: 'mercado-encarte', icone: 'Star', titulo: 'Mercado', destaque: 'Encarte', chamada: 'Ofertas de hoje!', ...P.vermelho },
 ]
 // Setor de cada tema com arte.
 const SETOR_DA_ARTE = { acougue: 'acougue', 'acougue-fds': 'acougue', hortifruti: 'hortifruti', 'hortifruti-nota10': 'hortifruti', 'ofertas-hortifruti': 'hortifruti' }

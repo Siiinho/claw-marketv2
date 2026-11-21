@@ -61,6 +61,11 @@ export const dataISOmaisDias = (dias) => {
   return [d.getUTCFullYear(), String(d.getUTCMonth() + 1).padStart(2, '0'), String(d.getUTCDate()).padStart(2, '0')].join('-')
 }
 
+// Mercado Encarte: jornal especial com as ofertas do dia escolhidas pelo próprio mercado.
+// O produto entra marcado com a data de hoje e sai sozinho no dia seguinte.
+export const MERCADO_ENCARTE = { id: 'mercado-encarte', nome: 'Mercado Encarte', cor: '#c1121f', corTag: '#c1121f', icone: 'Star' }
+export const noMercadoEncarte = (produto, hoje = dataISOmaisDias(0)) => Boolean(produto?.encarteMercadoDia) && produto.encarteMercadoDia === hoje
+
 export const formatData = (iso) =>
   parseData(iso)?.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) || '—'
 

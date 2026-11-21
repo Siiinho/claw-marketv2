@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Icon, Logo, PrecoVarejo } from '../components/ui'
-import { SETORES, setorById, formatBRL, formatData } from '../lib/utils'
+import { SETORES, setorById, formatBRL, formatData, MERCADO_ENCARTE, noMercadoEncarte, dataISOmaisDias } from '../lib/utils'
 import { carregarEncartePublicado, assinarEncarte, linkDoEncarte } from '../lib/encartePublico'
 import { temaCampanhaById, temasDoSetor } from '../lib/temasCampanha'
 import SeloArte from '../components/SeloArte'
@@ -206,6 +206,7 @@ function PreviewProduto({ produto, lista, onTrocar, onFechar, tema, encarte, loj
   const anterior = indice > 0 ? lista[indice - 1] : null
   const proximo = indice >= 0 && indice < lista.length - 1 ? lista[indice + 1] : null
   const toque = useRef(null)
+  const puxar = useRef(null)
   const [copiado, setCopiado] = useState(false)
   const [direcao, setDirecao] = useState(0)
 
@@ -219,9 +220,15 @@ function PreviewProduto({ produto, lista, onTrocar, onFechar, tema, encarte, loj
       else if (e.key === 'ArrowLeft') ir(anterior, -1)
     }
     window.addEventListener('keydown', teclas)
-    const overflow = document.body.style.overflow
+    // Trava a página de trás (no iPhone só o body não basta).
+    const antes = [document.body.style.overflow, document.documentElement.style.overflow]
     document.body.style.overflow = 'hidden'
-    return () => { window.removeEventListener('keydown', teclas); document.body.style.overflow = overflow }
+    document.documentElement.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', teclas)
+      document.body.style.overflow = antes[0]
+      document.documentElement.style.overflow = antes[1]
+    }
   }, [produto, onFechar, ir, proximo, anterior])
 
   useEffect(() => { setCopiado(false) }, [produto?.id])
@@ -253,6 +260,14 @@ function PreviewProduto({ produto, lista, onTrocar, onFechar, tema, encarte, loj
   }
 
   const inicioToque = (e) => { const t = e.touches[0]; toque.current = { x: t.clientX, y: t.clientY } }
+  // Puxar o topo da janela para baixo fecha, como nos apps.
+  const inicioPuxar = (e) => { puxar.current = e.touches[0].clientY }
+  const fimPuxar = (e) => {
+    if (puxar.current == null) return
+    const dy = e.changedTouches[0].clientY - puxar.current
+    puxar.current = null
+    if (dy > 70) onFechar()
+  }
   const fimToque = (e) => {
     if (!toque.current) return
     const t = e.changedTouches[0]
@@ -275,24 +290,26 @@ function PreviewProduto({ produto, lista, onTrocar, onFechar, tema, encarte, loj
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-6" onClick={onFechar} role="dialog" aria-modal="true" aria-label={produto.nome}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center overscroll-none bg-black/70 backdrop-blur-sm sm:items-center sm:p-6" onClick={onFechar} role="dialog" aria-modal="true" aria-label={produto.nome}>
       <div
-        className="cm-folha max-h-[94vh] w-full overflow-y-auto rounded-t-3xl bg-white pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-w-lg sm:rounded-3xl"
+        className="cm-folha cm-folha-altura flex w-full flex-col overflow-hidden rounded-t-3xl bg-white sm:max-w-lg sm:rounded-3xl"
         onClick={(e) => e.stopPropagation()}
-        onTouchStart={inicioToque}
-        onTouchEnd={fimToque}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-white px-4 pb-2 pt-3">
-          <div className="mx-auto mb-1 h-1.5 w-12 rounded-full bg-navy/15 sm:hidden" aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 6 }} />
+        {/* topo fixo: o botão de fechar fica sempre à vista */}
+        <div className="relative z-10 flex shrink-0 touch-none items-center justify-between gap-2 border-b border-navy/10 bg-white px-4 pb-2 pt-3" onTouchStart={inicioPuxar} onTouchEnd={fimPuxar}>
+          <div className="mx-auto mb-1 h-1.5 w-12 rounded-full bg-navy/20 sm:hidden" aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 6 }} />
           <span className="mt-2 rounded-full px-3 py-1 text-xs font-black uppercase text-white" style={{ background: setor.cor }}>{setor.nome}</span>
           {lista.length > 1 && <span className="mt-2 text-sm font-black text-navy" aria-live="polite">{indice + 1} de {lista.length}</span>}
-          <button type="button" onClick={onFechar} className="mt-2 flex h-11 w-11 items-center justify-center rounded-full bg-navy text-white" aria-label="Fechar">
-            <Icon name="X" size={22} />
+          <button type="button" onClick={onFechar} className="mt-2 flex h-11 shrink-0 items-center justify-center gap-1 rounded-full bg-navy px-4 text-sm font-black text-white" aria-label="Fechar">
+            <Icon name="X" size={20} /> Fechar
           </button>
         </div>
 
+        {/* só o conteúdo rola, sem arrastar a página de trás */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))]" onTouchStart={inicioToque} onTouchEnd={fimToque}>
+
         <div key={produto.id} className="cm-troca-produto" style={{ '--cm-lado': direcao }}>
-          <div className="relative mx-4 h-[36vh] min-h-56 overflow-hidden rounded-2xl sm:aspect-square sm:h-auto border-2 border-navy/10 bg-white p-4" style={{ background: `radial-gradient(circle at 50% 45%, #fff 0 45%, ${setor.cor}1f 100%)` }}>
+          <div className="relative mx-4 mt-3 h-[30vh] min-h-48 overflow-hidden rounded-2xl sm:aspect-square sm:h-auto border-2 border-navy/10 bg-white p-4" style={{ background: `radial-gradient(circle at 50% 45%, #fff 0 45%, ${setor.cor}1f 100%)` }}>
             <div className="cm-foto-preview h-full w-full"><FotoProduto produto={produto} /></div>
             {desconto > 0 && (
               <span className="cm-preco-preview absolute right-3 top-3 flex h-16 w-16 items-center justify-center rounded-full bg-bengala text-lg font-black text-white shadow-lg">
@@ -340,6 +357,10 @@ function PreviewProduto({ produto, lista, onTrocar, onFechar, tema, encarte, loj
             </div>
           )}
           <p className="text-sm text-ink-soft">Oferta válida enquanto durar o estoque. Imagem ilustrativa.</p>
+          <button type="button" onClick={onFechar} className="w-full rounded-xl border-2 border-navy/20 px-3 py-3 text-base font-black text-navy">
+            Voltar ao encarte
+          </button>
+        </div>
         </div>
       </div>
     </div>
@@ -395,6 +416,11 @@ export default function EncarteDigital() {
   const temaGeral = temaCampanhaById(encarte?.tema)
   // Cada setor tem o seu jornal, com o template escolhido para ele no Jornal.
   const temaDoSetor = (id) => temaCampanhaById(encarte?.temasSetor?.[id] || temasDoSetor(id)[0]?.id || encarte?.tema)
+  // Mercado Encarte: só as ofertas marcadas para hoje (somem sozinhas no dia seguinte).
+  const hoje = dataISOmaisDias(0)
+  const ofertasDoDia = useMemo(() => itens.filter((p) => noMercadoEncarte(p, hoje)), [itens, hoje])
+  const ehMercado = setorFiltro === MERCADO_ENCARTE.id
+  useEffect(() => { if (ehMercado && encarte && !ofertasDoDia.length) setSetorFiltro('todos') }, [ehMercado, encarte, ofertasDoDia.length])
   const tema = setorFiltro !== 'todos' && setorFiltro !== 'compras' ? temaDoSetor(setorFiltro) : temaGeral
   // Fundo enviado no Jornal vale só para o template dele.
   const fundoDoTema = encarte?.fundos?.[tema.id] || (tema.id === encarte?.tema ? encarte?.fundo || null : null)
@@ -402,10 +428,10 @@ export default function EncarteDigital() {
     () => SETORES.filter((s) => itens.some((p) => p.setor === s.id)),
     [itens]
   )
-  const visiveis = setorFiltro === 'todos' || setorFiltro === 'compras' ? itens : itens.filter((p) => p.setor === setorFiltro)
+  const visiveis = ehMercado ? ofertasDoDia : setorFiltro === 'todos' || setorFiltro === 'compras' ? itens : itens.filter((p) => p.setor === setorFiltro)
   const grupos = setorFiltro === 'todos' || setorFiltro === 'compras'
     ? setoresPresentes.map((s) => ({ setor: s, itens: itens.filter((p) => p.setor === s.id) }))
-    : [{ setor: setorById(setorFiltro), itens: visiveis }]
+    : [{ setor: ehMercado ? MERCADO_ENCARTE : setorById(setorFiltro), itens: visiveis }]
   const layout = encarte?.layout || 'grade'
   const paginas = paginarTemplate(visiveis, layout)
   const loja = encarte?.loja || LOJAS[0]
@@ -437,7 +463,9 @@ export default function EncarteDigital() {
             <Logo h={40} chip />
             <div className="min-w-0">
               <div className="truncate text-base font-black uppercase sm:text-lg">{tema.titulo} {tema.destaque}</div>
-              {encarte?.periodoDe && <div className="text-xs font-bold text-white/85 sm:text-sm">Válido de {formatData(encarte.periodoDe)} a {formatData(encarte.periodoAte)}</div>}
+              {ehMercado
+                ? <div className="text-xs font-bold text-white/85 sm:text-sm">Ofertas válidas só hoje, {formatData(hoje)}</div>
+                : encarte?.periodoDe && <div className="text-xs font-bold text-white/85 sm:text-sm">Válido de {formatData(encarte.periodoDe)} a {formatData(encarte.periodoAte)}</div>}
             </div>
           </div>
           {encarte?.publicadoEm && (
@@ -457,6 +485,17 @@ export default function EncarteDigital() {
         <nav className="sticky top-0 z-20 border-b-2 border-navy/10 bg-white/95 backdrop-blur" aria-label="Jornais do mercado">
           {/* 1ª linha: um jornal para cada setor, mais o Geral com tudo */}
           <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 pb-2 pt-3">
+            {ofertasDoDia.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSetorFiltro(MERCADO_ENCARTE.id)}
+                aria-pressed={ehMercado}
+                className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 px-4 py-2 text-sm font-black uppercase shadow ${ehMercado ? 'border-[#ffd60a] text-[#ffd60a] ring-2 ring-[#c1121f]' : 'border-[#c1121f] text-white'}`}
+                style={{ background: 'linear-gradient(120deg,#c1121f,#fb5607)' }}
+              >
+                <Icon name="Star" size={16} fill="#ffd60a" color="#ffd60a" /> Mercado Encarte ({ofertasDoDia.length})
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setSetorFiltro('todos')}
@@ -519,7 +558,7 @@ export default function EncarteDigital() {
               <div key={`${encarte.versao}-${setorFiltro}-${i}`} className="min-w-0 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-black/10">
                 <PaginaViva>
                   <Escalado>
-                    <PaginaTemplate animado tema={tema} itens={pagina} encarte={encarte} loja={loja} fundo={fundoDoTema} layout={layout} numero={i + 1} total={paginas.length} onAbrir={abrir} />
+                    <PaginaTemplate animado tema={tema} itens={pagina} encarte={ehMercado ? { ...encarte, periodoDe: hoje, periodoAte: hoje } : encarte} loja={loja} fundo={fundoDoTema} layout={layout} numero={i + 1} total={paginas.length} onAbrir={abrir} />
                   </Escalado>
                 </PaginaViva>
               </div>

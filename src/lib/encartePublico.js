@@ -40,7 +40,7 @@ const CANAL = 'clawmarket-encarte'
 const CAMPOS_PUBLICOS = [
   'id', 'nome', 'marca', 'gramagem', 'setor', 'codigoBarras', 'seloOferta',
   'unidade', 'precoNormal', 'precoJornal', 'descontoJornal', 'origemFila',
-  'imagem', 'imagemCachePermanente', 'imagemTratamento', 'ajusteArte',
+  'imagem', 'imagemCachePermanente', 'imagemTratamento', 'ajusteArte', 'encarteMercadoDia',
 ]
 
 const soPublico = (item) => {

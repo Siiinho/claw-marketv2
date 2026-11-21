@@ -236,10 +236,11 @@ const diaMes = (iso) => formatData(iso).slice(0, 5)
 
 function FaixaValidade({ encarte, tema, fonte = 24, alinhar = 'left' }) {
   if (!encarte?.periodoDe) return null
+  const umDia = encarte.periodoAte === encarte.periodoDe
   return (
     <div className="uppercase leading-[0.92]" style={{ fontFamily: 'var(--font-encarte)', fontWeight: 900, textAlign: alinhar, textShadow: contornoTexto(tema.contorno, Math.max(2, Math.round(fonte / 11))) }}>
-      <div style={{ fontSize: fonte * 0.78, color: '#ffffff' }}>Ofertas válidas de</div>
-      <div style={{ fontSize: fonte * 1.55, color: tema.corDestaque, letterSpacing: '0.01em' }}>{diaMes(encarte.periodoDe)} a {diaMes(encarte.periodoAte)}</div>
+      <div style={{ fontSize: fonte * 0.78, color: '#ffffff' }}>{umDia ? 'Ofertas válidas só' : 'Ofertas válidas de'}</div>
+      <div style={{ fontSize: fonte * 1.55, color: tema.corDestaque, letterSpacing: '0.01em' }}>{umDia ? `hoje, ${diaMes(encarte.periodoDe)}` : `${diaMes(encarte.periodoDe)} a ${diaMes(encarte.periodoAte)}`}</div>
       <div style={{ fontSize: fonte * 0.62, color: '#ffffff', fontWeight: 700, marginTop: fonte * 0.12 }}>ou enquanto durarem os estoques</div>
     </div>
   )
