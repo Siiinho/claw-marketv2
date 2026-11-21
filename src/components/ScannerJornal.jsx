@@ -2,9 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/StoreContext'
 import { buscarProdutoBengala } from '../lib/catalogoBengala'
 import { buscarImagemProduto, buscarProdutoAutomatizado } from '../lib/produtoApi'
-import { dataISOmaisDias } from '../lib/utils'
+import { dataISOmaisDias, noMercadoEncarte } from '../lib/utils'
 import { useLeitorCamera } from '../lib/useLeitorCamera'
 import { Botao, Campo, Icon, ProdutoThumb, inputCls } from './ui'
+import EstrelaMercado from './EstrelaMercado'
+
+const CHAVE_ESTRELA = 'clawmarket.scanner.estrela'
+function lerEstrela() {
+  try { return localStorage.getItem(CHAVE_ESTRELA) === '1' } catch { return false }
+}
 
 const rascunhoVazio = (codigo = '') => ({
   codigoBarras: codigo,
@@ -26,6 +32,7 @@ export default function ScannerJornal() {
   const {
     produtos,
     fila,
+    salvarProduto,
     salvarProdutoNaFila,
     registrarLote,
     removerDaFila,
@@ -36,6 +43,18 @@ export default function ScannerJornal() {
   const [rascunho, setRascunho] = useState(null)
   const [expandido, setExpandido] = useState(false)
   const inputRef = useRef(null)
+  // A estrela fica ligada entre um bipe e outro, para mandar vários produtos seguidos ao Mercado Encarte.
+  const [estrela, setEstrelaEstado] = useState(lerEstrela)
+  const setEstrela = (valor) => {
+    setEstrelaEstado(valor)
+    try { localStorage.setItem(CHAVE_ESTRELA, valor ? '1' : '0') } catch { /* sem armazenamento */ }
+  }
+  const comEstrela = (produto) => (estrela ? { ...produto, encarteMercadoDia: dataISOmaisDias(0) } : produto)
+  const alternarEstrela = (produto) => {
+    const ligar = !noMercadoEncarte(produto)
+    salvarProduto({ id: produto.id, encarteMercadoDia: ligar ? dataISOmaisDias(0) : null })
+    toast(ligar ? `${produto.nome} entrou nos estrelados (Mercado Encarte de hoje).` : `${produto.nome} saiu dos estrelados.`, 'info')
+  }
 
   const recentes = useMemo(() => [...fila].sort((a, b) =>
     new Date(b.adicionadoFilaEm || 0).getTime() - new Date(a.adicionadoFilaEm || 0).getTime()
@@ -45,7 +64,7 @@ export default function ScannerJornal() {
 
   const adicionarConhecido = (produto) => {
     const jaEstava = Boolean(produto.naFila)
-    salvarProdutoNaFila(produto, 'scanner-jornal')
+    salvarProdutoNaFila(comEstrela(produto), 'scanner-jornal')
     if (produto.validade) {
       registrarLote({
         produtoId: produto.id,
@@ -54,7 +73,8 @@ export default function ScannerJornal() {
         quantidade: Math.max(1, Number(produto.estoque) || 1),
       })
     }
-    toast(jaEstava ? `${produto.nome} já está na fila do jornal.` : `${produto.nome} adicionado à fila do jornal!`, jaEstava ? 'info' : 'sucesso')
+    const extra = estrela ? ' Com estrela no Mercado Encarte.' : ''
+    toast(jaEstava ? `${produto.nome} já está na fila do jornal.${extra}` : `${produto.nome} adicionado à fila do jornal!${extra}`, jaEstava ? 'info' : 'sucesso')
     setCodigo('')
     inputRef.current?.focus()
   }
@@ -106,16 +126,16 @@ export default function ScannerJornal() {
   const confirmarNovo = () => {
     if (!rascunho?.nome?.trim()) return toast('Informe o nome do produto.', 'erro')
     if (!(Number(rascunho.precoNormal) > 0)) return toast('Informe um preço válido.', 'erro')
-    const produto = {
+    const produto = comEstrela({
       ...rascunho,
       id: rascunho.id || globalThis.crypto?.randomUUID?.() || `produto-${Date.now()}`,
       loja: rascunho.loja || 'loja3',
       estoque: Math.max(1, Number(rascunho.estoque) || 1),
       precoNormal: Number(rascunho.precoNormal),
-    }
+    })
     salvarProdutoNaFila(produto, 'scanner-jornal')
     if (produto.validade) registrarLote({ produtoId: produto.id, loja: produto.loja, validade: produto.validade, quantidade: produto.estoque })
-    toast(`${produto.nome} cadastrado e adicionado à fila do jornal!`)
+    toast(`${produto.nome} cadastrado e adicionado à fila do jornal!${estrela ? ' Com estrela no Mercado Encarte.' : ''}`)
     setRascunho(null)
     setCodigo('')
     inputRef.current?.focus()
@@ -176,6 +196,8 @@ export default function ScannerJornal() {
         </button>
       </div>
 
+      <EstrelaMercado ativo={estrela} onChange={setEstrela} className="mt-2 w-full" texto="Estrela ao adicionar: entra também no Mercado Encarte de hoje" />
+
       {scanning ? (
         <div className="relative mt-3 overflow-hidden rounded-xl bg-black">
           <video ref={camera.videoRef} className="max-h-72 w-full object-cover" muted playsInline autoPlay />
@@ -227,6 +249,10 @@ export default function ScannerJornal() {
                   <div className="truncate text-sm font-bold text-ink">{produto.nome}</div>
                   <div className="truncate text-xs text-ink-soft">{[produto.marca, produto.gramagem].filter(Boolean).join(' · ') || 'Na fila do jornal'}</div>
                 </div>
+                <button type="button" onClick={() => alternarEstrela(produto)} aria-pressed={noMercadoEncarte(produto)} aria-label={`${noMercadoEncarte(produto) ? 'Tirar a estrela de' : 'Dar estrela para'} ${produto.nome}`}
+                  className={`rounded p-1.5 ${noMercadoEncarte(produto) ? 'bg-[#c1121f] text-[#ffd60a]' : 'text-ink-soft/60 hover:bg-[#c1121f]/10 hover:text-[#c1121f]'}`}>
+                  <Icon name="Star" size={15} fill={noMercadoEncarte(produto) ? '#ffd60a' : 'none'} />
+                </button>
                 <button onClick={() => { removerDaFila(produto.id); toast(`${produto.nome} removido da fila.`, 'info') }} aria-label={`Remover ${produto.nome} da fila`} className="rounded p-1.5 text-critical hover:bg-critical/10"><Icon name="X" size={15} /></button>
               </div>
             ))}

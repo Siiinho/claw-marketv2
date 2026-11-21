@@ -211,6 +211,33 @@ export default function Jornal() {
     toast(dia ? `${produto.nome}: oferta de ${rotuloDia(dia)} no Mercado Encarte.` : `${produto.nome} saiu do Mercado Encarte.`)
   }
   const alternarMercado = (produto) => diaDoMercado(produto, noMercadoEncarte(produto) ? null : dataISOmaisDias(0))
+  // Segunda lista: os produtos com estrela ficam separados da fila normal.
+  const estreladosPainel = filaDoPainel.filter((p) => noMercadoEncarte(p))
+    .sort((a, b) => String(a.encarteMercadoDia).localeCompare(String(b.encarteMercadoDia)))
+  const outrosPainel = filaDoPainel.filter((p) => !noMercadoEncarte(p))
+  const linhaPainel = (p) => {
+    const setorP = setorById(p.setor)
+    const estrelado = noMercadoEncarte(p)
+    return (
+      <div key={p.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-cream-200">
+        <input type="checkbox" checked={incluir(p.id)} onChange={() => toggleIncluir(p.id)} aria-label={`Incluir ${p.nome}`} className="h-4 w-4 shrink-0 accent-bengala" />
+        <ProdutoThumb produto={p} size={28} />
+        <span className="min-w-0 flex-1">
+          <span className="block whitespace-normal break-words text-sm leading-snug text-ink">{p.nome}</span>
+          <span className="block text-[11px] font-bold" style={{ color: setorP.corTag || setorP.cor }}>
+            {(!ehSetor || ehMercado) ? setorP.nome : null}
+            {estrelado ? <span className={`${(!ehSetor || ehMercado) ? 'ml-1 ' : ''}rounded bg-[#c1121f] px-1 text-white`}>{rotuloDia(p.encarteMercadoDia)}</span> : null}
+          </span>
+        </span>
+        {p.origemFila === 'vencimento' && <Pill cor="#d9641f" bg="#f47b361a">interna</Pill>}
+        <button type="button" onClick={() => alternarMercado(p)} aria-pressed={estrelado} aria-label={`${estrelado ? 'Tirar a estrela de' : 'Dar estrela para'} ${p.nome}`} title="Estrela: Mercado Encarte (oferta de hoje)"
+          className={`shrink-0 rounded-lg p-1.5 ${estrelado ? 'bg-[#c1121f] text-[#ffd60a]' : 'text-ink-soft/60 hover:bg-[#c1121f]/10 hover:text-[#c1121f]'}`}>
+          <Icon name="Star" size={15} fill={estrelado ? '#ffd60a' : 'none'} />
+        </button>
+        <button onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="shrink-0 rounded p-1.5 text-info hover:bg-info/10"><Icon name="Pencil" size={15} /></button>
+      </div>
+    )
+  }
   const proximosDias = Array.from({ length: 7 }, (_, i) => dataISOmaisDias(i))
   // O site do cliente sempre recebe todos os produtos; cada setor vira uma aba com o template dele.
   const ordenarParaJornal = (lista) => [
@@ -488,31 +515,32 @@ export default function Jornal() {
                 </button>
               </div>
               {filaDoPainel.length === 0 ? (
-                <p className="px-1 py-3 text-sm text-ink-soft">{ehMercado ? 'Fila vazia. Bipe os produtos e toque na estrela dos que entram no Mercado Encarte.' : ehSetor ? `Nenhum produto de ${nomeJornal} na fila. Bipe um produto desse setor ou mude o setor dele no lápis.` : 'Fila vazia. Bipe os produtos acima.'}</p>
+                <p className="px-1 py-3 text-sm text-ink-soft">{ehMercado ? 'Fila vazia. Bipe os produtos com a estrela ligada, ou toque na estrela dos que entram no Mercado Encarte.' : ehSetor ? `Nenhum produto de ${nomeJornal} na fila. Bipe um produto desse setor ou mude o setor dele no lápis.` : 'Fila vazia. Bipe os produtos acima.'}</p>
               ) : (
-                <div className="max-h-72 space-y-1 overflow-y-auto">
-                  {filaDoPainel.map((p) => {
-                    const setorP = setorById(p.setor)
-                    return (
-                      <div key={p.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-cream-200">
-                        <input type="checkbox" checked={incluir(p.id)} onChange={() => toggleIncluir(p.id)} aria-label={`Incluir ${p.nome}`} className="h-4 w-4 shrink-0 accent-bengala" />
-                        <ProdutoThumb produto={p} size={28} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block whitespace-normal break-words text-sm leading-snug text-ink">{p.nome}</span>
-                          {(!ehSetor || ehMercado) && <span className="block text-[11px] font-bold" style={{ color: setorP.corTag || setorP.cor }}>{setorP.nome}{noMercadoEncarte(p) ? <span className="ml-1 rounded bg-[#c1121f] px-1 text-white">{rotuloDia(p.encarteMercadoDia)}</span> : null}</span>}
-                        </span>
-                        {p.origemFila === 'vencimento' && <Pill cor="#d9641f" bg="#f47b361a">interna</Pill>}
-                        <button type="button" onClick={() => alternarMercado(p)} aria-pressed={noMercadoEncarte(p)} aria-label={`${noMercadoEncarte(p) ? 'Tirar do' : 'Pôr no'} Mercado Encarte: ${p.nome}`} title="Mercado Encarte (oferta de hoje)"
-                          className={`shrink-0 rounded-lg p-1.5 ${noMercadoEncarte(p) ? 'bg-[#c1121f] text-[#ffd60a]' : 'text-ink-soft/60 hover:bg-[#c1121f]/10 hover:text-[#c1121f]'}`}>
-                          <Icon name="Star" size={15} fill={noMercadoEncarte(p) ? '#ffd60a' : 'none'} />
-                        </button>
-                        <button onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="shrink-0 rounded p-1.5 text-info hover:bg-info/10"><Icon name="Pencil" size={15} /></button>
-                      </div>
-                    )
-                  })}
-                </div>
+                <>
+                  <div className="mb-2 overflow-hidden rounded-xl border-2 border-[#c1121f]/40">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-black uppercase tracking-wide text-white" style={{ background: 'linear-gradient(120deg,#c1121f,#fb5607)' }}>
+                      <Icon name="Star" size={14} fill="#ffd60a" className="text-[#ffd60a]" />
+                      <span className="flex-1">Só estrelas · Mercado Encarte</span>
+                      <span className="tabular-nums">{estreladosPainel.length}</span>
+                    </div>
+                    {estreladosPainel.length ? (
+                      <div className="max-h-56 space-y-1 overflow-y-auto bg-[#c1121f]/5 p-1">{estreladosPainel.map(linhaPainel)}</div>
+                    ) : (
+                      <p className="bg-[#c1121f]/5 px-2.5 py-2 text-[11px] text-ink-soft">Nenhum produto com estrela. Ligue a estrela no scanner ao bipar, ou toque na estrela de um produto da lista abaixo.</p>
+                    )}
+                  </div>
+                  <div className="mb-1 flex items-center gap-1.5 px-1 text-xs font-black uppercase tracking-wide text-navy">
+                    <Icon name="ListChecks" size={14} /> <span className="flex-1">Fila do jornal</span><span className="tabular-nums">{outrosPainel.length}</span>
+                  </div>
+                  {outrosPainel.length ? (
+                    <div className="max-h-72 space-y-1 overflow-y-auto">{outrosPainel.map(linhaPainel)}</div>
+                  ) : (
+                    <p className="px-1 py-2 text-[11px] text-ink-soft">Todos os produtos daqui estão com estrela.</p>
+                  )}
+                </>
               )}
-              <p className="mt-1 px-1 text-[11px] text-ink-soft">Estrela: entra no Mercado Encarte (hoje; troque o dia tocando no produto na prévia). Sai sozinho depois do dia. Selo, preço e posição na arte: toque no produto na prévia. Setor errado: use o lápis.</p>
+              <p className="mt-1 px-1 text-[11px] text-ink-soft">Estrela: o produto vai para a lista Só estrelas e entra no Mercado Encarte (hoje; troque o dia tocando no produto na prévia). Sai sozinho depois do dia. Selo, preço e posição na arte: toque no produto na prévia. Setor errado: use o lápis.</p>
             </div>
 
             <div className="card-bengala space-y-3 p-4">
@@ -915,7 +943,47 @@ function FilaView({ fila, vencimento, remover, salvarProduto, toast }) {
   if (fila.length === 0) {
     return <EmptyState icon="ListChecks" titulo="Fila vazia" descricao="Em Produtos ou Ofertas, use o botão de jornal para adicionar produtos aqui." />
   }
-  const grupos = SETORES.map((s) => ({ setor: s, itens: fila.filter((p) => p.setor === s.id) })).filter((g) => g.itens.length)
+  const estrelados = fila.filter((p) => noMercadoEncarte(p))
+    .sort((a, b) => String(a.encarteMercadoDia).localeCompare(String(b.encarteMercadoDia)))
+  const grupos = SETORES.map((s) => ({ setor: s, itens: fila.filter((p) => p.setor === s.id && !noMercadoEncarte(p)) })).filter((g) => g.itens.length)
+  const alternarEstrela = (p) => {
+    const ligar = !noMercadoEncarte(p)
+    salvarProduto({ id: p.id, encarteMercadoDia: ligar ? dataISOmaisDias(0) : null })
+    toast(ligar ? `${p.nome} entrou nos estrelados (Mercado Encarte de hoje).` : `${p.nome} saiu dos estrelados.`, 'info')
+  }
+  const linhaFila = (p, comSetor = false) => {
+    const estrelado = noMercadoEncarte(p)
+    const setorP = setorById(p.setor)
+    return (
+      <div key={p.id} className="flex items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-4">
+        <ProdutoThumb produto={p} size={36} />
+        <div className="min-w-0 flex-1">
+          <div className="whitespace-normal break-words text-sm font-medium leading-snug text-ink">{p.nome}</div>
+          <div className="text-xs text-ink-soft">
+            {comSetor ? <span className="font-bold" style={{ color: setorP.corTag || setorP.cor }}>{setorP.nome} </span> : null}
+            {estrelado ? <span className="mr-1 rounded bg-[#c1121f] px-1 font-bold text-white">{rotuloDia(p.encarteMercadoDia)}</span> : null}
+            {p.marca}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {p.origemFila === 'vencimento'
+              ? <Pill cor="#c42b2b" bg="#fbe5e5">Vencimento</Pill>
+              : p.origemFila === 'scanner' || p.origemFila === 'scanner-jornal'
+                ? <Pill cor="#1c6e48" bg="#e2f3ea">Confirmado no scanner</Pill>
+                : p.origemFila === 'oferta'
+                  ? <Pill cor="#2e6fb0" bg="#e6f1fb">Oferta confirmada</Pill>
+                : <Pill>Manual</Pill>}
+            <span className="text-sm font-medium">{formatBRL(p.precoPromo || p.precoNormal)}</span>
+          </div>
+        </div>
+        <button type="button" onClick={() => alternarEstrela(p)} aria-pressed={estrelado} aria-label={`${estrelado ? 'Tirar a estrela de' : 'Dar estrela para'} ${p.nome}`}
+          className={`rounded p-1.5 ${estrelado ? 'bg-[#c1121f] text-[#ffd60a]' : 'text-ink-soft/60 hover:bg-[#c1121f]/10 hover:text-[#c1121f]'}`}>
+          <Icon name="Star" size={15} fill={estrelado ? '#ffd60a' : 'none'} />
+        </button>
+        <button onClick={() => setEditando({ ...p })} aria-label={`Editar ${p.nome}`} className="rounded p-1.5 text-info hover:bg-info/10"><Icon name="Pencil" size={15} /></button>
+        <button onClick={() => { remover(p.id); toast('Removido da fila.', 'info') }} aria-label={`Remover ${p.nome} da fila`} className="rounded p-1 text-critical hover:bg-critical/10"><Icon name="X" size={15} /></button>
+      </div>
+    )
+  }
   const salvarEdicao = () => {
     if (!editando?.nome?.trim()) return toast('Informe o nome do produto.', 'erro')
     if (!(Number(editando.precoNormal) > 0)) return toast('Informe um preço válido.', 'erro')
@@ -950,7 +1018,18 @@ function FilaView({ fila, vencimento, remover, salvarProduto, toast }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div className="card-bengala p-3"><div className="text-xs text-ink-soft">Na fila</div><div className="text-xl font-bold text-ink">{fila.length}</div></div>
         <div className="card-bengala p-3"><div className="text-xs text-ink-soft">De vencimento</div><div className="text-xl font-bold text-critical">{vencimento.length}</div></div>
-        <div className="card-bengala p-3"><div className="text-xs text-ink-soft">Setores</div><div className="text-xl font-bold text-ink">{grupos.length}</div></div>
+        <div className="card-bengala p-3"><div className="text-xs text-ink-soft">Com estrela</div><div className="text-xl font-bold text-[#c1121f]">{estrelados.length}</div></div>
+      </div>
+      <div className="card-bengala overflow-hidden border-2 border-[#c1121f]/40">
+        <div className="flex items-center gap-2 px-4 py-2 text-white" style={{ background: 'linear-gradient(120deg,#c1121f,#fb5607)' }}>
+          <Icon name="Star" size={16} fill="#ffd60a" className="text-[#ffd60a]" /> <span className="font-bold">Só estrelas · Mercado Encarte</span>
+          <span className="text-xs opacity-80">({estrelados.length})</span>
+        </div>
+        {estrelados.length ? (
+          <div className="divide-y divide-ink-soft/8">{estrelados.map((p) => linhaFila(p, true))}</div>
+        ) : (
+          <p className="px-4 py-3 text-sm text-ink-soft">Nenhum produto com estrela. Ligue a estrela no scanner na hora de adicionar, ou toque na estrela de um produto abaixo.</p>
+        )}
       </div>
       {grupos.map((g) => (
         <div key={g.setor.id} className="card-bengala overflow-hidden">
@@ -958,27 +1037,7 @@ function FilaView({ fila, vencimento, remover, salvarProduto, toast }) {
             <Icon name={g.setor.icone} size={16} /> <span className="font-bold">{g.setor.nome}</span>
             <span className="text-xs opacity-70">({g.itens.length})</span>
           </div>
-          <div className="divide-y divide-ink-soft/8">
-            {g.itens.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
-                <ProdutoThumb produto={p} size={36} />
-                <div className="min-w-0 flex-1">
-                  <div className="whitespace-normal break-words text-sm font-medium leading-snug text-ink">{p.nome}</div>
-                  <div className="text-xs text-ink-soft">{p.marca}</div>
-                </div>
-                {p.origemFila === 'vencimento'
-                  ? <Pill cor="#c42b2b" bg="#fbe5e5">Vencimento</Pill>
-                  : p.origemFila === 'scanner'
-                    ? <Pill cor="#1c6e48" bg="#e2f3ea">Confirmado no scanner</Pill>
-                    : p.origemFila === 'oferta'
-                      ? <Pill cor="#2e6fb0" bg="#e6f1fb">Oferta confirmada</Pill>
-                    : <Pill>Manual</Pill>}
-                <span className="text-sm font-medium">{formatBRL(p.precoPromo || p.precoNormal)}</span>
-                <button onClick={() => setEditando({ ...p })} aria-label={`Editar ${p.nome}`} className="rounded p-1.5 text-info hover:bg-info/10"><Icon name="Pencil" size={15} /></button>
-                <button onClick={() => { remover(p.id); toast('Removido da fila.', 'info') }} className="rounded p-1 text-critical hover:bg-critical/10"><Icon name="X" size={15} /></button>
-              </div>
-            ))}
-          </div>
+          <div className="divide-y divide-ink-soft/8">{g.itens.map((p) => linhaFila(p))}</div>
         </div>
       ))}
       <Modal

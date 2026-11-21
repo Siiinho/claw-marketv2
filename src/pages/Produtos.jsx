@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { useStore, podeEditar } from '../store/StoreContext'
 import { Icon, PrecoVarejo, StatusBadge, ProdutoThumb, EmptyState, Botao, Modal, Campo, inputCls, Pill } from '../components/ui'
-import { SETORES, setorById, statusValidade, formatBRL, arquivoParaDataURL, dataISOmaisDias } from '../lib/utils'
+import { SETORES, setorById, statusValidade, formatBRL, arquivoParaDataURL, dataISOmaisDias, noMercadoEncarte } from '../lib/utils'
 import {
   buscarImagemProduto,
   buscarProdutoCatalogo,
@@ -209,8 +209,21 @@ export default function Produtos() {
   const adicionarFila = (p) => {
     const origem = ['critico', 'atencao', 'vencido'].includes(statusValidade(p.validade).id) ? 'vencimento' : 'manual'
     toggleFila(p.id, origem)
-    toast(p.naFila ? 'Removido da fila do jornal.' : 'Adicionado à fila do jornal!', p.naFila ? 'info' : 'sucesso')
+    toast(p.naFila ? 'Removido da fila do jornal.' : 'Adicionado à fila do jornal! Toque na estrela se ele for oferta do Mercado Encarte.', p.naFila ? 'info' : 'sucesso')
   }
+  // Estrela: só aparece para produto que está indo para o jornal; manda para a lista de estrelados (Mercado Encarte de hoje).
+  const alternarEstrela = (p) => {
+    const ligar = !noMercadoEncarte(p)
+    salvarProduto({ id: p.id, encarteMercadoDia: ligar ? dataISOmaisDias(0) : null })
+    toast(ligar ? `${p.nome} entrou nos estrelados (Mercado Encarte de hoje).` : `${p.nome} saiu dos estrelados.`, 'info')
+  }
+  const BotaoEstrela = ({ p }) => (p.naFila ? (
+    <button type="button" onClick={() => alternarEstrela(p)} aria-pressed={noMercadoEncarte(p)}
+      title={noMercadoEncarte(p) ? 'Tirar a estrela (Mercado Encarte)' : 'Dar estrela: Mercado Encarte de hoje'}
+      className={`rounded-lg p-1.5 ${noMercadoEncarte(p) ? 'bg-[#c1121f] text-[#ffd60a]' : 'text-ink-soft/60 hover:bg-[#c1121f]/10 hover:text-[#c1121f]'}`}>
+      <Icon name="Star" size={16} fill={noMercadoEncarte(p) ? '#ffd60a' : 'none'} />
+    </button>
+  ) : null)
 
   return (
     <div className="space-y-4">
@@ -288,6 +301,7 @@ export default function Produtos() {
                         >
                           <Icon name={p.naFila ? 'Check' : 'Newspaper'} size={16} />
                         </button>
+                        <BotaoEstrela p={p} />
                         {editavel && (
                           <>
                             <button onClick={() => abrirEditar(p)} className="rounded-lg p-1.5 text-ink-soft hover:bg-cream-200" title="Editar">
@@ -322,6 +336,7 @@ export default function Produtos() {
                     <button onClick={() => adicionarFila(p)} className={`rounded-lg p-1.5 ${p.naFila ? 'bg-coral/15 text-coral' : 'text-ink-soft'}`}>
                       <Icon name="Newspaper" size={16} />
                     </button>
+                    <BotaoEstrela p={p} />
                     {editavel && (
                       <button onClick={() => abrirEditar(p)} className="rounded-lg p-1.5 text-ink-soft">
                         <Icon name="Pencil" size={16} />

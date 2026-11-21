@@ -2,7 +2,13 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
 import { Icon, StatusBadge, ProdutoThumb, Botao, PrecoVarejo, inputCls } from '../components/ui'
-import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, precoComRegra, labelDias } from '../lib/utils'
+import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, precoComRegra, labelDias, dataISOmaisDias } from '../lib/utils'
+import EstrelaMercado from '../components/EstrelaMercado'
+
+const CHAVE_ESTRELA = 'clawmarket.scanner.estrela'
+function lerEstrela() {
+  try { return localStorage.getItem(CHAVE_ESTRELA) === '1' } catch { return false }
+}
 import { buscarProdutoBengala } from '../lib/catalogoBengala'
 import { useLeitorCamera } from '../lib/useLeitorCamera'
 import { buscarImagemProduto, buscarProdutoAutomatizado, imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
@@ -28,6 +34,12 @@ export default function Scanner() {
   const [novoEstoque, setNovoEstoque] = useState('')
   const [veredito, setVeredito] = useState(null) // { tipo:'jornal'|'ok', desconto, precoNovo, dias }
   const [historico, setHistorico] = useState([]) // sessão de bipes
+  // Estrela do Mercado Encarte: fica ligada entre um bipe e outro.
+  const [estrela, setEstrelaEstado] = useState(lerEstrela)
+  const setEstrela = (valor) => {
+    setEstrelaEstado(valor)
+    try { localStorage.setItem(CHAVE_ESTRELA, valor ? '1' : '0') } catch { /* sem armazenamento */ }
+  }
   const [buscando, setBuscando] = useState(false)
   const inputRef = useRef(null)
 
@@ -164,6 +176,7 @@ export default function Scanner() {
       estoque: Math.max(Number(resultado.estoque) || 0, quantidade),
       naFila: true,
       origemFila,
+      ...(estrela ? { encarteMercadoDia: dataISOmaisDias(0) } : {}),
     }
 
     salvarProdutoNaFila(atualizado, origemFila)
@@ -378,7 +391,8 @@ export default function Scanner() {
                 <input type="number" min="1" inputMode="numeric" value={quantidadeLote} onChange={(e) => setQuantidadeLote(e.target.value)} className={`${inputCls} py-2.5`} />
               </label>
             </div>
-            <Botao onClick={verificar} disabled={Boolean(veredito)} className="mt-3 min-h-12 w-full justify-center px-5 py-3 text-base">
+            <EstrelaMercado ativo={estrela} onChange={setEstrela} className="mt-3 w-full" texto="Estrela: entra também no Mercado Encarte de hoje" />
+            <Botao onClick={verificar} disabled={Boolean(veredito)} className="mt-2 min-h-12 w-full justify-center px-5 py-3 text-base">
               <Icon name="Newspaper" size={18} /> {veredito ? 'Produto confirmado na fila' : 'Confirmar e adicionar ao jornal'}
             </Botao>
           </div>
