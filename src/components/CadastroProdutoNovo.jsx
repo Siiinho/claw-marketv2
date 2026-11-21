@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SETORES, arquivoParaDataURL, dataISOmaisDias } from '../lib/utils'
+import { setorPeloNome } from '../lib/classificarSetor'
 import { Botao, Campo, Icon, ProdutoThumb, inputCls } from './ui'
 
 const UNIDADES = ['UNI', 'KG', 'PCT', 'CX', 'BDJ', 'DZ']
@@ -24,7 +25,23 @@ export default function CadastroProdutoNovo({ inicial, comLote = false, titulo =
     unidade: inicial?.unidade || unidadePadrao(inicial?.setor || 'mercearia'),
   }))
   const [lendoFoto, setLendoFoto] = useState(false)
+  // Enquanto ninguém escolhe o setor, ele acompanha o nome (ex.: "Limpador..." vai para Limpeza).
+  const [setorTocado, setSetorTocado] = useState(false)
   const muda = (campo) => (e) => setP((atual) => ({ ...atual, [campo]: e.target.value }))
+
+  const mudarNome = (e) => {
+    const nome = e.target.value
+    setP((atual) => {
+      const sugerido = setorTocado ? null : setorPeloNome(nome)
+      if (!sugerido || sugerido === atual.setor) return { ...atual, nome }
+      return {
+        ...atual,
+        nome,
+        setor: sugerido,
+        unidade: atual.unidade === unidadePadrao(atual.setor) ? unidadePadrao(sugerido) : atual.unidade,
+      }
+    })
+  }
 
   const trocarSetor = (setor) => setP((atual) => ({
     ...atual,
@@ -75,6 +92,8 @@ export default function CadastroProdutoNovo({ inicial, comLote = false, titulo =
       precoPromo: promo > 0 ? promo : null,
       estoque: Math.max(1, Number(p.estoque) || 1),
       cadastradoNoScanner: true,
+      // quem cadastrou escolheu o setor: a correção automática não troca
+      setorManual: true,
     })
   }
 
@@ -104,11 +123,11 @@ export default function CadastroProdutoNovo({ inicial, comLote = false, titulo =
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Campo label="Código de barras *"><input className={inputCls} inputMode="numeric" value={p.codigoBarras || ''} onChange={muda('codigoBarras')} /></Campo>
-        <div className="col-span-2"><Campo label="Nome do produto *"><input className={inputCls} value={p.nome || ''} onChange={muda('nome')} placeholder="Ex.: Arroz Tio João 5kg" autoFocus /></Campo></div>
+        <div className="col-span-2"><Campo label="Nome do produto *"><input className={inputCls} value={p.nome || ''} onChange={mudarNome} placeholder="Ex.: Arroz Tio João 5kg" autoFocus /></Campo></div>
         <Campo label="Marca"><input className={inputCls} value={p.marca || ''} onChange={muda('marca')} /></Campo>
         <Campo label="Gramagem"><input className={inputCls} value={p.gramagem || ''} onChange={muda('gramagem')} placeholder="350 g" /></Campo>
         <Campo label="Setor *">
-          <select className={inputCls} value={p.setor || 'mercearia'} onChange={(e) => trocarSetor(e.target.value)}>
+          <select className={inputCls} value={p.setor || 'mercearia'} onChange={(e) => { setSetorTocado(true); trocarSetor(e.target.value) }}>
             {SETORES.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
           </select>
         </Campo>

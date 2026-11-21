@@ -14,6 +14,7 @@ import {
   listarPerfisNuvem, alterarPapelNuvem, baixarTudoNuvem, gravarNuvem, assinarNuvem, enviarFotoNuvem,
 } from '../lib/nuvem'
 import { fotoDoCatalogo, ehFotoDaPastaLocal } from '../lib/catalogoBengala'
+import { setorPeloNome } from '../lib/classificarSetor'
 
 const KEY = 'clawmarket:v1'
 const LIMPEZA_CATALOGO_KEY = 'clawmarket:catalogo-limpo:2026-07-24'
@@ -514,7 +515,8 @@ export function StoreProvider({ children }) {
     (prod) => {
       setProdutos((list) => {
         if (prod.id && list.some((p) => p.id === prod.id)) {
-          return list.map((p) => (p.id === prod.id ? { ...p, ...prod } : p))
+          // Setor trocado à mão (lápis ou edição): a correção automática de setores não mexe mais nele.
+          return list.map((p) => (p.id === prod.id ? { ...p, ...prod, ...(prod.setor && p.setor && prod.setor !== p.setor ? { setorManual: true } : {}) } : p))
         }
         const loja = prod.loja || (lojaAtiva !== 'todas' ? lojaAtiva : LOJAS[0].id)
         return [{
@@ -698,6 +700,24 @@ export function StoreProvider({ children }) {
     (produtoId) => ofertas.find((o) => o.produtoId === produtoId && o.ativa) || null,
     [ofertas]
   )
+
+  // Correção de setores dos produtos já salvos (ex.: limpador Ypê que estava em Mercearia): vale a
+  // regra pelo nome, a mesma dos catálogos. Não mexe no setor escolhido à mão (`setorManual`) e só
+  // roda nos aparelhos de admin ou gerente, que são quem cuida do jornal.
+  const setoresConferidos = useRef(new Set())
+  useEffect(() => {
+    if (!(usuario?.papel === 'admin' || usuario?.papel === 'gerente')) return
+    const trocas = new Map()
+    for (const p of produtos) {
+      if (!p?.id || p.setorManual) continue
+      const chave = `${p.id}|${p.nome}|${p.setor}`
+      if (setoresConferidos.current.has(chave)) continue
+      setoresConferidos.current.add(chave)
+      const novo = setorPeloNome(p.nome) || setorPeloNome(p.nomeBengala)
+      if (novo && novo !== p.setor) trocas.set(p.id, novo)
+    }
+    if (trocas.size) setProdutos((lista) => lista.map((p) => (trocas.has(p.id) && !p.setorManual ? { ...p, setor: trocas.get(p.id) } : p)))
+  }, [produtos, usuario?.papel])
 
   // produtos da loja ativa ('todas' = rede consolidada)
   const produtosVisiveis = useMemo(
