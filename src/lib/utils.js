@@ -82,7 +82,7 @@ export const diaSemana = (iso) => {
 // <= 2 dias: crítico | <= 7 dias: atenção | > 7: normal | < 0: vencido
 export function statusValidade(iso) {
   const d = diasParaVencer(iso)
-  if (d == null) return { id: 'sem-validade', label: 'Sem validade', cor: '#6b5a54', bg: '#f3ead9', dias: null }
+  if (d == null) return { id: 'sem-validade', label: 'Sem validade', cor: '#566274', bg: '#e8edf3', dias: null }
   if (d < 0) return { id: 'vencido', label: 'Vencido', cor: '#7a241b', bg: '#f3dcd8', dias: d }
   if (d <= 2) return { id: 'critico', label: 'Crítico', cor: '#c42b2b', bg: '#fbe5e5', dias: d }
   if (d <= 7) return { id: 'atencao', label: 'Atenção', cor: '#a9740d', bg: '#fdf0d8', dias: d }
@@ -167,6 +167,9 @@ export function arquivoParaDataURL(file, max = 480) {
     reader.readAsDataURL(file)
   })
 }
+
+// "1 produto" / "3 produtos": evita o "produto(s)" na interface
+export const plural = (n, singular, pluralForma) => `${n} ${n === 1 ? singular : pluralForma}`
 
 // ---- selos de oferta (aparecem no encarte impresso e no digital) ----
 // A validade do produto NUNCA vai para o encarte: o selo é o que o cliente vê.
