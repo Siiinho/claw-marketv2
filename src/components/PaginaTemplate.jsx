@@ -181,11 +181,25 @@ export function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
   )
 }
 
-// Posições das células dentro da área de produtos.
-export function posicoesGrade(formatoId, layout, quantidade, topo) {
+// Rodapé oficial do Bengala (o mesmo do jornal impresso): QR, WhatsApp, lojas, cartões e avisos.
+export const RODAPE_OFICIAL = `${import.meta.env.BASE_URL}templates/rodape-oficial-bengala.webp`
+const RODAPE_RAZAO = 2160 / 384
+// Na largura da página; na TV (deitada) fica mais baixo, centralizado numa faixa branca.
+export const alturaRodape = (f) => Math.round(Math.min(f.largura / RODAPE_RAZAO, f.altura * 0.18))
+
+export function RodapeOficial({ altura }) {
+  return (
+    <div className="absolute inset-x-0 bottom-0 flex justify-center bg-white" style={{ height: altura, zIndex: 1 }}>
+      <img src={RODAPE_OFICIAL} alt="Lojas, WhatsApp, redes sociais e cartões aceitos do Bengala" className="block h-full max-w-full object-contain" />
+    </div>
+  )
+}
+
+// Posições das células dentro da área de produtos (acima do rodapé, quando houver).
+export function posicoesGrade(formatoId, layout, quantidade, topo, rodape = 0) {
   const f = formatoById(formatoId)
   const y0 = topo || f.topo
-  const area = { x: MARGEM, y: y0, w: f.largura - MARGEM * 2, h: f.altura - y0 - MARGEM }
+  const area = { x: MARGEM, y: y0, w: f.largura - MARGEM * 2, h: f.altura - y0 - (rodape ? rodape + GAP : MARGEM) }
   const montar = (cols, lins) => {
     const w = (area.w - GAP * (cols - 1)) / cols
     const h = (area.h - GAP * (lins - 1)) / lins
@@ -295,7 +309,8 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
   const usarFundo = !!imagemFundo
   // Nos temas com arte, a arte do título desce um pouco mais no Feed.
   const topo = tema.arte && f.id === 'feed' && !fundo ? 500 : f.topo
-  const posicoes = posicoesGrade(f.id, layout, itens.length, topo)
+  const rodape = alturaRodape(f)
+  const posicoes = posicoesGrade(f.id, layout, itens.length, topo, rodape)
   // Temas com arte nos formatos altos: logo, chamada, validade e endereço numa coluna ao lado da arte.
   const colunaArte = tema.arte && !f.compacto && !fundo
   const larguraTitulo = f.largura - MARGEM * 2
@@ -352,8 +367,10 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
         </div>}
       </div>
 
+      <RodapeOficial altura={rodape} />
+
       {numero && total > 1 && (
-        <div className="absolute rounded-full bg-black/50 px-3 py-1 text-[18px] font-black text-white" style={{ right: 12, bottom: 6, zIndex: 2 }}>
+        <div className="absolute rounded-full bg-black/50 px-3 py-1 text-[18px] font-black text-white" style={{ right: 12, bottom: rodape + 6, zIndex: 2 }}>
           {numero}/{total}
         </div>
       )}
