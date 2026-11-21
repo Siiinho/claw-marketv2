@@ -2,7 +2,14 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
 import { Icon, StatusBadge, ProdutoThumb, Botao, PrecoVarejo, inputCls } from '../components/ui'
-import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, precoComRegra, labelDias } from '../lib/utils'
+import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, precoComRegra, labelDias, dataISOmaisDias } from '../lib/utils'
+import EstrelaMercado from '../components/EstrelaMercado'
+import CadastroProdutoNovo from '../components/CadastroProdutoNovo'
+
+const CHAVE_ESTRELA = 'clawmarket.scanner.estrela'
+function lerEstrela() {
+  try { return localStorage.getItem(CHAVE_ESTRELA) === '1' } catch { return false }
+}
 import { buscarProdutoBengala } from '../lib/catalogoBengala'
 import { useLeitorCamera } from '../lib/useLeitorCamera'
 import { buscarImagemProduto, buscarProdutoAutomatizado, imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
@@ -18,9 +25,11 @@ export default function Scanner() {
     criarOferta,
     excluirOferta,
     ofertaDoProduto,
+    config,
     toast,
   } = useStore()
   const [codigo, setCodigo] = useState('')
+  const [codigoNovo, setCodigoNovo] = useState('') // código bipado que não existe em lugar nenhum
   const [resultado, setResultado] = useState(undefined) // undefined | null | produto
   const [validadeLote, setValidadeLote] = useState('')
   const [codigoLote, setCodigoLote] = useState('')
@@ -28,6 +37,12 @@ export default function Scanner() {
   const [novoEstoque, setNovoEstoque] = useState('')
   const [veredito, setVeredito] = useState(null) // { tipo:'jornal'|'ok', desconto, precoNovo, dias }
   const [historico, setHistorico] = useState([]) // sessão de bipes
+  // Estrela do Mercado Encarte: fica ligada entre um bipe e outro.
+  const [estrela, setEstrelaEstado] = useState(lerEstrela)
+  const setEstrela = (valor) => {
+    setEstrelaEstado(valor)
+    try { localStorage.setItem(CHAVE_ESTRELA, valor ? '1' : '0') } catch { /* sem armazenamento */ }
+  }
   const [buscando, setBuscando] = useState(false)
   const inputRef = useRef(null)
 
@@ -115,12 +130,14 @@ export default function Scanner() {
       }
 
       setResultado(p || null)
+      setCodigoNovo(p ? '' : c)
       setValidadeLote(p?.validade || '')
       setCodigoLote('')
       setQuantidadeLote('1')
       setNovoEstoque(p ? String(p.estoque) : '')
     } catch (_) {
       setResultado(null)
+      setCodigoNovo(c)
       toast('Não foi possível consultar o catálogo agora.', 'erro')
     } finally {
       setBuscando(false)
@@ -153,7 +170,7 @@ export default function Scanner() {
 
     const quantidade = Math.max(1, Number(quantidadeLote) || 1)
     const dias = diasParaVencer(validadeLote)
-    const regra = regraDoProduto(dias, config.regrasPreco || [])
+    const regra = regraDoProduto(dias, config?.regrasPreco || [])
     const origemFila = regra ? 'vencimento' : 'scanner'
     const jaEstavaNaFila = Boolean(resultado.naFila)
     const ofertaExistente = ofertaDoProduto(resultado.id)
@@ -164,6 +181,7 @@ export default function Scanner() {
       estoque: Math.max(Number(resultado.estoque) || 0, quantidade),
       naFila: true,
       origemFila,
+      ...(estrela ? { encarteMercadoDia: dataISOmaisDias(0) } : {}),
     }
 
     salvarProdutoNaFila(atualizado, origemFila)
@@ -321,9 +339,24 @@ export default function Scanner() {
       </div>
 
       {resultado === null && (
-        <div className="anim-in flex items-center gap-3 rounded-xl border border-critical/30 bg-critical/10 px-4 py-3 text-critical">
-          <Icon name="SearchX" size={20} /> Produto não encontrado no cadastro.
-        </div>
+        // Código que não existe em lugar nenhum: passo de cadastro e depois segue para validade e jornal.
+        <CadastroProdutoNovo
+          key={codigoNovo}
+          inicial={{ codigoBarras: codigoNovo.replace(/\D/g, '') }}
+          toast={toast}
+          textoSalvar="Cadastrar e seguir para o jornal"
+          onCancelar={() => { setResultado(undefined); setCodigo(''); inputRef.current?.focus() }}
+          onSalvar={(novo) => {
+            const produto = { ...novo, validade: '', naFila: false, origemFila: null }
+            salvarProduto(produto)
+            setResultado(produto)
+            setValidadeLote('')
+            setCodigoLote('')
+            setQuantidadeLote('1')
+            setNovoEstoque(String(produto.estoque))
+            toast(`${produto.nome} cadastrado. Agora informe a validade e confirme no jornal.`)
+          }}
+        />
       )}
 
       {/* produto + verificação de validade */}
@@ -378,7 +411,8 @@ export default function Scanner() {
                 <input type="number" min="1" inputMode="numeric" value={quantidadeLote} onChange={(e) => setQuantidadeLote(e.target.value)} className={`${inputCls} py-2.5`} />
               </label>
             </div>
-            <Botao onClick={verificar} disabled={Boolean(veredito)} className="mt-3 min-h-12 w-full justify-center px-5 py-3 text-base">
+            <EstrelaMercado ativo={estrela} onChange={setEstrela} className="mt-3 w-full" texto="Estrela: entra também no Mercado Encarte de hoje" />
+            <Botao onClick={verificar} disabled={Boolean(veredito)} className="mt-2 min-h-12 w-full justify-center px-5 py-3 text-base">
               <Icon name="Newspaper" size={18} /> {veredito ? 'Produto confirmado na fila' : 'Confirmar e adicionar ao jornal'}
             </Botao>
           </div>

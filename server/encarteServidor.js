@@ -25,7 +25,7 @@ const ARQ = () => path.join(DIR(), 'encarte.json')
 const DIR_IMG = () => path.join(DIR(), 'img')
 const LIMITE_CORPO = 40 * 1024 * 1024
 
-const CAMPOS_ITEM = ['id', 'nome', 'marca', 'gramagem', 'setor', 'codigoBarras', 'seloOferta', 'unidade', 'precoNormal', 'precoJornal', 'descontoJornal', 'origemFila', 'imagem']
+const CAMPOS_ITEM = ['id', 'nome', 'marca', 'gramagem', 'setor', 'codigoBarras', 'seloOferta', 'unidade', 'precoNormal', 'precoJornal', 'descontoJornal', 'origemFila', 'imagem', 'encarteMercadoDia']
 const CAMPOS_LOJA = ['nome', 'endereco', 'cidade', 'whatsapp']
 const TIPOS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
 const MIME = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }

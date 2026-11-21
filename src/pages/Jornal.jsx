@@ -5,14 +5,15 @@ import { Icon, ProdutoThumb, EmptyState, Botao, Campo, inputCls, Pill, Modal } f
 import ScannerJornal from '../components/ScannerJornal'
 import CentralArtes from '../components/CentralArtes'
 import {
-  SETORES, setorById, formatBRL,
+  SETORES, setorById, formatBRL, MERCADO_ENCARTE, noMercadoEncarte,
   percentDesc, dataISOmaisDias, SELOS_OFERTA,
 } from '../lib/utils'
 import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
 import SeletorTema from '../components/SeletorTema'
 import SeloArte from '../components/SeloArte'
 import EditorCelula from '../components/EditorCelula'
-import PaginaTemplate, { Escalado, paginarTemplate, LARGURA, ALTURA } from '../components/PaginaTemplate'
+import { Escalado } from '../components/PaginaTemplate'
+import { PaginaEncarte, paginarEncarte, tamanhoPagina, itensDaPagina, ehFormatoJornal } from '../components/JornalMercado'
 import { temaCampanhaById, temasDoSetor, caminhoArte } from '../lib/temasCampanha'
 import { abrirJanelaPrevisualizacao, previsualizarImpressaoPaginas } from '../lib/exportar'
 import { imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
@@ -34,11 +35,18 @@ function paginasDoHistorico(jornal) {
     precoJornal: p.precoJornalCalculado ?? p.precoPromo ?? p.precoNormal,
     descontoJornal: p.descontoJornalCalculado ?? 0,
   }))
-  return paginarTemplate(itens, jornal?.layoutArte || 'grade', 'feed')
+  return paginarEncarte(itens, jornal?.layoutArte || 'grade')
 }
 
 // Escolhas do painel (jornal aberto e template de cada jornal) guardadas neste aparelho,
 // para não se perderem ao recarregar antes de publicar.
+// Próximos 7 dias para escolher o dia da oferta no Mercado Encarte.
+const NOMES_DIA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const rotuloDia = (iso) => {
+  const [a, m, d] = String(iso).split('-').map(Number)
+  return `${NOMES_DIA[new Date(Date.UTC(a, m - 1, d)).getUTCDay()]} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
+}
+
 const CHAVE_RASCUNHO = 'clawmarket:jornal-rascunho:v1'
 function lerRascunho() {
   try { return JSON.parse(localStorage.getItem(CHAVE_RASCUNHO) || '{}') || {} } catch (_) { return {} }
@@ -52,11 +60,14 @@ export default function Jornal() {
   const store = useStore()
   const { fila, config, jornais, ofertaDoProduto, salvarProduto, salvarJornal, excluirJornal, removerDaFila, toast } = store
   const [aba, setAba] = useState('gerar')
+  // Link do encarte (tag NFC), status do site e última publicação: só o admin vê.
+  const ehAdmin = store.usuario?.papel === 'admin'
 
   // ---- config de geração ----
   // Jornal aberto no painel: 'geral' (todos os produtos) ou o id de um setor (só os dele).
   const [jornalSel, setJornalSel] = useState(() => lerRascunho().jornal || 'geral')
   const ehSetor = jornalSel !== 'geral'
+  const ehMercado = jornalSel === MERCADO_ENCARTE.id
   const [titulo, setTitulo] = useState('Jornal de Ofertas - Bengala Supermercado')
   const [excluidos, setExcluidos] = useState(() => new Set())
   const [exportando, setExportando] = useState(false)
@@ -176,7 +187,7 @@ export default function Jornal() {
 
   // ---- montagem do conteúdo ----
   const ativos = fila.filter((p) => incluir(p.id))
-  const ativosDoModelo = ehSetor ? ativos.filter((p) => p.setor === jornalSel) : ativos
+  const ativosDoModelo = ehMercado ? ativos.filter((p) => noMercadoEncarte(p)) : ehSetor ? ativos.filter((p) => p.setor === jornalSel) : ativos
   const vencimento = ativosDoModelo.filter((p) => p.origemFila === 'vencimento')
   const regulares = ativosDoModelo.filter((p) => p.origemFila !== 'vencimento')
 
@@ -187,11 +198,49 @@ export default function Jornal() {
     ...[...regulares].sort((a, b) => ordemSetor(a) - ordemSetor(b)),
   ]
   const itensArte = itensJornal.map((p) => ({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
-  const paginasJornal = paginarTemplate(itensArte, layoutDigital, 'feed')
+  // O Mercado Encarte sai sempre no formato jornal da semana (um bloco por dia).
+  const layoutAtual = ehMercado ? 'jornal' : layoutDigital
+  const paginasJornal = paginarEncarte(itensArte, layoutAtual)
+  const tamanho = tamanhoPagina(layoutAtual)
   const temaArte = temaCampanhaById(temaAtualId)
-  const nomeJornal = ehSetor ? setorById(jornalSel).nome : 'Geral'
+  const nomeJornal = ehMercado ? MERCADO_ENCARTE.nome : ehSetor ? setorById(jornalSel).nome : 'Geral'
   const contagemSetor = (id) => ativos.filter((p) => p.setor === id).length
-  const filaDoPainel = ehSetor ? fila.filter((p) => p.setor === jornalSel) : fila
+  // No Mercado Encarte a lista mostra a fila toda, para escolher na estrela o que entra hoje.
+  const filaDoPainel = ehSetor && !ehMercado ? fila.filter((p) => p.setor === jornalSel) : fila
+  const totalMercado = ativos.filter((p) => noMercadoEncarte(p)).length
+  const diaDoMercado = (produto, dia) => {
+    salvarProduto({ id: produto.id, encarteMercadoDia: dia })
+    toast(dia ? `${produto.nome}: oferta de ${rotuloDia(dia)} no Mercado Encarte.` : `${produto.nome} saiu do Mercado Encarte.`)
+  }
+  const alternarMercado = (produto) => diaDoMercado(produto, noMercadoEncarte(produto) ? null : dataISOmaisDias(0))
+  // Segunda lista: os produtos com estrela ficam separados da fila normal.
+  const estreladosPainel = filaDoPainel.filter((p) => noMercadoEncarte(p))
+    .sort((a, b) => String(a.encarteMercadoDia).localeCompare(String(b.encarteMercadoDia)))
+  const outrosPainel = filaDoPainel.filter((p) => !noMercadoEncarte(p))
+  const linhaPainel = (p) => {
+    const setorP = setorById(p.setor)
+    const estrelado = noMercadoEncarte(p)
+    return (
+      <div key={p.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-cream-200">
+        <input type="checkbox" checked={incluir(p.id)} onChange={() => toggleIncluir(p.id)} aria-label={`Incluir ${p.nome}`} className="h-4 w-4 shrink-0 accent-bengala" />
+        <ProdutoThumb produto={p} size={28} />
+        <span className="min-w-0 flex-1">
+          <span className="block whitespace-normal break-words text-sm leading-snug text-ink">{p.nome}</span>
+          <span className="block text-[11px] font-bold" style={{ color: setorP.corTag || setorP.cor }}>
+            {(!ehSetor || ehMercado) ? setorP.nome : null}
+            {estrelado ? <span className={`${(!ehSetor || ehMercado) ? 'ml-1 ' : ''}rounded bg-[#c1121f] px-1 text-white`}>{rotuloDia(p.encarteMercadoDia)}</span> : null}
+          </span>
+        </span>
+        {p.origemFila === 'vencimento' && <Pill cor="#d9641f" bg="#f47b361a">interna</Pill>}
+        <button type="button" onClick={() => alternarMercado(p)} aria-pressed={estrelado} aria-label={`${estrelado ? 'Tirar a estrela de' : 'Dar estrela para'} ${p.nome}`} title="Estrela: Mercado Encarte (oferta de hoje)"
+          className={`shrink-0 rounded-lg p-1.5 ${estrelado ? 'bg-[#c1121f] text-[#ffd60a]' : 'text-ink-soft/60 hover:bg-[#c1121f]/10 hover:text-[#c1121f]'}`}>
+          <Icon name="Star" size={15} fill={estrelado ? '#ffd60a' : 'none'} />
+        </button>
+        <button onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="shrink-0 rounded p-1.5 text-info hover:bg-info/10"><Icon name="Pencil" size={15} /></button>
+      </div>
+    )
+  }
+  const proximosDias = Array.from({ length: 7 }, (_, i) => dataISOmaisDias(i))
   // O site do cliente sempre recebe todos os produtos; cada setor vira uma aba com o template dele.
   const ordenarParaJornal = (lista) => [
     ...lista.filter((p) => p.origemFila === 'vencimento'),
@@ -227,7 +276,7 @@ export default function Jornal() {
     totalPaginas: paginasJornal.length,
     temaArte: temaAtualId,
     escalaLogo,
-    layoutArte: layoutDigital,
+    layoutArte: layoutAtual,
     fundoArte: fundoDigital,
     produtos: itensJornal.map((produto) => ({
       ...produto,
@@ -263,7 +312,9 @@ export default function Jornal() {
 
   const lojaAtual = (store.lojas || []).find((l) => l.id === store.lojaAtiva) || (store.lojas || [])[0]
   const itensParaArte = () => itensArte
-  const encarteArte = { periodoDe: validadeDe, periodoAte: validadeAte }
+  // O Mercado Encarte vale do primeiro ao último dia marcado.
+  const diasMercado = ativosDoModelo.map((p) => p.encarteMercadoDia).filter(Boolean).sort()
+  const encarteArte = ehMercado && diasMercado.length ? { periodoDe: diasMercado[0], periodoAte: diasMercado[diasMercado.length - 1] } : { periodoDe: validadeDe, periodoAte: validadeAte }
   const salvarPrecoDaPrevia = () => {
     const normal = Number(String(precoEditando.normal).replace(',', '.'))
     const promo = String(precoEditando.promo).trim() ? Number(String(precoEditando.promo).replace(',', '.')) : null
@@ -282,7 +333,7 @@ export default function Jornal() {
   const publicarDigital = async () => {
     if (!ativos.length) return toast('Adicione ao menos um produto ao jornal.', 'erro')
     const todos = ordenarParaJornal(ativos)
-    const setoresDoJornal = [...new Set(todos.map((p) => p.setor).filter(Boolean))]
+    const setoresDoJornal = [...new Set(todos.map((p) => p.setor).filter(Boolean)), ...(todos.some((p) => noMercadoEncarte(p)) ? [MERCADO_ENCARTE.id] : [])]
     const dados = {
       titulo,
       mercado: config.nomeMercado,
@@ -393,6 +444,13 @@ export default function Jornal() {
           <div className="min-w-0 space-y-4">
             <div className="card-bengala p-4">
               <p className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-soft">1. Qual jornal você vai montar?</p>
+              <button type="button" onClick={() => setJornalSel(MERCADO_ENCARTE.id)} aria-pressed={ehMercado}
+                className={`mb-1.5 flex w-full items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-left text-sm font-black ${ehMercado ? 'border-[#c1121f] text-white' : 'border-[#c1121f]/40 bg-white text-[#c1121f]'}`}
+                style={ehMercado ? { background: 'linear-gradient(120deg,#c1121f,#fb5607)' } : undefined}>
+                <Icon name="Star" size={18} fill={ehMercado ? '#ffd60a' : 'none'} />
+                <span className="min-w-0 flex-1">Mercado Encarte <span className={`block text-[11px] font-bold ${ehMercado ? 'text-white/85' : 'text-ink-soft'}`}>Ofertas da semana, dia a dia, no formato do jornal</span></span>
+                <span className="text-xs font-bold opacity-80">{totalMercado} {totalMercado === 1 ? 'produto' : 'produtos'}</span>
+              </button>
               <button type="button" onClick={() => setJornalSel('geral')} aria-pressed={!ehSetor}
                 className={`flex w-full items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-left text-sm font-black ${!ehSetor ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}>
                 <Icon name="Store" size={18} />
@@ -414,7 +472,7 @@ export default function Jornal() {
                   )
                 })}
               </div>
-              <p className="mt-2 text-[11px] leading-snug text-ink-soft">No site do cliente aparece a aba Geral e uma aba para cada setor que tiver produto, cada uma com o template dela.</p>
+              <p className="mt-2 text-[11px] leading-snug text-ink-soft">No site do cliente aparece a aba especial Mercado Encarte (quando tiver oferta de hoje), a aba Geral e uma aba para cada setor com produto, cada uma com o template dela.</p>
             </div>
 
             <div className="card-bengala p-4">
@@ -459,27 +517,32 @@ export default function Jornal() {
                 </button>
               </div>
               {filaDoPainel.length === 0 ? (
-                <p className="px-1 py-3 text-sm text-ink-soft">{ehSetor ? `Nenhum produto de ${nomeJornal} na fila. Bipe um produto desse setor ou mude o setor dele no lápis.` : 'Fila vazia. Bipe os produtos acima.'}</p>
+                <p className="px-1 py-3 text-sm text-ink-soft">{ehMercado ? 'Fila vazia. Bipe os produtos com a estrela ligada, ou toque na estrela dos que entram no Mercado Encarte.' : ehSetor ? `Nenhum produto de ${nomeJornal} na fila. Bipe um produto desse setor ou mude o setor dele no lápis.` : 'Fila vazia. Bipe os produtos acima.'}</p>
               ) : (
-                <div className="max-h-72 space-y-1 overflow-y-auto">
-                  {filaDoPainel.map((p) => {
-                    const setorP = setorById(p.setor)
-                    return (
-                      <div key={p.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-cream-200">
-                        <input type="checkbox" checked={incluir(p.id)} onChange={() => toggleIncluir(p.id)} aria-label={`Incluir ${p.nome}`} className="h-4 w-4 shrink-0 accent-bengala" />
-                        <ProdutoThumb produto={p} size={28} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block whitespace-normal break-words text-sm leading-snug text-ink">{p.nome}</span>
-                          {!ehSetor && <span className="block text-[11px] font-bold" style={{ color: setorP.corTag || setorP.cor }}>{setorP.nome}</span>}
-                        </span>
-                        {p.origemFila === 'vencimento' && <Pill cor="#d9641f" bg="#f47b361a">interna</Pill>}
-                        <button onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="shrink-0 rounded p-1.5 text-info hover:bg-info/10"><Icon name="Pencil" size={15} /></button>
-                      </div>
-                    )
-                  })}
-                </div>
+                <>
+                  <div className="mb-2 overflow-hidden rounded-xl border-2 border-[#c1121f]/40">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-black uppercase tracking-wide text-white" style={{ background: 'linear-gradient(120deg,#c1121f,#fb5607)' }}>
+                      <Icon name="Star" size={14} fill="#ffd60a" className="text-[#ffd60a]" />
+                      <span className="flex-1">Só estrelas · Mercado Encarte</span>
+                      <span className="tabular-nums">{estreladosPainel.length}</span>
+                    </div>
+                    {estreladosPainel.length ? (
+                      <div className="max-h-56 space-y-1 overflow-y-auto bg-[#c1121f]/5 p-1">{estreladosPainel.map(linhaPainel)}</div>
+                    ) : (
+                      <p className="bg-[#c1121f]/5 px-2.5 py-2 text-[11px] text-ink-soft">Nenhum produto com estrela. Ligue a estrela no scanner ao bipar, ou toque na estrela de um produto da lista abaixo.</p>
+                    )}
+                  </div>
+                  <div className="mb-1 flex items-center gap-1.5 px-1 text-xs font-black uppercase tracking-wide text-navy">
+                    <Icon name="ListChecks" size={14} /> <span className="flex-1">Fila do jornal</span><span className="tabular-nums">{outrosPainel.length}</span>
+                  </div>
+                  {outrosPainel.length ? (
+                    <div className="max-h-72 space-y-1 overflow-y-auto">{outrosPainel.map(linhaPainel)}</div>
+                  ) : (
+                    <p className="px-1 py-2 text-[11px] text-ink-soft">Todos os produtos daqui estão com estrela.</p>
+                  )}
+                </>
               )}
-              <p className="mt-1 px-1 text-[11px] text-ink-soft">Selo, preço e posição na arte: toque no produto na prévia. Setor errado: use o lápis.</p>
+              <p className="mt-1 px-1 text-[11px] text-ink-soft">Estrela: o produto vai para a lista Só estrelas e entra no Mercado Encarte (hoje; troque o dia tocando no produto na prévia). Sai sozinho depois do dia. Selo, preço e posição na arte: toque no produto na prévia. Setor errado: use o lápis.</p>
             </div>
 
             <div className="card-bengala space-y-3 p-4">
@@ -493,9 +556,9 @@ export default function Jornal() {
               <div>
                 <div className="text-xs font-bold uppercase text-navy">Layout</div>
                 <div className="mt-1 grid grid-cols-2 gap-1.5">
-                  {[['grade', 'Grade 3×3 (9 produtos)'], ['destaque', '1 destaque + 7']].map(([id, rotulo]) => (
+                  {[['grade', 'Grade 3×3 (9 produtos)'], ['destaque', '1 destaque + 7'], ['jornal', 'Jornal da semana (A4, muitos produtos, blocos por dia ou setor)']].map(([id, rotulo]) => (
                     <button key={id} type="button" onClick={() => setLayoutDigital(id)} aria-pressed={layoutDigital === id}
-                      className={`rounded-lg border-2 px-2 py-2 text-xs font-black ${layoutDigital === id ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}>
+                      className={`rounded-lg border-2 px-2 py-2 text-xs font-black ${id === 'jornal' ? 'col-span-2' : ''} ${layoutDigital === id ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}>
                       {rotulo}
                     </button>
                   ))}
@@ -529,14 +592,16 @@ export default function Jornal() {
 
             <div className="rounded-xl border-2 border-navy bg-white p-4">
               <div className="flex items-center gap-2 text-sm font-black text-navy">
-                <Icon name="Smartphone" size={16} /> 5. Publicar no site do cliente (tag NFC)
+                <Icon name="Smartphone" size={16} /> 5. Publicar no site do cliente
               </div>
-              <p className="mt-1 text-xs text-ink-soft">
-                Publica de uma vez o Geral e o jornal de cada setor.{' '}
-                {publicadoEm
-                  ? `Última publicação: ${new Date(publicadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.`
-                  : 'Ainda não publicado.'}
-              </p>
+              {ehAdmin && (
+                <p className="mt-1 text-xs text-ink-soft">
+                  Publica de uma vez o Geral e o jornal de cada setor.{' '}
+                  {publicadoEm
+                    ? `Última publicação: ${new Date(publicadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.`
+                    : 'Ainda não publicado.'}
+                </p>
+              )}
               {site.protegido && (
                 <label className="mt-3 block">
                   <span className="text-xs font-bold uppercase text-navy">Senha de publicação</span>
@@ -544,7 +609,7 @@ export default function Jornal() {
                     onChange={(e) => { setSenhaPublicacao(e.target.value); salvarSenhaPublicacao(e.target.value) }} />
                 </label>
               )}
-              <div className={`mt-2 rounded-lg px-2 py-1.5 text-[11px] font-bold ${site.erro ? 'bg-critical/10 text-critical' : site.online ? 'bg-success/10 text-navy' : 'bg-navy/5 text-ink-soft'}`} role="status">
+              {ehAdmin && <div className={`mt-2 rounded-lg px-2 py-1.5 text-[11px] font-bold ${site.erro ? 'bg-critical/10 text-critical' : site.online ? 'bg-success/10 text-navy' : 'bg-navy/5 text-ink-soft'}`} role="status">
                 {site.erro
                   ? site.erro
                   : site.online
@@ -557,7 +622,7 @@ export default function Jornal() {
                     : site.online === false
                       ? 'Servidor do encarte não encontrado. Publique pelo PC do mercado para os clientes verem.'
                       : 'Verificando o site…'}
-              </div>
+              </div>}
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button type="button" onClick={publicarDigital} disabled={publicando} className="rounded-lg bg-bengala px-3 py-3 text-sm font-black text-white disabled:opacity-60">
                   {publicando ? 'Publicando…' : 'Publicar agora'}
@@ -568,6 +633,14 @@ export default function Jornal() {
               </div>
             </div>
 
+            {ativosDoModelo.length > 18 && !ehFormatoJornal(layoutAtual) && (
+              <div className="flex items-center gap-2 rounded-xl border-2 border-offer bg-offer/15 p-3 text-sm">
+                <Icon name="Newspaper" size={18} className="shrink-0 text-navy" />
+                <span className="flex-1 font-bold text-navy">Muitos produtos? O Jornal da semana põe todos em blocos, como no jornal impresso.</span>
+                <button type="button" onClick={() => setLayoutDigital('jornal')} className="shrink-0 rounded-lg bg-navy px-3 py-2 text-xs font-black text-white">Usar</button>
+              </div>
+            )}
+
             {itensJornal.length > 0 && (
               <div className="rounded-xl border border-info/20 bg-info/5 p-3 text-sm">
                 <div className="flex items-center gap-2 font-bold text-ink">
@@ -575,7 +648,7 @@ export default function Jornal() {
                   {paginasJornal.length} {paginasJornal.length === 1 ? 'página no encarte' : 'páginas no encarte'}
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-ink-soft">
-                  {layoutDigital === 'destaque' ? 'Até 8 produtos por página (1 destaque + 7).' : 'Até 9 produtos por página.'} Na impressão, cada página sai numa folha A4.
+                  {ehFormatoJornal(layoutAtual) ? 'Jornal da semana: 6 produtos por linha, em blocos por dia (ou por setor).' : layoutDigital === 'destaque' ? 'Até 8 produtos por página (1 destaque + 7).' : 'Até 9 produtos por página.'} Na impressão, cada página sai numa folha A4.
                 </p>
               </div>
             )}
@@ -650,11 +723,11 @@ export default function Jornal() {
               <div key={indice} className="mx-auto w-full max-w-[680px] space-y-1.5">
                 <div className="flex items-center justify-between px-1 text-xs text-ink-soft">
                   <span className="font-bold text-ink">Página {indice + 1} de {paginasJornal.length}</span>
-                  <span>{itens.length} {itens.length === 1 ? 'produto' : 'produtos'}</span>
+                  <span>{itensDaPagina(itens, layoutAtual).length} {itensDaPagina(itens, layoutAtual).length === 1 ? 'produto' : 'produtos'}</span>
                 </div>
                 <div className="overflow-hidden rounded-xl shadow-lg ring-1 ring-black/5">
-                  <Escalado largura={LARGURA} altura={ALTURA}>
-                    <PaginaTemplate tema={temaArte} itens={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutDigital} numero={indice + 1} total={paginasJornal.length} onAbrir={abrirProdutoDaPrevia} escalaLogo={escalaLogo} />
+                  <Escalado largura={tamanho.largura} altura={tamanho.altura}>
+                    <PaginaEncarte tema={temaArte} pagina={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutAtual} numero={indice + 1} total={paginasJornal.length} onAbrir={abrirProdutoDaPrevia} escalaLogo={escalaLogo} />
                   </Escalado>
                 </div>
               </div>
@@ -665,8 +738,8 @@ export default function Jornal() {
           {itensJornal.length > 0 && (
             <div className="pointer-events-none fixed top-0" style={{ left: -20000 }} aria-hidden="true">
               {paginasJornal.map((itens, indice) => (
-                <div key={indice} ref={(el) => { pageRefs.current[indice] = el }} style={{ width: LARGURA, height: ALTURA }}>
-                  <PaginaTemplate tema={temaArte} itens={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutDigital} numero={indice + 1} total={paginasJornal.length} escalaLogo={escalaLogo} />
+                <div key={indice} ref={(el) => { pageRefs.current[indice] = el }} style={{ width: tamanho.largura, height: tamanho.altura }}>
+                  <PaginaEncarte tema={temaArte} pagina={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutAtual} numero={indice + 1} total={paginasJornal.length} escalaLogo={escalaLogo} />
                 </div>
               ))}
             </div>
@@ -726,10 +799,10 @@ export default function Jornal() {
       {historicoParaAbrir ? (
         <div className="pointer-events-none fixed top-0" style={{ left: -20000 }} aria-hidden="true">
           {paginasDoHistorico(historicoParaAbrir.jornal).map((itens, indice, todas) => (
-            <div key={`${historicoParaAbrir.jornal.id}-${indice}`} ref={(elemento) => { historicoRefs.current[indice] = elemento }} style={{ width: LARGURA, height: ALTURA }}>
-              <PaginaTemplate
+            <div key={`${historicoParaAbrir.jornal.id}-${indice}`} ref={(elemento) => { historicoRefs.current[indice] = elemento }} style={{ width: tamanhoPagina(historicoParaAbrir.jornal.layoutArte).largura, height: tamanhoPagina(historicoParaAbrir.jornal.layoutArte).altura }}>
+              <PaginaEncarte
                 tema={temaCampanhaById(historicoParaAbrir.jornal.temaArte || temaDigital)}
-                itens={itens}
+                pagina={itens}
                 encarte={{ periodoDe: historicoParaAbrir.jornal.validadeDe, periodoAte: historicoParaAbrir.jornal.validadeAte }}
                 loja={lojaAtual}
                 fundo={historicoParaAbrir.jornal.fundoArte || null}
@@ -768,6 +841,27 @@ export default function Jornal() {
                 onChange={setAjusteEditando}
               />
             </div>
+            {(() => {
+              const atual = fila.find((f) => f.id === seloEditando.id) || seloEditando
+              const dia = noMercadoEncarte(atual) ? atual.encarteMercadoDia : null
+              return (
+                <div className="rounded-xl border-2 border-[#c1121f]/40 p-3">
+                  <p className="flex items-center gap-1.5 text-sm font-black text-[#c1121f]"><Icon name="Star" size={16} fill={dia ? '#ffd60a' : 'none'} /> Mercado Encarte: dia da oferta</p>
+                  <div className="mt-2 grid grid-cols-4 gap-1.5">
+                    {proximosDias.map((d, i) => (
+                      <button key={d} type="button" onClick={() => diaDoMercado(atual, d)} aria-pressed={dia === d}
+                        className={`rounded-lg border-2 px-1 py-1.5 text-xs font-black ${dia === d ? 'border-[#c1121f] bg-[#c1121f] text-white' : 'border-[#c1121f]/25 bg-white text-[#c1121f]'}`}>
+                        {i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : rotuloDia(d)}
+                      </button>
+                    ))}
+                    <button type="button" onClick={() => diaDoMercado(atual, null)} disabled={!dia}
+                      className="rounded-lg border-2 border-ink-soft/20 bg-white px-1 py-1.5 text-xs font-black text-ink-soft disabled:opacity-40">
+                      Fora
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
             <div>
               <p className="mb-2 text-sm font-bold text-ink">Selo</p>
               <p className="mb-2 text-xs text-ink-soft">O selo aparece só neste produto no encarte, nas artes e nos cartazes. Muda na hora.</p>
@@ -853,7 +947,47 @@ function FilaView({ fila, vencimento, remover, salvarProduto, toast }) {
   if (fila.length === 0) {
     return <EmptyState icon="ListChecks" titulo="Fila vazia" descricao="Em Produtos ou Ofertas, use o botão de jornal para adicionar produtos aqui." />
   }
-  const grupos = SETORES.map((s) => ({ setor: s, itens: fila.filter((p) => p.setor === s.id) })).filter((g) => g.itens.length)
+  const estrelados = fila.filter((p) => noMercadoEncarte(p))
+    .sort((a, b) => String(a.encarteMercadoDia).localeCompare(String(b.encarteMercadoDia)))
+  const grupos = SETORES.map((s) => ({ setor: s, itens: fila.filter((p) => p.setor === s.id && !noMercadoEncarte(p)) })).filter((g) => g.itens.length)
+  const alternarEstrela = (p) => {
+    const ligar = !noMercadoEncarte(p)
+    salvarProduto({ id: p.id, encarteMercadoDia: ligar ? dataISOmaisDias(0) : null })
+    toast(ligar ? `${p.nome} entrou nos estrelados (Mercado Encarte de hoje).` : `${p.nome} saiu dos estrelados.`, 'info')
+  }
+  const linhaFila = (p, comSetor = false) => {
+    const estrelado = noMercadoEncarte(p)
+    const setorP = setorById(p.setor)
+    return (
+      <div key={p.id} className="flex items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-4">
+        <ProdutoThumb produto={p} size={36} />
+        <div className="min-w-0 flex-1">
+          <div className="whitespace-normal break-words text-sm font-medium leading-snug text-ink">{p.nome}</div>
+          <div className="text-xs text-ink-soft">
+            {comSetor ? <span className="font-bold" style={{ color: setorP.corTag || setorP.cor }}>{setorP.nome} </span> : null}
+            {estrelado ? <span className="mr-1 rounded bg-[#c1121f] px-1 font-bold text-white">{rotuloDia(p.encarteMercadoDia)}</span> : null}
+            {p.marca}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {p.origemFila === 'vencimento'
+              ? <Pill cor="#c42b2b" bg="#fbe5e5">Vencimento</Pill>
+              : p.origemFila === 'scanner' || p.origemFila === 'scanner-jornal'
+                ? <Pill cor="#1c6e48" bg="#e2f3ea">Confirmado no scanner</Pill>
+                : p.origemFila === 'oferta'
+                  ? <Pill cor="#2e6fb0" bg="#e6f1fb">Oferta confirmada</Pill>
+                : <Pill>Manual</Pill>}
+            <span className="text-sm font-medium">{formatBRL(p.precoPromo || p.precoNormal)}</span>
+          </div>
+        </div>
+        <button type="button" onClick={() => alternarEstrela(p)} aria-pressed={estrelado} aria-label={`${estrelado ? 'Tirar a estrela de' : 'Dar estrela para'} ${p.nome}`}
+          className={`rounded p-1.5 ${estrelado ? 'bg-[#c1121f] text-[#ffd60a]' : 'text-ink-soft/60 hover:bg-[#c1121f]/10 hover:text-[#c1121f]'}`}>
+          <Icon name="Star" size={15} fill={estrelado ? '#ffd60a' : 'none'} />
+        </button>
+        <button onClick={() => setEditando({ ...p })} aria-label={`Editar ${p.nome}`} className="rounded p-1.5 text-info hover:bg-info/10"><Icon name="Pencil" size={15} /></button>
+        <button onClick={() => { remover(p.id); toast('Removido da fila.', 'info') }} aria-label={`Remover ${p.nome} da fila`} className="rounded p-1 text-critical hover:bg-critical/10"><Icon name="X" size={15} /></button>
+      </div>
+    )
+  }
   const salvarEdicao = () => {
     if (!editando?.nome?.trim()) return toast('Informe o nome do produto.', 'erro')
     if (!(Number(editando.precoNormal) > 0)) return toast('Informe um preço válido.', 'erro')
@@ -888,7 +1022,18 @@ function FilaView({ fila, vencimento, remover, salvarProduto, toast }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div className="card-bengala p-3"><div className="text-xs text-ink-soft">Na fila</div><div className="text-xl font-bold text-ink">{fila.length}</div></div>
         <div className="card-bengala p-3"><div className="text-xs text-ink-soft">De vencimento</div><div className="text-xl font-bold text-critical">{vencimento.length}</div></div>
-        <div className="card-bengala p-3"><div className="text-xs text-ink-soft">Setores</div><div className="text-xl font-bold text-ink">{grupos.length}</div></div>
+        <div className="card-bengala p-3"><div className="text-xs text-ink-soft">Com estrela</div><div className="text-xl font-bold text-[#c1121f]">{estrelados.length}</div></div>
+      </div>
+      <div className="card-bengala overflow-hidden border-2 border-[#c1121f]/40">
+        <div className="flex items-center gap-2 px-4 py-2 text-white" style={{ background: 'linear-gradient(120deg,#c1121f,#fb5607)' }}>
+          <Icon name="Star" size={16} fill="#ffd60a" className="text-[#ffd60a]" /> <span className="font-bold">Só estrelas · Mercado Encarte</span>
+          <span className="text-xs opacity-80">({estrelados.length})</span>
+        </div>
+        {estrelados.length ? (
+          <div className="divide-y divide-ink-soft/8">{estrelados.map((p) => linhaFila(p, true))}</div>
+        ) : (
+          <p className="px-4 py-3 text-sm text-ink-soft">Nenhum produto com estrela. Ligue a estrela no scanner na hora de adicionar, ou toque na estrela de um produto abaixo.</p>
+        )}
       </div>
       {grupos.map((g) => (
         <div key={g.setor.id} className="card-bengala overflow-hidden">
@@ -896,27 +1041,7 @@ function FilaView({ fila, vencimento, remover, salvarProduto, toast }) {
             <Icon name={g.setor.icone} size={16} /> <span className="font-bold">{g.setor.nome}</span>
             <span className="text-xs opacity-70">({g.itens.length})</span>
           </div>
-          <div className="divide-y divide-ink-soft/8">
-            {g.itens.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
-                <ProdutoThumb produto={p} size={36} />
-                <div className="min-w-0 flex-1">
-                  <div className="whitespace-normal break-words text-sm font-medium leading-snug text-ink">{p.nome}</div>
-                  <div className="text-xs text-ink-soft">{p.marca}</div>
-                </div>
-                {p.origemFila === 'vencimento'
-                  ? <Pill cor="#c42b2b" bg="#fbe5e5">Vencimento</Pill>
-                  : p.origemFila === 'scanner'
-                    ? <Pill cor="#1c6e48" bg="#e2f3ea">Confirmado no scanner</Pill>
-                    : p.origemFila === 'oferta'
-                      ? <Pill cor="#2e6fb0" bg="#e6f1fb">Oferta confirmada</Pill>
-                    : <Pill>Manual</Pill>}
-                <span className="text-sm font-medium">{formatBRL(p.precoPromo || p.precoNormal)}</span>
-                <button onClick={() => setEditando({ ...p })} aria-label={`Editar ${p.nome}`} className="rounded p-1.5 text-info hover:bg-info/10"><Icon name="Pencil" size={15} /></button>
-                <button onClick={() => { remover(p.id); toast('Removido da fila.', 'info') }} className="rounded p-1 text-critical hover:bg-critical/10"><Icon name="X" size={15} /></button>
-              </div>
-            ))}
-          </div>
+          <div className="divide-y divide-ink-soft/8">{g.itens.map((p) => linhaFila(p))}</div>
         </div>
       ))}
       <Modal

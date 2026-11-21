@@ -7,7 +7,7 @@ import logoTransparente from '../assets/logo-bengala-transparente.png'
 
 // Logo do mercado direto sobre a arte do tema, sem caixa branca (arquivo PNG transparente).
 // `escala` (0,4 a 1,3) vem do controle "Tamanho do logo" de cada jornal.
-function LogoEncarte({ h = 110, escala = 1 }) {
+export function LogoEncarte({ h = 110, escala = 1 }) {
   return <img src={logoTransparente} alt="Bengala Supermercado" className="block w-auto object-contain" style={{ height: h * escala }} />
 }
 
@@ -88,7 +88,7 @@ export function Escalado({ children, largura = LARGURA, altura = ALTURA, maxLarg
   )
 }
 
-const contornoTexto = (cor, px = 4) =>
+export const contornoTexto = (cor, px = 4) =>
   [`-${px}px -${px}px 0 ${cor}`, `${px}px -${px}px 0 ${cor}`, `-${px}px ${px}px 0 ${cor}`, `${px}px ${px}px 0 ${cor}`, `0 ${px * 2}px 0 ${cor}`].join(', ')
 
 // Tamanho de fonte para um texto em caixa alta pesada caber numa largura.
@@ -234,12 +234,13 @@ export function posicoesGrade(formatoId, layout, quantidade, topo) {
 // Validade e endereço soltos na arte (sem caixas), em letra de encarte com contorno.
 const diaMes = (iso) => formatData(iso).slice(0, 5)
 
-function FaixaValidade({ encarte, tema, fonte = 24, alinhar = 'left' }) {
+export function FaixaValidade({ encarte, tema, fonte = 24, alinhar = 'left' }) {
   if (!encarte?.periodoDe) return null
+  const umDia = encarte.periodoAte === encarte.periodoDe
   return (
     <div className="uppercase leading-[0.92]" style={{ fontFamily: 'var(--font-encarte)', fontWeight: 900, textAlign: alinhar, textShadow: contornoTexto(tema.contorno, Math.max(2, Math.round(fonte / 11))) }}>
-      <div style={{ fontSize: fonte * 0.78, color: '#ffffff' }}>Ofertas válidas de</div>
-      <div style={{ fontSize: fonte * 1.55, color: tema.corDestaque, letterSpacing: '0.01em' }}>{diaMes(encarte.periodoDe)} a {diaMes(encarte.periodoAte)}</div>
+      <div style={{ fontSize: fonte * 0.78, color: '#ffffff' }}>{umDia ? 'Ofertas válidas só' : 'Ofertas válidas de'}</div>
+      <div style={{ fontSize: fonte * 1.55, color: tema.corDestaque, letterSpacing: '0.01em' }}>{umDia ? `hoje, ${diaMes(encarte.periodoDe)}` : `${diaMes(encarte.periodoDe)} a ${diaMes(encarte.periodoAte)}`}</div>
       <div style={{ fontSize: fonte * 0.62, color: '#ffffff', fontWeight: 700, marginTop: fonte * 0.12 }}>ou enquanto durarem os estoques</div>
     </div>
   )
