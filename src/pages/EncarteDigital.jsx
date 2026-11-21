@@ -6,7 +6,8 @@ import { carregarEncartePublicado, assinarEncarte, linkDoEncarte } from '../lib/
 import { temaCampanhaById, temasDoSetor } from '../lib/temasCampanha'
 import SeloArte from '../components/SeloArte'
 import { SimboloClawMarket } from '../components/MarcaClawMarket'
-import PaginaTemplate, { Escalado, paginarTemplate } from '../components/PaginaTemplate'
+import { Escalado } from '../components/PaginaTemplate'
+import { PaginaEncarte, paginarEncarte, tamanhoPagina, ehFormatoJornal, alturaUsada } from '../components/JornalMercado'
 import { LOJAS } from '../data/seed'
 
 // Encarte digital público: a página que a tag NFC abre.
@@ -432,8 +433,12 @@ export default function EncarteDigital() {
   const grupos = setorFiltro === 'todos' || setorFiltro === 'compras'
     ? setoresPresentes.map((s) => ({ setor: s, itens: itens.filter((p) => p.setor === s.id) }))
     : [{ setor: ehMercado ? MERCADO_ENCARTE : setorById(setorFiltro), itens: visiveis }]
-  const layout = encarte?.layout || 'grade'
-  const paginas = paginarTemplate(visiveis, layout)
+  // Mercado Encarte sempre no formato jornal da semana (um bloco por dia).
+  const layout = ehMercado ? 'jornal' : encarte?.layout || 'grade'
+  const paginas = paginarEncarte(visiveis, layout)
+  const tamanho = tamanhoPagina(layout)
+  const diasMercado = ofertasDoDia.map((p) => p.encarteMercadoDia).sort()
+  const encarteDaAba = ehMercado && diasMercado.length ? { ...encarte, periodoDe: diasMercado[0], periodoAte: diasMercado[diasMercado.length - 1] } : encarte
   const loja = encarte?.loja || LOJAS[0]
 
   // produto aberto fica no endereço (#/encarte?p=<id>): dá para compartilhar e o botão voltar fecha
@@ -464,7 +469,7 @@ export default function EncarteDigital() {
             <div className="min-w-0">
               <div className="truncate text-base font-black uppercase sm:text-lg">{tema.titulo} {tema.destaque}</div>
               {ehMercado
-                ? <div className="text-xs font-bold text-white/85 sm:text-sm">Ofertas válidas só hoje, {formatData(hoje)}</div>
+                ? <div className="text-xs font-bold text-white/85 sm:text-sm">Ofertas de cada dia, de {formatData(diasMercado[0] || hoje)} a {formatData(diasMercado[diasMercado.length - 1] || hoje)}</div>
                 : encarte?.periodoDe && <div className="text-xs font-bold text-white/85 sm:text-sm">Válido de {formatData(encarte.periodoDe)} a {formatData(encarte.periodoAte)}</div>}
             </div>
           </div>
@@ -557,8 +562,8 @@ export default function EncarteDigital() {
             {paginas.map((pagina, i) => (
               <div key={`${encarte.versao}-${setorFiltro}-${i}`} className="min-w-0 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-black/10">
                 <PaginaViva>
-                  <Escalado>
-                    <PaginaTemplate animado tema={tema} itens={pagina} encarte={ehMercado ? { ...encarte, periodoDe: hoje, periodoAte: hoje } : encarte} loja={loja} fundo={fundoDoTema} layout={layout} numero={i + 1} total={paginas.length} onAbrir={abrir} />
+                  <Escalado largura={tamanho.largura} altura={ehFormatoJornal(layout) ? alturaUsada(pagina) : tamanho.altura}>
+                    <PaginaEncarte animado compacto tema={tema} pagina={pagina} encarte={encarteDaAba} loja={loja} fundo={fundoDoTema} layout={layout} numero={i + 1} total={paginas.length} onAbrir={abrir} />
                   </Escalado>
                 </PaginaViva>
               </div>
