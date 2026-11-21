@@ -60,6 +60,8 @@ export default function Jornal() {
   const store = useStore()
   const { fila, config, jornais, ofertaDoProduto, salvarProduto, salvarJornal, excluirJornal, removerDaFila, toast } = store
   const [aba, setAba] = useState('gerar')
+  // Link do encarte (tag NFC), status do site e última publicação: só o admin vê.
+  const ehAdmin = store.usuario?.papel === 'admin'
 
   // ---- config de geração ----
   // Jornal aberto no painel: 'geral' (todos os produtos) ou o id de um setor (só os dele).
@@ -590,14 +592,16 @@ export default function Jornal() {
 
             <div className="rounded-xl border-2 border-navy bg-white p-4">
               <div className="flex items-center gap-2 text-sm font-black text-navy">
-                <Icon name="Smartphone" size={16} /> 5. Publicar no site do cliente (tag NFC)
+                <Icon name="Smartphone" size={16} /> 5. Publicar no site do cliente
               </div>
-              <p className="mt-1 text-xs text-ink-soft">
-                Publica de uma vez o Geral e o jornal de cada setor.{' '}
-                {publicadoEm
-                  ? `Última publicação: ${new Date(publicadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.`
-                  : 'Ainda não publicado.'}
-              </p>
+              {ehAdmin && (
+                <p className="mt-1 text-xs text-ink-soft">
+                  Publica de uma vez o Geral e o jornal de cada setor.{' '}
+                  {publicadoEm
+                    ? `Última publicação: ${new Date(publicadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.`
+                    : 'Ainda não publicado.'}
+                </p>
+              )}
               {site.protegido && (
                 <label className="mt-3 block">
                   <span className="text-xs font-bold uppercase text-navy">Senha de publicação</span>
@@ -605,7 +609,7 @@ export default function Jornal() {
                     onChange={(e) => { setSenhaPublicacao(e.target.value); salvarSenhaPublicacao(e.target.value) }} />
                 </label>
               )}
-              <div className={`mt-2 rounded-lg px-2 py-1.5 text-[11px] font-bold ${site.erro ? 'bg-critical/10 text-critical' : site.online ? 'bg-success/10 text-navy' : 'bg-navy/5 text-ink-soft'}`} role="status">
+              {ehAdmin && <div className={`mt-2 rounded-lg px-2 py-1.5 text-[11px] font-bold ${site.erro ? 'bg-critical/10 text-critical' : site.online ? 'bg-success/10 text-navy' : 'bg-navy/5 text-ink-soft'}`} role="status">
                 {site.erro
                   ? site.erro
                   : site.online
@@ -618,7 +622,7 @@ export default function Jornal() {
                     : site.online === false
                       ? 'Servidor do encarte não encontrado. Publique pelo PC do mercado para os clientes verem.'
                       : 'Verificando o site…'}
-              </div>
+              </div>}
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <button type="button" onClick={publicarDigital} disabled={publicando} className="rounded-lg bg-bengala px-3 py-3 text-sm font-black text-white disabled:opacity-60">
                   {publicando ? 'Publicando…' : 'Publicar agora'}

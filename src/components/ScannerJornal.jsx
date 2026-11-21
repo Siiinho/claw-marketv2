@@ -4,8 +4,9 @@ import { buscarProdutoBengala } from '../lib/catalogoBengala'
 import { buscarImagemProduto, buscarProdutoAutomatizado } from '../lib/produtoApi'
 import { dataISOmaisDias, noMercadoEncarte } from '../lib/utils'
 import { useLeitorCamera } from '../lib/useLeitorCamera'
-import { Botao, Campo, Icon, ProdutoThumb, inputCls } from './ui'
+import { Botao, Icon, ProdutoThumb, inputCls } from './ui'
 import EstrelaMercado from './EstrelaMercado'
+import CadastroProdutoNovo from './CadastroProdutoNovo'
 
 const CHAVE_ESTRELA = 'clawmarket.scanner.estrela'
 function lerEstrela() {
@@ -123,38 +124,14 @@ export default function ScannerJornal() {
     }
   }
 
-  const confirmarNovo = () => {
-    if (!rascunho?.nome?.trim()) return toast('Informe o nome do produto.', 'erro')
-    if (!(Number(rascunho.precoNormal) > 0)) return toast('Informe um preço válido.', 'erro')
-    const produto = comEstrela({
-      ...rascunho,
-      id: rascunho.id || globalThis.crypto?.randomUUID?.() || `produto-${Date.now()}`,
-      loja: rascunho.loja || 'loja3',
-      estoque: Math.max(1, Number(rascunho.estoque) || 1),
-      precoNormal: Number(rascunho.precoNormal),
-    })
+  const confirmarNovo = (novo) => {
+    const produto = comEstrela(novo)
     salvarProdutoNaFila(produto, 'scanner-jornal')
     if (produto.validade) registrarLote({ produtoId: produto.id, loja: produto.loja, validade: produto.validade, quantidade: produto.estoque })
     toast(`${produto.nome} cadastrado e adicionado à fila do jornal!${estrela ? ' Com estrela no Mercado Encarte.' : ''}`)
     setRascunho(null)
     setCodigo('')
     inputRef.current?.focus()
-  }
-
-  const enviarImagem = (arquivo) => {
-    if (!arquivo) return
-    const leitor = new FileReader()
-    leitor.onload = () => setRascunho((atual) => ({
-      ...atual,
-      imagem: String(leitor.result || ''),
-      imagemManual: true,
-      imagemTratada: true,
-      imagemTratamento: 'imagem-manual-livre-v1',
-      imagemAltaResolucao: null,
-      imagemOrigem: 'upload-manual',
-    }))
-    leitor.onerror = () => toast('Não foi possível ler a imagem.', 'erro')
-    leitor.readAsDataURL(arquivo)
   }
 
   const camera = useLeitorCamera(
@@ -207,31 +184,16 @@ export default function ScannerJornal() {
       ) : null}
 
       {rascunho ? (
-        <div className="mt-4 rounded-xl border border-info/25 bg-info/5 p-3">
-          <div className="mb-3 flex items-center gap-3">
-            <ProdutoThumb produto={rascunho} size={54} />
-            <div className="min-w-0 flex-1">
-              <div className="font-bold text-ink">Complete o produto</div>
-              <div className="text-xs text-ink-soft">Ele será salvo e colocado diretamente na fila.</div>
-            </div>
-            <label className="cursor-pointer rounded-lg border border-ink-soft/20 bg-white px-2.5 py-1.5 text-xs font-bold text-ink">
-              <Icon name="ImagePlus" size={13} className="mr-1 inline" /> Imagem
-              <input type="file" accept="image/*" className="sr-only" onChange={(evento) => enviarImagem(evento.target.files?.[0])} />
-            </label>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <div className="sm:col-span-2"><Campo label="Nome"><input className={inputCls} value={rascunho.nome || ''} onChange={(e) => setRascunho((p) => ({ ...p, nome: e.target.value }))} /></Campo></div>
-            <Campo label="Marca"><input className={inputCls} value={rascunho.marca || ''} onChange={(e) => setRascunho((p) => ({ ...p, marca: e.target.value }))} /></Campo>
-            <Campo label="Gramagem"><input className={inputCls} value={rascunho.gramagem || ''} onChange={(e) => setRascunho((p) => ({ ...p, gramagem: e.target.value }))} placeholder="350 g" /></Campo>
-            <Campo label="Validade"><input type="date" className={inputCls} value={rascunho.validade || ''} onChange={(e) => setRascunho((p) => ({ ...p, validade: e.target.value }))} /></Campo>
-            <Campo label="Quantidade"><input type="number" min="1" className={inputCls} value={rascunho.estoque || 1} onChange={(e) => setRascunho((p) => ({ ...p, estoque: e.target.value }))} /></Campo>
-            <Campo label="Preço (R$)"><input type="number" min="0.01" step="0.01" className={inputCls} value={rascunho.precoNormal || ''} onChange={(e) => setRascunho((p) => ({ ...p, precoNormal: e.target.value }))} /></Campo>
-          </div>
-          <div className="mt-3 flex justify-end gap-2">
-            <Botao variante="contorno" onClick={() => setRascunho(null)}>Cancelar</Botao>
-            <Botao onClick={confirmarNovo}><Icon name="Newspaper" size={15} /> Confirmar e adicionar</Botao>
-          </div>
-        </div>
+        <CadastroProdutoNovo
+          key={rascunho.codigoBarras}
+          inicial={rascunho}
+          comLote
+          titulo={rascunho.nome ? 'Complete o produto' : 'Produto não encontrado. Cadastre agora'}
+          textoSalvar="Confirmar e adicionar ao jornal"
+          toast={toast}
+          onCancelar={() => { setRascunho(null); inputRef.current?.focus() }}
+          onSalvar={confirmarNovo}
+        />
       ) : null}
 
       {recentes.length ? (
