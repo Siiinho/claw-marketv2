@@ -7,7 +7,7 @@ import logoTransparente from '../assets/logo-bengala-transparente.png'
 
 // Logo do mercado direto sobre a arte do tema, sem caixa branca (arquivo PNG transparente).
 // `escala` (0,4 a 1,3) vem do controle "Tamanho do logo" de cada jornal.
-function LogoEncarte({ h = 110, escala = 1 }) {
+export function LogoEncarte({ h = 110, escala = 1 }) {
   return <img src={logoTransparente} alt="Bengala Supermercado" className="block w-auto object-contain" style={{ height: h * escala }} />
 }
 
@@ -88,7 +88,7 @@ export function Escalado({ children, largura = LARGURA, altura = ALTURA, maxLarg
   )
 }
 
-const contornoTexto = (cor, px = 4) =>
+export const contornoTexto = (cor, px = 4) =>
   [`-${px}px -${px}px 0 ${cor}`, `${px}px -${px}px 0 ${cor}`, `-${px}px ${px}px 0 ${cor}`, `${px}px ${px}px 0 ${cor}`, `0 ${px * 2}px 0 ${cor}`].join(', ')
 
 // Tamanho de fonte para um texto em caixa alta pesada caber numa largura.
@@ -234,7 +234,7 @@ export function posicoesGrade(formatoId, layout, quantidade, topo) {
 // Validade e endereço soltos na arte (sem caixas), em letra de encarte com contorno.
 const diaMes = (iso) => formatData(iso).slice(0, 5)
 
-function FaixaValidade({ encarte, tema, fonte = 24, alinhar = 'left' }) {
+export function FaixaValidade({ encarte, tema, fonte = 24, alinhar = 'left' }) {
   if (!encarte?.periodoDe) return null
   const umDia = encarte.periodoAte === encarte.periodoDe
   return (

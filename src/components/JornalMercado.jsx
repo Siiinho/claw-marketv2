@@ -1,11 +1,13 @@
-import { PrecoVarejo } from './ui'
+import { Icon, PrecoVarejo } from './ui'
 import { SETORES, setorById, formatData } from '../lib/utils'
-import PaginaTemplate, { unidadeDe, paginarTemplate, fonteQueCabe, LARGURA, ALTURA } from './PaginaTemplate'
-import logoTransparente from '../assets/logo-bengala-transparente.png'
+import { caminhoArte } from '../lib/temasCampanha'
+import PaginaTemplate, { unidadeDe, paginarTemplate, fonteQueCabe, contornoTexto, FaixaValidade, LogoEncarte, LARGURA, ALTURA } from './PaginaTemplate'
 
 // Formato "Jornal do mercado", como o jornal impresso do Bengala: página A4 em pé, topo com a
 // campanha, blocos "Ofertas válidas somente <dia>" com uma grade cheia de produtos e rodapé com
-// os dados da loja. As cores vêm do template escolhido (qualquer tema serve).
+// os dados da loja. Fundo, arte do título e cores vêm do template escolhido, sem criar arte nova:
+// nos temas com arte, o fundo é o mesmo do template (public/temas/<id>/jornal.webp) e a arte do
+// título (titulo.webp) vai centralizada no topo; nos temas de setor, o fundo em CSS com o ícone.
 //  - Com dia marcado (Mercado Encarte), cada dia vira um bloco.
 //  - Sem dia, os blocos são os setores.
 
@@ -13,8 +15,9 @@ export const JORNAL_W = 1080
 export const JORNAL_H = 1527 // proporção A4
 const COLS = 7
 const PAD = 20
-const TOPO = 300
-const RODAPE = 150
+const TOPO = 330
+const RODAPE = 192 // rodapé oficial (3188x567) na largura da página
+const RODAPE_OFICIAL = `${import.meta.env.BASE_URL}templates/rodape-oficial-bengala.webp`
 const CAB = 48 // faixa do bloco
 const GAP = 8
 const BORDA = 6 // moldura do bloco
@@ -82,15 +85,6 @@ export function paginarJornal(itens) {
 export const alturaUsada = (blocos) => Math.min(JORNAL_H, Math.max(TOPO + RODAPE + 260,
   TOPO + 6 + blocos.reduce((t, b) => t + CAB + BORDA * 2 + INTERNO * 1.5 + GAP + b.linhas.length * (CELULA_H + 4), 0) + RODAPE + PAD))
 
-// Fita de aviso na diagonal com o nome do tema repetido.
-function Fita({ texto, bg, cor, style }) {
-  return (
-    <div aria-hidden="true" className="absolute overflow-hidden whitespace-nowrap uppercase" style={{ height: 40, lineHeight: '40px', background: bg, color: cor, fontFamily: 'Bangers, var(--font-sans)', fontSize: 28, letterSpacing: '0.06em', boxShadow: '0 4px 0 rgba(0,0,0,.35)', ...style }}>
-      {Array.from({ length: 6 }, () => `${texto} ★ `).join('')}
-    </div>
-  )
-}
-
 function Celula({ produto, tema, onAbrir, indice }) {
   const nome = String(produto.nome || '')
   const fonteNome = nome.length > 34 ? 13 : nome.length > 22 ? 15 : 17
@@ -116,35 +110,64 @@ function Celula({ produto, tema, onAbrir, indice }) {
   )
 }
 
-export default function PaginaJornalMercado({ tema, blocos, encarte, loja, numero, total, onAbrir, animado = false, escalaLogo = 1, altura = JORNAL_H }) {
-  // Texto das fitas: o nome do tema (no impresso era "BLACK FRIDAY").
-  const fita = `${tema.titulo} ${tema.destaque}`.trim()
+export default function PaginaJornalMercado({ tema, blocos, encarte, loja, fundo, numero, total, onAbrir, animado = false, escalaLogo = 1, altura = JORNAL_H }) {
   const logo = Math.min(1.3, Math.max(0.4, Number(escalaLogo ?? encarte?.escalaLogo ?? 1) || 1))
-  const contorno = `0 3px 0 ${tema.contorno}, 2px 2px 0 ${tema.contorno}, -2px 2px 0 ${tema.contorno}`
+  const contorno = contornoTexto(tema.contorno, 3)
+  // Fundo: o enviado pelo mercado, ou o fundo do template (temas com arte), ou o fundo em CSS do tema.
+  const imagemFundo = fundo || caminhoArte(tema, 'jornal')
+  const arteTitulo = !fundo && caminhoArte(tema, 'titulo')
+  const LADO = 300 // colunas do logo e da validade, ao lado da arte do título
+  const periodo = encarte?.periodoDe
+    ? (encarte.periodoAte && encarte.periodoAte !== encarte.periodoDe
+      ? `Ofertas de ${formatData(encarte.periodoDe).slice(0, 5)} a ${formatData(encarte.periodoAte).slice(0, 5)}`
+      : `Ofertas de ${formatData(encarte.periodoDe).slice(0, 5)}`)
+    : ''
   let indice = 0
   return (
     <div className={`relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: JORNAL_W, height: altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
-      {/* big idea, como no jornal impresso: fitas na diagonal pelos cantos e o tema centralizado */}
-      <div className="cm-topo absolute inset-x-0 top-0" style={{ height: TOPO }}>
-        <Fita texto={fita} bg={tema.corDestaque} cor={tema.contorno} style={{ left: -70, top: 34, width: 470, transform: 'rotate(-14deg)' }} />
-        <Fita texto={fita} bg={tema.contorno} cor={tema.corDestaque} style={{ left: -40, top: 92, width: 330, transform: 'rotate(-14deg)' }} />
-        <Fita texto={fita} bg={tema.corDestaque} cor={tema.contorno} style={{ right: -70, top: 34, width: 470, transform: 'rotate(14deg)' }} />
-        <Fita texto={fita} bg={tema.contorno} cor={tema.corDestaque} style={{ right: -40, top: 92, width: 330, transform: 'rotate(14deg)' }} />
-        <div className="absolute inset-x-0 top-0 flex flex-col items-center text-center" style={{ paddingTop: 12 }}>
-          <img src={logoTransparente} alt="Bengala Supermercado" className="block w-auto object-contain" style={{ height: 92 * logo }} />
-          <div className="flex items-baseline justify-center whitespace-nowrap font-black uppercase italic leading-[0.95] tracking-tight" style={{ gap: '0.22em', marginTop: 2, fontSize: fonteQueCabe(`${tema.titulo} ${tema.destaque}`, 640, 84) }}>
-            <span style={{ color: tema.corTitulo, textShadow: contorno }}>{tema.titulo}</span>
-            <span style={{ color: tema.corDestaque, textShadow: contorno }}>{tema.destaque}</span>
-          </div>
-          {tema.chamada && (
-            <div className="uppercase leading-none text-white" style={{ marginTop: 4, fontFamily: 'Bangers, var(--font-sans)', fontSize: 34, letterSpacing: '0.03em', textShadow: contorno }}>{tema.chamada}</div>
-          )}
-          {encarte?.periodoDe && (
-            <div className="rounded-full uppercase" style={{ marginTop: 8, padding: '4px 20px 3px', fontFamily: 'var(--font-encarte)', fontWeight: 900, fontSize: 24, background: tema.corDestaque, color: tema.contorno }}>
-              {encarte.periodoAte && encarte.periodoAte !== encarte.periodoDe ? `Ofertas de ${formatData(encarte.periodoDe).slice(0, 5)} a ${formatData(encarte.periodoAte).slice(0, 5)}` : `Ofertas de ${formatData(encarte.periodoDe).slice(0, 5)}`} · enquanto durarem os estoques
-            </div>
-          )}
+      {imagemFundo && <img src={imagemFundo} alt="" className="cm-fundo absolute inset-x-0 top-0 w-full object-cover object-top" style={{ height: JORNAL_H }} />}
+      {!imagemFundo && tema.icone && (
+        <div aria-hidden="true" className="absolute" style={{ right: -90, top: -60, color: '#ffffff', opacity: 0.13, transform: 'rotate(-14deg)' }}>
+          <Icon name={tema.icone} size={660} strokeWidth={1.6} />
         </div>
+      )}
+
+      {/* big idea: a arte do título do template centralizada, logo de um lado e validade do outro */}
+      <div className="cm-topo absolute inset-x-0 top-0" style={{ height: TOPO }}>
+        {arteTitulo ? (
+          <>
+            <img src={arteTitulo} alt={`${tema.titulo} ${tema.destaque}`} className="absolute object-contain" style={{ left: PAD + LADO, right: PAD + LADO, top: 4, height: TOPO - 14, width: JORNAL_W - (PAD + LADO) * 2 }} />
+            <div className="absolute flex flex-col items-start gap-2" style={{ left: PAD, top: 18, width: LADO - 10 }}>
+              <LogoEncarte h={130} escala={logo} />
+              {tema.chamada && (
+                <div className="uppercase leading-[0.95] text-white" style={{ fontFamily: 'Bangers, var(--font-sans)', fontSize: Math.min(40, fonteQueCabe(tema.chamada, (LADO - 10) * 2, 40, 0.5)), letterSpacing: '0.02em', textShadow: contorno }}>{tema.chamada}</div>
+              )}
+            </div>
+            {encarte?.periodoDe && (
+              <div className="absolute" style={{ right: PAD, top: 40, width: LADO - 10 }}>
+                <FaixaValidade encarte={encarte} tema={tema} fonte={30} alinhar="right" />
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="absolute inset-x-0 top-0 flex flex-col items-center text-center" style={{ paddingTop: 14 }}>
+            <LogoEncarte h={100} escala={logo} />
+            {!fundo && (
+              <div className="flex items-baseline justify-center whitespace-nowrap font-black uppercase italic leading-[0.95] tracking-tight" style={{ gap: '0.22em', marginTop: 4, fontSize: fonteQueCabe(`${tema.titulo} ${tema.destaque}`, 760, 88) }}>
+                <span style={{ color: tema.corTitulo, textShadow: contorno }}>{tema.titulo}</span>
+                <span style={{ color: tema.corDestaque, textShadow: contorno }}>{tema.destaque}</span>
+              </div>
+            )}
+            {!fundo && tema.chamada && (
+              <div className="uppercase leading-none text-white" style={{ marginTop: 4, fontFamily: 'Bangers, var(--font-sans)', fontSize: 36, letterSpacing: '0.03em', textShadow: contorno }}>{tema.chamada}</div>
+            )}
+            {periodo && (
+              <div className="uppercase" style={{ marginTop: 8, fontFamily: 'var(--font-encarte)', fontWeight: 900, fontSize: 28, color: tema.corDestaque, textShadow: contorno }}>
+                {periodo} · <span style={{ color: '#ffffff' }}>enquanto durarem os estoques</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* blocos do dia (ou do setor) com a grade de produtos */}
@@ -165,18 +188,8 @@ export default function PaginaJornalMercado({ tema, blocos, encarte, loja, numer
         ))}
       </div>
 
-      {/* rodapé com a loja */}
-      <div className="absolute inset-x-0 bottom-0 flex items-center gap-4 bg-white" style={{ height: RODAPE, padding: `12px ${PAD}px` }}>
-        <img src={logoTransparente} alt="" className="block w-auto object-contain" style={{ height: 90 }} />
-        <div className="min-w-0 flex-1 leading-tight text-[#111]">
-          {loja?.nome && <div className="font-black uppercase" style={{ fontSize: 24 }}>{loja.nome}</div>}
-          {(loja?.endereco || loja?.cidade) && <div style={{ fontSize: 19, fontWeight: 600 }}>{[loja.endereco, loja.cidade].filter(Boolean).join(' · ')}</div>}
-          {loja?.whatsapp && <div className="font-black" style={{ fontSize: 22, color: '#128c4a' }}>WhatsApp {loja.whatsapp}</div>}
-        </div>
-        <div className="max-w-[330px] text-right font-bold uppercase leading-tight text-[#333]" style={{ fontSize: 14 }}>
-          Ofertas válidas enquanto durarem os estoques. Reservamo-nos o direito de limitar a quantidade por cliente. Imagens ilustrativas.
-        </div>
-      </div>
+      {/* rodapé oficial do jornal impresso do Bengala (QR, WhatsApp, lojas, cartões e avisos) */}
+      <img src={RODAPE_OFICIAL} alt="Lojas, WhatsApp, redes sociais e cartões aceitos do Bengala" className="absolute inset-x-0 bottom-0 block w-full bg-white" style={{ height: RODAPE }} />
 
       {numero && total > 1 && (
         <div className="absolute rounded-full bg-black/60 px-3 py-1 text-[18px] font-black text-white" style={{ right: 12, bottom: RODAPE + 6 }}>{numero}/{total}</div>
