@@ -1,5 +1,5 @@
-import MarcaClawMarket, { SimboloClawMarket } from './MarcaClawMarket'
-import { useEffect, useState } from 'react'
+import { SimboloClawMarket } from './MarcaClawMarket'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useStore, NAV, podeVer } from '../store/StoreContext'
 import { Icon } from './ui'
@@ -19,239 +19,310 @@ const SUBTITULOS = {
   config: 'Estabelecimento e automação',
 }
 
-const MENU_PRINCIPAL = ['dashboard', 'scanner', 'produtos', 'ofertas', 'jornal']
+// Abas da faixa superior (desktop); o resto vai para "Mais".
+const MENU_PRINCIPAL = ['dashboard', 'produtos', 'ofertas', 'jornal']
+// Barra inferior do celular: o botão de bipar fica no centro, maior.
 const MENU_MOBILE = [
   { key: 'dashboard', label: 'Início', path: '/', icone: 'Home', end: true },
-  { key: 'scanner', label: 'Bipar', path: '/scanner', icone: 'ScanLine' },
   { key: 'produtos', label: 'Produtos', path: '/produtos', icone: 'Package' },
+  { key: 'scanner', label: 'Bipar', path: '/scanner', icone: 'ScanBarcode', central: true },
   { key: 'jornal', label: 'Jornal', path: '/jornal', icone: 'Newspaper' },
 ]
 
-function Marca({ colapsado }) {
-  return (
-    <div className="relative flex items-center gap-2.5 overflow-hidden border-b border-white/10 px-3 py-4">
-      <span className="pointer-events-none absolute -right-5 -top-7 h-20 w-20 rounded-full border-[14px] border-offer/15" />
-      {colapsado
-        ? <SimboloClawMarket tamanho={36} />
-        : <MarcaClawMarket tamanho={38} subtitulo="Supermercado Bengala" className="relative" />}
-    </div>
-  )
+function useFecharAoClicarFora(aberto, fechar) {
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!aberto) return
+    const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) fechar() }
+    const onEsc = (e) => e.key === 'Escape' && fechar()
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onEsc)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }, [aberto, fechar])
+  return ref
 }
 
 export default function Layout() {
   const { usuario, logout, lojas, lojaAtiva, setLojaAtiva } = useStore()
   const location = useLocation()
   const navigate = useNavigate()
-  const [colapsado, setColapsado] = useState(false)
-  const [drawerAberto, setDrawerAberto] = useState(false)
   const [busca, setBusca] = useState('')
   const [maisAberto, setMaisAberto] = useState(false)
+  const [contaAberta, setContaAberta] = useState(false)
+  const [folhaAberta, setFolhaAberta] = useState(false)
 
   const atual = NAV.find((n) => n.path === location.pathname) || NAV[0]
   const itensVisiveis = NAV.filter((n) => podeVer(usuario.papel, n.key))
-  const itensMobile = MENU_MOBILE.filter((n) => podeVer(usuario.papel, n.key))
   const itensPrincipais = MENU_PRINCIPAL
     .map((key) => itensVisiveis.find((n) => n.key === key))
     .filter(Boolean)
-  const itensSecundarios = itensVisiveis.filter((n) => !MENU_PRINCIPAL.includes(n.key))
+  const itensSecundarios = itensVisiveis.filter((n) => !MENU_PRINCIPAL.includes(n.key) && n.key !== 'scanner')
+  const itensMobile = MENU_MOBILE.filter((n) => podeVer(usuario.papel, n.key))
+  const secundariosMobile = itensVisiveis.filter((n) => !MENU_MOBILE.some((m) => m.key === n.key))
   const inicial = (usuario.nome || '?').charAt(0).toUpperCase()
+  const atualNoMais = itensSecundarios.some((n) => n.key === atual.key)
+
+  const refMais = useFecharAoClicarFora(maisAberto, () => setMaisAberto(false))
+  const refConta = useFecharAoClicarFora(contaAberta, () => setContaAberta(false))
 
   useEffect(() => {
-    if (itensSecundarios.some((n) => n.key === atual.key)) setMaisAberto(true)
-  }, [atual.key])
+    setMaisAberto(false)
+    setContaAberta(false)
+    setFolhaAberta(false)
+  }, [location.pathname])
 
   const sair = () => {
     logout()
     navigate('/login')
   }
 
-  const ItemMenu = ({ n, mobile }) => (
-    <NavLink
-      key={n.key}
-      to={n.path}
-      end={n.path === '/'}
-      onClick={() => setDrawerAberto(false)}
-      className={({ isActive }) =>
-        `relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${
-          isActive ? 'bg-bengala font-semibold text-white' : 'text-white/72 hover:bg-white/8 hover:text-white'
-        }`
-      }
-    >
-      {({ isActive }) => (
-        <>
-          <Icon name={n.icone} size={18} className="shrink-0" />
-          {(mobile || !colapsado) && <span className="truncate">{n.label}</span>}
-        </>
-      )}
-    </NavLink>
-  )
+  const abaCls = ({ isActive }) =>
+    `relative flex h-14 items-center gap-2 px-3 text-sm font-semibold ${
+      isActive ? 'text-white' : 'text-white/65 hover:text-white'
+    }`
 
-  const Sidebar = ({ mobile }) => (
-    <aside
-      className="flex h-full flex-col bg-brick text-cream transition-all"
-      style={{ width: mobile ? 248 : colapsado ? 64 : 240 }}
-    >
-      <Marca colapsado={!mobile && colapsado} />
-      <nav className="flex-1 overflow-y-auto px-2 py-3">
-        {(mobile || !colapsado) && <p className="mb-1.5 px-3 text-[11px] font-semibold text-white/50">Principal</p>}
-        <div className="space-y-1">
-          {itensPrincipais.map((n) => <ItemMenu key={n.key} n={n} mobile={mobile} />)}
-        </div>
-
-        {itensSecundarios.length > 0 && (
-          <div className="mt-3 border-t border-white/10 pt-2">
-            <button
-              onClick={() => setMaisAberto((aberto) => !aberto)}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/60 hover:bg-white/8 hover:text-white"
-              title="Mais opções"
-            >
-              <Icon name="MoreHorizontal" size={18} className="shrink-0" />
-              {(mobile || !colapsado) && (
-                <>
-                  <span className="flex-1 text-left">Mais opções</span>
-                  <Icon name={maisAberto ? 'ChevronUp' : 'ChevronDown'} size={15} />
-                </>
-              )}
-            </button>
-            {maisAberto && (
-              <div className="mt-1 space-y-1">
-                {itensSecundarios.map((n) => <ItemMenu key={n.key} n={n} mobile={mobile} />)}
-              </div>
-            )}
-          </div>
-        )}
-      </nav>
-      <div className="border-t border-cream/10 p-3">
-        {(mobile || !colapsado) && (
-          <div className="mb-3">
-            <InstallButton />
-          </div>
-        )}
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-coral font-medium text-white">
-            {inicial}
-          </div>
-          {(mobile || !colapsado) && (
-            <div className="min-w-0 flex-1 leading-tight">
-              <div className="truncate text-sm font-medium text-cream">{usuario.nome}</div>
-              <div className="truncate text-[11px] text-cream/60">{usuario.cargo}</div>
-            </div>
-          )}
-          {(mobile || !colapsado) && (
-            <button onClick={sair} title="Sair" className="rounded-lg p-1.5 text-cream/70 hover:bg-brick-light">
-              <Icon name="LogOut" size={17} />
-            </button>
-          )}
-        </div>
-      </div>
-    </aside>
+  const seletorLoja = (escuro) => (
+    <div className="relative">
+      <Icon name="Store" size={15} className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 ${escuro ? 'text-white/60' : 'text-ink-soft'}`} />
+      <select
+        value={lojaAtiva}
+        onChange={(e) => setLojaAtiva(e.target.value)}
+        aria-label="Loja"
+        className={`w-full appearance-none rounded-lg py-2 pl-8 pr-7 text-sm font-medium outline-none ${
+          escuro
+            ? 'border border-white/15 bg-white/8 text-white focus:border-offer [&>option]:text-ink'
+            : 'border border-ink-soft/20 bg-white text-ink focus:border-bengala focus:ring-2 focus:ring-bengala/20'
+        }`}
+      >
+        <option value="todas">Todas as lojas</option>
+        {lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
+      </select>
+      <Icon name="ChevronDown" size={14} className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 ${escuro ? 'text-white/60' : 'text-ink-soft'}`} />
+    </div>
   )
 
   return (
-    <div className="flex h-screen h-dvh overflow-hidden bg-cream">
-      {/* sidebar desktop */}
-      <div className="hidden md:block">
-        <Sidebar mobile={false} />
-      </div>
+    <div className="flex h-screen h-dvh flex-col overflow-hidden bg-cream">
+      {/* faixa superior: azul da marca com o filete vermelho do encarte */}
+      <header
+        className="relative z-30 shrink-0 bg-navy text-white"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
+        <div className="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4 md:gap-4 md:px-6">
+          <NavLink to="/" className="flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="ClawMarket, início">
+            <SimboloClawMarket tamanho={34} />
+            <span className="display-bengala hidden text-[21px] leading-none sm:inline">
+              Claw<span className="text-offer">Market</span>
+            </span>
+          </NavLink>
 
-      {/* drawer mobile */}
-      {drawerAberto && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 bg-ink/40" onClick={() => setDrawerAberto(false)} />
-          <div className="absolute left-0 top-0 h-full">
-            <Sidebar mobile />
+          {/* título da página no celular */}
+          <div className="min-w-0 flex-1 md:hidden">
+            <p className="display-bengala truncate text-lg leading-none">{atual.label}</p>
+          </div>
+
+          {/* abas no desktop */}
+          <nav className="ml-2 hidden h-14 items-stretch md:flex" aria-label="Navegação principal">
+            {itensPrincipais.map((n) => (
+              <NavLink key={n.key} to={n.path} end={n.path === '/'} className={abaCls}>
+                {({ isActive }) => (
+                  <>
+                    {n.label}
+                    {isActive && <span className="absolute inset-x-3 bottom-0 h-[3px] rounded-t bg-offer" />}
+                  </>
+                )}
+              </NavLink>
+            ))}
+            {itensSecundarios.length > 0 && (
+              <div ref={refMais} className="relative flex">
+                <button
+                  onClick={() => setMaisAberto((a) => !a)}
+                  aria-expanded={maisAberto}
+                  className={`relative flex h-14 items-center gap-1.5 px-3 text-sm font-semibold ${atualNoMais ? 'text-white' : 'text-white/65 hover:text-white'}`}
+                >
+                  {atualNoMais ? atual.label : 'Mais'}
+                  <Icon name="ChevronDown" size={15} />
+                  {atualNoMais && <span className="absolute inset-x-3 bottom-0 h-[3px] rounded-t bg-offer" />}
+                </button>
+                {maisAberto && (
+                  <div className="menu-in absolute left-0 top-[calc(100%+6px)] w-60 origin-top-left rounded-xl border border-navy/10 bg-white p-1.5 text-ink shadow-[0_12px_32px_rgba(8,43,79,.18)]">
+                    {itensSecundarios.map((n) => (
+                      <NavLink
+                        key={n.key}
+                        to={n.path}
+                        className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${isActive ? 'bg-cream-200 font-semibold' : 'hover:bg-cream'}`}
+                      >
+                        <Icon name={n.icone} size={17} className="text-ink-soft" />
+                        {n.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </nav>
+
+          <div className="ml-auto flex items-center gap-2">
+            <OfflineBadge />
+            <div className="hidden w-48 lg:block">{seletorLoja(true)}</div>
+            {podeVer(usuario.papel, 'scanner') && atual.key !== 'scanner' && (
+              <button
+                onClick={() => navigate('/scanner')}
+                className="hidden h-10 items-center gap-2 rounded-lg bg-bengala px-4 text-sm font-semibold text-white hover:bg-bengala-dark md:inline-flex"
+              >
+                <Icon name="ScanBarcode" size={18} />
+                Bipar
+              </button>
+            )}
+            <div ref={refConta} className="relative hidden md:block">
+              <button
+                onClick={() => setContaAberta((a) => !a)}
+                aria-label="Conta"
+                aria-expanded={contaAberta}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-offer text-sm font-bold text-navy"
+              >
+                {inicial}
+              </button>
+              {contaAberta && (
+                <div className="menu-in absolute right-0 top-[calc(100%+8px)] w-64 origin-top-right rounded-xl border border-navy/10 bg-white p-3 text-ink shadow-[0_12px_32px_rgba(8,43,79,.18)]">
+                  <p className="truncate font-semibold">{usuario.nome}</p>
+                  <p className="truncate text-xs text-ink-soft">{usuario.cargo}</p>
+                  <div className="mt-3 lg:hidden">{seletorLoja(false)}</div>
+                  <div className="mt-3"><InstallButton /></div>
+                  <button onClick={sair} className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-ink-soft hover:bg-cream hover:text-ink">
+                    <Icon name="LogOut" size={16} /> Sair
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setFolhaAberta(true)}
+              aria-label="Menu"
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-white/80 hover:bg-white/10 md:hidden"
+            >
+              <Icon name="Menu" size={21} />
+            </button>
+          </div>
+        </div>
+        <div className="h-[3px] bg-bengala" />
+      </header>
+
+      <main className="flex-1 overflow-x-hidden overflow-y-auto pb-28 md:pb-10">
+        <div className="mx-auto max-w-7xl px-4 pt-5 md:px-6 md:pt-7">
+          {atual.key !== 'dashboard' && (
+            <div className="mb-5 hidden flex-wrap items-end justify-between gap-3 md:flex">
+              <div className="min-w-0">
+                <h1 className="display-bengala text-[30px] leading-none text-navy">{atual.label}</h1>
+                <p className="mt-1.5 text-sm text-ink-soft">{SUBTITULOS[atual.key]}</p>
+              </div>
+              {atual.key === 'produtos' && (
+                <div className="relative">
+                  <Icon name="Search" size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" />
+                  <input
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                    placeholder="Buscar produto..."
+                    className="w-72 rounded-lg border border-ink-soft/20 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-bengala focus:ring-2 focus:ring-bengala/20"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          {atual.key === 'produtos' && (
+            <div className="relative mb-4 md:hidden">
+              <Icon name="Search" size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" />
+              <input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar produto..."
+                className="w-full rounded-lg border border-ink-soft/20 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-bengala focus:ring-2 focus:ring-bengala/20"
+              />
+            </div>
+          )}
+          <Outlet context={{ busca, setBusca }} />
+        </div>
+      </main>
+
+      {/* barra inferior do celular, com o botão de bipar em destaque */}
+      {itensMobile.length > 1 && (
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-30 border-t border-navy/10 bg-white px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-1.5 md:hidden"
+          aria-label="Navegação principal"
+        >
+          <div className="grid items-end" style={{ gridTemplateColumns: `repeat(${itensMobile.length}, minmax(0, 1fr))` }}>
+            {itensMobile.map((item) =>
+              item.central ? (
+                <NavLink key={item.path} to={item.path} className="flex flex-col items-center gap-1 text-[11px] font-bold text-bengala">
+                  <span className="-mt-6 flex h-15 w-15 items-center justify-center rounded-full border-4 border-white bg-bengala text-white shadow-[0_6px_16px_rgba(216,30,41,.35)]">
+                    <Icon name={item.icone} size={26} />
+                  </span>
+                  {item.label}
+                </NavLink>
+              ) : (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    `flex min-h-12 flex-col items-center justify-center gap-1 text-[11px] font-bold ${isActive ? 'text-navy' : 'text-ink-soft'}`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <span className={`flex h-7 w-12 items-center justify-center rounded-full ${isActive ? 'bg-offer' : ''}`}>
+                        <Icon name={item.icone} size={20} />
+                      </span>
+                      {item.label}
+                    </>
+                  )}
+                </NavLink>
+              )
+            )}
+          </div>
+        </nav>
+      )}
+
+      {/* folha do celular: outras páginas, loja e conta */}
+      {folhaAberta && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+          <div className="overlay-in absolute inset-0 bg-ink/45" onClick={() => setFolhaAberta(false)} />
+          <div className="sheet-in absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-2xl bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+            <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-cream-200" />
+            <div className="mb-4 flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-offer font-bold text-navy">{inicial}</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-ink">{usuario.nome}</p>
+                <p className="truncate text-xs text-ink-soft">{usuario.cargo}</p>
+              </div>
+              <button onClick={() => setFolhaAberta(false)} aria-label="Fechar" className="rounded-lg p-2 text-ink-soft hover:bg-cream">
+                <Icon name="X" size={20} />
+              </button>
+            </div>
+            <div className="mb-4">{seletorLoja(false)}</div>
+            {secundariosMobile.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {secundariosMobile.map((n) => (
+                  <NavLink
+                    key={n.key}
+                    to={n.path}
+                    className={({ isActive }) => `flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-xl border p-2 text-center text-xs font-semibold ${isActive ? 'border-navy bg-navy text-white' : 'border-navy/10 text-ink'}`}
+                  >
+                    <Icon name={n.icone} size={20} />
+                    {n.label}
+                  </NavLink>
+                ))}
+              </div>
+            )}
+            <div className="mt-4"><InstallButton /></div>
+            <button onClick={sair} className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-ink-soft/20 py-3 text-sm font-semibold text-ink">
+              <Icon name="LogOut" size={16} /> Sair
+            </button>
           </div>
         </div>
       )}
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* header */}
-        <header
-          className="z-10 flex min-h-[64px] items-center gap-3 border-b border-navy/8 bg-white px-4 pb-2.5 shadow-sm"
-          style={{ paddingTop: 'max(.625rem, env(safe-area-inset-top))' }}
-        >
-          <button
-            onClick={() => setDrawerAberto(true)}
-            aria-label="Abrir menu"
-            className="rounded-lg p-1.5 text-ink-soft hover:bg-cream-200 md:hidden"
-          >
-            <Icon name="Menu" size={20} />
-          </button>
-          <button
-            onClick={() => setColapsado((c) => !c)}
-            aria-label={colapsado ? 'Expandir menu lateral' : 'Recolher menu lateral'}
-            className="hidden rounded-lg p-1.5 text-ink-soft hover:bg-cream-200 md:block"
-          >
-            <Icon name="PanelLeft" size={20} />
-          </button>
-          <div className="min-w-0 flex-1">
-            <h1 className="display-bengala truncate text-[22px] leading-tight text-navy">{atual.label}</h1>
-            <p className="truncate text-xs text-ink-soft">{SUBTITULOS[atual.key]}</p>
-          </div>
-          <span className="hidden max-w-40 truncate rounded-full bg-offer px-2.5 py-1 text-xs font-black text-navy sm:inline-flex lg:hidden">
-            Piloto · Loja 3
-          </span>
-          <OfflineBadge />
-          <div className="relative hidden lg:block">
-            <Icon name="Store" size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-soft" />
-            <select
-              value={lojaAtiva}
-              onChange={(e) => setLojaAtiva(e.target.value)}
-              className="appearance-none rounded-lg border border-ink-soft/20 bg-white py-2 pl-8 pr-7 text-sm font-medium outline-none focus:border-bengala focus:ring-2 focus:ring-bengala/20"
-            >
-              <option value="todas">Todas as lojas</option>
-              {lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
-            </select>
-            <Icon name="ChevronDown" size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-soft" />
-          </div>
-          {atual.key === 'produtos' && (
-          <div className="relative hidden sm:block">
-            <Icon name="Search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" />
-            <input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar produto..."
-              className="w-44 rounded-lg border border-ink-soft/20 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:w-56 focus:border-bengala focus:ring-2 focus:ring-bengala/20 lg:w-56"
-            />
-          </div>
-          )}
-          {atual.key !== 'scanner' && (
-            <button
-              onClick={() => navigate('/scanner')}
-              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-bengala px-3 py-2 text-sm font-semibold text-white hover:bg-bengala-dark"
-            >
-              <Icon name="ScanLine" size={17} />
-              <span className="hidden sm:inline">Escanear</span>
-            </button>
-          )}
-        </header>
-
-        <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 pb-24 md:p-5">
-          <Outlet context={{ busca, setBusca }} />
-        </main>
-
-        <nav
-          className="fixed bottom-0 left-0 right-0 z-30 grid border-t border-navy/10 bg-white/95 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(8,43,79,.08)] backdrop-blur md:hidden"
-          style={{ gridTemplateColumns: `repeat(${itensMobile.length}, minmax(0, 1fr))` }}
-          aria-label="Navegação principal"
-        >
-          {itensMobile.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.end}
-              className={({ isActive }) =>
-                `flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-bold transition ${
-                  isActive ? 'bg-bengala/10 text-bengala' : 'text-ink-soft'
-                }`
-              }
-            >
-              <Icon name={item.icone} size={20} />
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-      </div>
     </div>
   )
 }
