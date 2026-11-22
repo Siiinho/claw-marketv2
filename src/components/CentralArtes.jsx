@@ -14,7 +14,7 @@ import { exportarPNG, exportarPDFPaginas, gerarPNG } from '../lib/exportar'
 
 const SAIDAS = [
   ...Object.values(FORMATOS).map((f) => ({ id: f.id, nome: f.nome, sub: `${f.proporcao} · ${f.uso}`, icone: f.icone })),
-  { id: 'cartaz', nome: 'Cartaz', sub: 'A3 a A7, 7 modelos para imprimir', icone: 'FileText' },
+  { id: 'cartaz', nome: 'Cartaz', sub: 'A3 a A7, 1 por folha, 7 modelos', icone: 'FileText' },
   { id: 'etiqueta', nome: 'Etiquetas', sub: 'Preço de gôndola, 24 por folha', icone: 'Tags' },
 ]
 
@@ -284,7 +284,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
         )}
         <p className="mt-3 text-xs text-ink-soft">
           {impressao
-            ? `${ehCartaz && ctrlCartaz?.onAbrir ? 'Toque num cartaz para mudar o preço, o texto ou o tamanho de cada parte. ' : ''}O PDF sai em folha ${ehCartaz ? imp.folha.formato.toUpperCase() : 'A4'}${ehCartaz && imp.porFolha > 1 ? ' com linhas pontilhadas para recortar' : ''}. A validade dos produtos não aparece, só o período da campanha.`
+            ? `${ehCartaz && ctrlCartaz?.onAbrir ? 'Toque num cartaz para mudar o preço, o texto ou o tamanho de cada parte. ' : ''}${ehCartaz ? `O PDF sai com 1 cartaz por folha ${tamanho} (${imp.desc}). Na impressora, escolha papel ${tamanho} ou "Ajustar à página".` : 'O PDF sai em folha A4 com linhas pontilhadas para recortar.'} A validade dos produtos não aparece, só o período da campanha.`
             : `As artes saem no tamanho certo (${dim.largura} × ${dim.altura} px). No celular, use Compartilhar para mandar direto no WhatsApp ou Instagram.`}
         </p>
       </Secao>

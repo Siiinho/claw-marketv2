@@ -9,7 +9,6 @@ import { CamadaCartaz } from './camadas'
 // A validade do produto nunca aparece: só o período da campanha.
 
 const PX_POR_MM = 96 / 25.4
-const MARGEM_MM = 4
 
 export const PAPEIS = {
   A3: { id: 'A3', w: 297, h: 420 },
@@ -21,33 +20,21 @@ export const PAPEIS = {
 
 export const ORIENTACOES = [['retrato', 'Em pé'], ['paisagem', 'Deitado']]
 
-// Quantos cartazes cabem na folha (A3 sai em folha A3; o resto em A4, na posição que couber mais).
+// Impressão sempre 1 cartaz por folha, com a folha do tamanho do cartaz (A5 sai em página A5,
+// A6 em página A6...), para usar a folha inteira, sem sobra nem linha de corte.
 export function imposicao(tamanho = 'A4', orientacao = 'retrato') {
   const papel = PAPEIS[tamanho] || PAPEIS.A4
   const deitado = orientacao === 'paisagem'
-  const cw = deitado ? papel.h : papel.w
-  const ch = deitado ? papel.w : papel.h
-  const base = tamanho === 'A3' ? PAPEIS.A3 : PAPEIS.A4
-  const opcoes = [
-    { orientacao: 'retrato', w: base.w, h: base.h },
-    { orientacao: 'paisagem', w: base.h, h: base.w },
-  ].map((f) => {
-    const cols = Math.max(1, Math.floor((f.w + 0.5) / cw))
-    const lins = Math.max(1, Math.floor((f.h + 0.5) / ch))
-    return { ...f, cols, lins, n: cols * lins }
-  })
-  opcoes.sort((a, b) => b.n - a.n || +(b.orientacao === orientacao) - +(a.orientacao === orientacao))
-  const f = opcoes[0]
-  const folha = { formato: base.id.toLowerCase(), orientacao: f.orientacao, largura: Math.round(f.w * PX_POR_MM), altura: Math.round(f.h * PX_POR_MM) }
-  const margem = MARGEM_MM * PX_POR_MM
+  const w = Math.round((deitado ? papel.h : papel.w) * PX_POR_MM)
+  const h = Math.round((deitado ? papel.w : papel.h) * PX_POR_MM)
   return {
-    folha,
-    cols: f.cols,
-    lins: f.lins,
-    porFolha: f.n,
-    margem,
-    cartaz: { largura: (folha.largura - margem * 2) / f.cols, altura: (folha.altura - margem * 2) / f.lins },
-    desc: f.n === 1 ? `1 por folha ${base.id}` : `${f.n} por folha ${base.id}`,
+    folha: { formato: papel.id.toLowerCase(), orientacao: deitado ? 'paisagem' : 'retrato', largura: w, altura: h },
+    cols: 1,
+    lins: 1,
+    porFolha: 1,
+    margem: 0,
+    cartaz: { largura: w, altura: h },
+    desc: `${papel.w} × ${papel.h} mm`,
   }
 }
 

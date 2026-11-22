@@ -199,8 +199,8 @@ export async function exportarPDF(el, nome = 'jornal') {
   }
 }
 
-// Folhas em mm (A3 para cartazes grandes; o resto em A4).
-const PAPEL_MM = { a4: [210, 297], a3: [297, 420] }
+// Folhas em mm. Cartaz sai 1 por folha, na folha do tamanho dele.
+const PAPEL_MM = { a3: [297, 420], a4: [210, 297], a5: [148, 210], a6: [105, 148], a7: [74, 105] }
 
 export async function exportarPDFPaginas(elementos, nome = 'jornal', { formato = 'a4', onProgresso } = {}) {
   const papel = PAPEL_MM[formato] ? formato : 'a4'
