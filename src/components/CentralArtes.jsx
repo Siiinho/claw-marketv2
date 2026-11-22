@@ -35,6 +35,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
   const [tamanho, setTamanho] = useState('A5')
   const [excluidos, setExcluidos] = useState(() => new Set())
   const [ocupado, setOcupado] = useState(null)
+  const [progresso, setProgresso] = useState(null)
   const refs = useRef([])
   const tema = temaCampanhaById(temaId)
 
@@ -76,6 +77,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
       if (erro?.name !== 'AbortError') toast(erro?.message || 'Não foi possível gerar a arte.', 'erro')
     } finally {
       setOcupado(null)
+      setProgresso(null)
     }
   }
 
@@ -107,7 +109,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
   })
 
   const baixarPDF = () => executar('pdf', async () => {
-    const r = await exportarPDFPaginas(refs.current.slice(0, paginas.length), impressao ? nomeArquivo(0).replace(/-\d+$/, '') : `${slug(titulo)}-${saida}`, { formato: ehCartaz ? imp.folha.formato : 'a4' })
+    const r = await exportarPDFPaginas(refs.current.slice(0, paginas.length), impressao ? nomeArquivo(0).replace(/-\d+$/, '') : `${slug(titulo)}-${saida}`, { formato: ehCartaz ? imp.folha.formato : 'a4', onProgresso: (i, n) => setProgresso(n > 1 ? `${i} de ${n}` : null) })
     setTimeout(() => URL.revokeObjectURL(r.url), 60000)
   })
 
@@ -237,7 +239,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
         descricao={plural(temConteudo ? paginas.length : 0, impressao ? 'folha' : 'arte', impressao ? 'folhas' : 'artes')}
         acao={impressao ? (
           <Botao onClick={baixarPDF} disabled={!temConteudo || !!ocupado}>
-            <Icon name={ocupado === 'pdf' ? 'LoaderCircle' : 'Printer'} size={17} className={ocupado === 'pdf' ? 'animate-spin' : ''} /> Baixar PDF para imprimir
+            <Icon name={ocupado === 'pdf' ? 'LoaderCircle' : 'Printer'} size={17} className={ocupado === 'pdf' ? 'animate-spin' : ''} /> {ocupado === 'pdf' ? (progresso ? `Gerando folha ${progresso}` : 'Gerando PDF…') : 'Baixar PDF para imprimir'}
           </Botao>
         ) : (
           <>

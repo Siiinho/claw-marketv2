@@ -1,9 +1,14 @@
 import html2canvas from 'html2canvas-pro'
+import { snapdom } from '@zumer/snapdom'
 import jsPDF from 'jspdf'
 
 const proximoFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
 const LIMITE_PIXELS_CANVAS = 24_000_000
-const ESCALA_IMPRESSAO = 5
+// 3x a folha de 96 px = ~290 dpi, qualidade de gráfica. Mais que isso só deixava o PDF lento.
+const ESCALA_IMPRESSAO = 3
+// Página do PDF em JPEG de alta qualidade: o jsPDF grava o JPEG direto, sem recomprimir,
+// o que deixa a geração bem mais rápida que PNG (que ele decodifica e comprime de novo).
+const QUALIDADE_PDF = 0.95
 
 async function aguardarImagem(img) {
   if (img.complete && img.naturalWidth > 0) return
@@ -60,8 +65,6 @@ async function captura(el, { escala } = {}) {
   const escalaSegura = Math.sqrt(LIMITE_PIXELS_CANVAS / Math.max(largura * altura, 1))
   const escalas = escala ? [escala, Math.min(escala, 2), 1].filter((v, i, l) => l.indexOf(v) === i) : [...new Set([
     Math.min(ESCALA_IMPRESSAO, escalaSegura),
-    Math.min(4, escalaSegura),
-    Math.min(3, escalaSegura),
     Math.min(2, escalaSegura),
   ])]
     .filter((scale) => Number.isFinite(scale) && scale >= 1)
@@ -72,6 +75,15 @@ async function captura(el, { escala } = {}) {
   // As fontes dos cartazes precisam estar carregadas, senão o arquivo sai com a fonte reserva.
   try { await document.fonts?.ready } catch { /* sem suporte: segue */ }
   for (const scale of escalas.length ? escalas : [1]) {
+    // snapdom (github.com/zumerlab/snapdom): captura a página pelo próprio navegador,
+    // várias vezes mais rápido que o html2canvas e fiel às fontes e aos SVGs.
+    // Se falhar (navegador antigo, imagem bloqueada), cai no html2canvas.
+    try {
+      const canvas = await snapdom.toCanvas(el, { scale, backgroundColor: '#ffffff' })
+      if (canvas?.width > 1 && canvas?.height > 1) return canvas
+    } catch (erro) {
+      ultimoErro = erro
+    }
     try {
       return await html2canvas(el, {
         scale,
@@ -170,7 +182,7 @@ export async function gerarPNG(el, opcoes) {
 export async function exportarPDF(el, nome = 'jornal') {
   const canvas = await captura(el)
   try {
-    const blobPagina = await canvasParaBlob(canvas, 'image/png')
+    const blobPagina = await canvasParaBlob(canvas, 'image/jpeg', QUALIDADE_PDF)
     const bytesPagina = await blobParaBytes(blobPagina)
     const orientacao = canvas.width > canvas.height ? 'l' : 'p'
     const pdf = new jsPDF({ orientation: orientacao, unit: 'mm', format: 'a4', compress: true })
@@ -179,7 +191,7 @@ export async function exportarPDF(el, nome = 'jornal') {
     const escala = Math.min(larguraA4 / canvas.width, alturaA4 / canvas.height)
     const largura = canvas.width * escala
     const altura = canvas.height * escala
-    pdf.addImage(bytesPagina, 'PNG', (larguraA4 - largura) / 2, (alturaA4 - altura) / 2, largura, altura, undefined, 'SLOW')
+    pdf.addImage(bytesPagina, 'JPEG', (larguraA4 - largura) / 2, (alturaA4 - altura) / 2, largura, altura, undefined, 'NONE')
     return oferecerArquivo(pdf.output('blob'), `${nome}.pdf`)
   } finally {
     canvas.width = 1
@@ -190,7 +202,7 @@ export async function exportarPDF(el, nome = 'jornal') {
 // Folhas em mm (A3 para cartazes grandes; o resto em A4).
 const PAPEL_MM = { a4: [210, 297], a3: [297, 420] }
 
-export async function exportarPDFPaginas(elementos, nome = 'jornal', { formato = 'a4' } = {}) {
+export async function exportarPDFPaginas(elementos, nome = 'jornal', { formato = 'a4', onProgresso } = {}) {
   const papel = PAPEL_MM[formato] ? formato : 'a4'
   const [curto, longo] = PAPEL_MM[papel]
   const paginas = elementos.filter(Boolean)
@@ -198,6 +210,9 @@ export async function exportarPDFPaginas(elementos, nome = 'jornal', { formato =
 
   let pdf
   for (let i = 0; i < paginas.length; i += 1) {
+    onProgresso?.(i + 1, paginas.length)
+    // Deixa a tela respirar entre as páginas (o botão mostra o progresso).
+    await proximoFrame()
     const canvas = await captura(paginas[i])
     try {
       const larguraCanvas = canvas.width
@@ -205,9 +220,8 @@ export async function exportarPDFPaginas(elementos, nome = 'jornal', { formato =
       const orientacao = larguraCanvas > alturaCanvas ? 'l' : 'p'
       const larguraA4 = orientacao === 'l' ? longo : curto
       const alturaA4 = orientacao === 'l' ? curto : longo
-      // PNG evita os artefatos e o texto borrado introduzidos pela compressão
-      // JPEG. A captura em alta resolução permanece nítida na impressão A4.
-      const blobPagina = await canvasParaBlob(canvas, 'image/png')
+      // JPEG 95% em ~290 dpi: sem marcas visíveis no papel e muito mais rápido que PNG.
+      const blobPagina = await canvasParaBlob(canvas, 'image/jpeg', QUALIDADE_PDF)
       const bytesPagina = await blobParaBytes(blobPagina)
       const escalaA4 = Math.min(larguraA4 / larguraCanvas, alturaA4 / alturaCanvas)
       const largura = larguraCanvas * escalaA4
@@ -217,7 +231,7 @@ export async function exportarPDFPaginas(elementos, nome = 'jornal', { formato =
 
       if (!pdf) pdf = new jsPDF({ orientation: orientacao, unit: 'mm', format: papel, compress: true })
       else pdf.addPage(papel, orientacao)
-      pdf.addImage(bytesPagina, 'PNG', x, y, largura, altura, undefined, 'SLOW')
+      pdf.addImage(bytesPagina, 'JPEG', x, y, largura, altura, undefined, 'NONE')
     } finally {
       // Libera os pixels mesmo quando uma página falha no meio da exportação.
       canvas.width = 1
