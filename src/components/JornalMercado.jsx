@@ -133,7 +133,7 @@ export default function PaginaJornalMercado({ tema, blocos, encarte, loja, fundo
     : ''
   let indice = 0
   return (
-    <div className={`relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: JORNAL_W, height: altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
+    <div className={`arte-fixa relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: JORNAL_W, height: altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
       {imagemFundo && <img src={imagemFundo} alt="" className="cm-fundo absolute inset-x-0 top-0 w-full object-cover object-top" style={{ height: JORNAL_H }} />}
       {!imagemFundo && tema.icone && (
         <div aria-hidden="true" className="absolute" style={{ right: -90, top: -60, color: '#ffffff', opacity: 0.13, transform: 'rotate(-14deg)' }}>

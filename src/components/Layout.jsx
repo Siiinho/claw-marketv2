@@ -86,7 +86,7 @@ export default function Layout() {
 
   const seletorLoja = (escuro) => (
     <div className="relative">
-      <Icon name="Store" size={15} className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 ${escuro ? 'text-white/60' : 'text-ink-soft'}`} />
+      <Icon name="Store" size={15} className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 ${escuro ? 'text-white/85' : 'text-ink-soft'}`} />
       <select
         value={lojaAtiva}
         onChange={(e) => setLojaAtiva(e.target.value)}
@@ -100,12 +100,12 @@ export default function Layout() {
         <option value="todas">Todas as lojas</option>
         {lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
       </select>
-      <Icon name="ChevronDown" size={14} className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 ${escuro ? 'text-white/60' : 'text-ink-soft'}`} />
+      <Icon name="ChevronDown" size={14} className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 ${escuro ? 'text-white/85' : 'text-ink-soft'}`} />
     </div>
   )
 
   return (
-    <div className="flex h-screen h-dvh flex-col overflow-hidden bg-cream">
+    <div className="app-ui flex h-screen h-dvh flex-col overflow-hidden bg-cream">
       {/* faixa superior: azul da marca com o filete vermelho do encarte */}
       <header
         className="relative z-30 shrink-0 bg-navy text-white"

@@ -58,7 +58,7 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    <div className="app-ui flex min-h-screen flex-col md:flex-row">
       {/* lado esquerdo */}
       <div className="relative flex flex-col justify-between overflow-hidden bg-brick p-8 text-cream md:w-1/2 md:p-12">
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1.5 bg-bengala" />

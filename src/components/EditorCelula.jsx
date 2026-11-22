@@ -110,7 +110,7 @@ export default function EditorCelula({ produto, tema, ajuste, onChange }) {
           onPointerUp={soltar}
           onPointerCancel={soltar}
         >
-          <div ref={celulaRef} className="pointer-events-none absolute left-0 top-0" style={{ width: W, height: H, transform: `scale(${escala})`, transformOrigin: 'top left' }}>
+          <div ref={celulaRef} className="arte-fixa pointer-events-none absolute left-0 top-0" style={{ width: W, height: H, transform: `scale(${escala})`, transformOrigin: 'top left' }}>
             <CelulaProduto produto={{ ...produto, ajusteArte: atual }} tema={tema} estilo={{ left: 0, top: 0, width: W, height: H }} />
           </div>
           {CAMADAS.map(([id]) => caixas[id] && (

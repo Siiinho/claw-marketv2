@@ -293,7 +293,7 @@ export default function Produtos() {
                     </td>
                     <td className="px-4 py-3 text-ink-soft">
                       <div>{setorById(p.setor).nome}</div>
-                      <div className="text-xs text-ink-soft/70">{lojaNome(p.loja)}</div>
+                      <div className="text-xs text-ink-soft">{lojaNome(p.loja)}</div>
                     </td>
                     <td className="num-tab px-4 py-3">{p.estoque}</td>
                     <td className="px-4 py-3"><StatusBadge validade={p.validade} /></td>

@@ -30,7 +30,7 @@ export function BotaoEstrela({ ativo, onClick, nome, className = '' }) {
       aria-pressed={ativo}
       aria-label={`${ativo ? 'Tirar a estrela de' : 'Dar estrela para'} ${nome}`}
       title="Estrela: entra no Mercado Encarte (oferta de hoje)"
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${ativo ? 'bg-bengala text-offer' : 'text-ink-soft/70 hover:bg-bengala/10 hover:text-bengala'} ${className}`}
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${ativo ? 'bg-bengala text-offer' : 'text-ink-soft hover:bg-bengala/10 hover:text-bengala'} ${className}`}
     >
       <Icon name="Star" size={17} fill={ativo ? 'var(--color-offer)' : 'none'} />
     </button>

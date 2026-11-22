@@ -522,7 +522,7 @@ export default function Jornal() {
                           className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-sm ${ativo ? 'border-navy bg-navy/[0.045] font-bold text-navy shadow-[inset_0_0_0_1px_var(--color-navy)]' : `border-ink-soft/20 bg-white font-semibold hover:border-ink-soft/45 ${n ? 'text-ink' : 'text-ink-soft'}`}`}>
                           <ImagemSetor id={s.id} size={24} />
                           <span className="min-w-0 flex-1 truncate">{s.nome}</span>
-                          <span className={`num-tab shrink-0 text-xs ${n ? 'font-bold text-ink' : 'text-ink-soft/70'}`}>{n}</span>
+                          <span className={`num-tab shrink-0 text-xs ${n ? 'font-bold text-ink' : 'text-ink-soft'}`}>{n}</span>
                         </button>
                       )
                     })}

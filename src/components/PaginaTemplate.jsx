@@ -321,7 +321,7 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
   const tituloTop = f.tituloTop ? Math.max(f.tituloTop - 30, 32 + 160 * logo - 6) : 0
   const fonteTitulo = f.tituloTop ? Math.min(1, (topo - 120 - tituloTop) / (f.titulo * 0.9 + f.destaque * 0.95)) : 1
   return (
-    <div className={`relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: f.largura, height: f.altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
+    <div className={`arte-fixa relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: f.largura, height: f.altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
       {usarFundo && <img src={imagemFundo} alt="" className="cm-fundo absolute inset-0 h-full w-full object-cover" />}
       {/* templates de setor: o ícone do setor grande ao fundo */}
       {!usarFundo && tema.icone && (
