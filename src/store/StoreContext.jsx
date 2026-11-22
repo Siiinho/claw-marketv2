@@ -523,6 +523,7 @@ export function StoreProvider({ children }) {
           ...prod,
           id: prod.id || uid(),
           loja,
+          cadastradoEm: prod.cadastradoEm || new Date().toISOString(),
           naFila: Boolean(prod.naFila),
           origemFila: prod.naFila ? (prod.origemFila || 'manual') : null,
           adicionadoFilaEm: prod.naFila ? (prod.adicionadoFilaEm || new Date().toISOString()) : null,
@@ -538,6 +539,53 @@ export function StoreProvider({ children }) {
     setOfertas((list) => list.filter((o) => o.produtoId !== id))
     setLotes((list) => list.filter((l) => l.produtoId !== id))
     registrarAcao('excluir', 'produto', id)
+  }, [registrarAcao])
+
+  // Baixa de produto vencido ou perto de vencer: 'troca' (volta ao fornecedor, não é perda)
+  // ou 'perda' (descarte; entra nos relatórios e no desperdício). Tira a quantidade do estoque;
+  // quando zera, o lote daquela validade fica resolvido e sai da fila do jornal.
+  const darBaixaProduto = useCallback((id, { tipo, quantidade, motivo = '' }) => {
+    const em = new Date().toISOString()
+    const qtd = Math.max(1, Math.round(Number(quantidade) || 0))
+    setProdutos((list) => list.map((p) => {
+      if (p.id !== id) return p
+      const estoque = Math.max(0, Number(p.estoque) || 0)
+      const restante = Math.max(0, estoque - qtd)
+      const registro = {
+        id: uid(),
+        tipo: tipo === 'troca' ? 'troca' : 'perda',
+        quantidade: qtd,
+        estoqueAntes: estoque,
+        valorUnit: Number(p.precoNormal) || 0,
+        valor: qtd * (Number(p.precoNormal) || 0),
+        validade: p.validade || null,
+        motivo: String(motivo || '').trim().slice(0, 200),
+        em,
+        usuarioNome: usuario?.nome || null,
+      }
+      return {
+        ...p,
+        estoque: restante,
+        baixas: [registro, ...(p.baixas || [])].slice(0, 50),
+        ...(restante === 0 ? { baixaValidade: p.validade || null, naFila: false, origemFila: null, adicionadoFilaEm: null } : {}),
+      }
+    }))
+    registrarAcao(tipo === 'troca' ? 'troca' : 'perda', 'produto', id, `${qtd} un`)
+  }, [registrarAcao, usuario?.nome])
+
+  const desfazerBaixa = useCallback((id, baixaId) => {
+    setProdutos((list) => list.map((p) => {
+      if (p.id !== id) return p
+      const b = (p.baixas || []).find((x) => x.id === baixaId)
+      if (!b) return p
+      return {
+        ...p,
+        estoque: (Number(p.estoque) || 0) + (Number(b.quantidade) || 0),
+        baixas: (p.baixas || []).filter((x) => x.id !== baixaId),
+        baixaValidade: null,
+      }
+    }))
+    registrarAcao('desfazer-baixa', 'produto', id)
   }, [registrarAcao])
 
   const registrarLote = useCallback((dados) => {
@@ -622,6 +670,7 @@ export function StoreProvider({ children }) {
         ...prod,
         id,
         loja,
+        cadastradoEm: prod.cadastradoEm || agora,
         naFila: true,
         origemFila: origem || 'scanner',
         adicionadoFilaEm: agora,
@@ -754,6 +803,8 @@ export function StoreProvider({ children }) {
     carregandoSessao,
     salvarProduto,
     excluirProduto,
+    darBaixaProduto,
+    desfazerBaixa,
     registrarLote,
     toggleFila,
     adicionarNaFila,

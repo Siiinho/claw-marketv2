@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useStore } from '../store/StoreContext'
 import { Icon, Indicador, Secao } from '../components/ui'
-import { SETORES, setorById, statusValidade, diasParaVencer, formatBRL } from '../lib/utils'
+import { SETORES, setorById, statusValidade, diasParaVencer, formatBRL, valorPerdasRegistradas, loteResolvido } from '../lib/utils'
 
 export default function Relatorios() {
   const { produtos, ofertas, todosProdutos, lojas, lojaAtiva, setLojaAtiva } = useStore()
@@ -12,7 +12,7 @@ export default function Relatorios() {
         .map((l) => {
           const ps = todosProdutos.filter((p) => p.loja === l.id)
           const vencendo = ps.filter((p) => { const d = diasParaVencer(p.validade); return d != null && d >= 0 && d <= 7 }).length
-          const perda = ps.filter((p) => diasParaVencer(p.validade) < 0).reduce((s, p) => s + (p.precoNormal || 0) * (p.estoque || 0), 0)
+          const perda = ps.filter((p) => diasParaVencer(p.validade) < 0).reduce((s, p) => s + (p.precoNormal || 0) * (p.estoque || 0), 0) + valorPerdasRegistradas(ps)
           const valorEstoque = ps.reduce((s, p) => s + (p.precoNormal || 0) * (p.estoque || 0), 0)
           return { ...l, itens: ps.length, vencendo, perda, valorEstoque }
         })
@@ -30,6 +30,7 @@ export default function Relatorios() {
         return p ? s + (p.precoNormal * (o.desconto / 100)) * (p.estoque || 1) : s
       }, 0)
     const perda = produtos.filter((p) => diasParaVencer(p.validade) < 0).reduce((s, p) => s + (p.precoNormal || 0) * (p.estoque || 0), 0)
+    const perdaRegistrada = valorPerdasRegistradas(produtos)
 
     const porSetor = SETORES.map((s) => ({
       ...s,
@@ -41,9 +42,9 @@ export default function Relatorios() {
     })).filter((s) => s.valor > 0).sort((a, b) => b.valor - a.valor)
 
     const status = { vencido: 0, critico: 0, atencao: 0, normal: 0 }
-    produtos.forEach((p) => { status[statusValidade(p.validade).id]++ })
+    produtos.forEach((p) => { if (!loteResolvido(p)) status[statusValidade(p.validade).id]++ })
 
-    return { valorEstoque, economia, perda, porSetor, status, totalOfertas: ofertas.length }
+    return { valorEstoque, economia, perda: perda + perdaRegistrada, perdaRegistrada, porSetor, status, totalOfertas: ofertas.length }
   }, [produtos, ofertas])
 
   const maxValor = Math.max(...d.porSetor.map((s) => s.valor), 1)
@@ -60,7 +61,7 @@ export default function Relatorios() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Indicador rotulo="Valor em estoque" valor={formatBRL(d.valorEstoque)} icone="Wallet" cor="var(--color-info)" />
         <Indicador rotulo="Economia gerada" valor={formatBRL(d.economia)} icone="PiggyBank" cor="var(--color-success)" />
-        <Indicador rotulo="Perda potencial" valor={formatBRL(d.perda)} icone="TrendingDown" cor="var(--color-critical)" />
+        <Indicador rotulo="Perdas" valor={formatBRL(d.perda)} icone="TrendingDown" cor="var(--color-critical)" detalhe={`${formatBRL(d.perdaRegistrada)} já descartados; o resto está vencido na loja`} />
         <Indicador rotulo="Ofertas criadas" valor={d.totalOfertas} icone="Tag" cor="var(--color-coral-dark)" />
       </div>
 

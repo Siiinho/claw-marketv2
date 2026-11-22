@@ -280,9 +280,9 @@ export function Rotulo({ children, acao, className = '' }) {
 }
 
 // Abas internas da página (controle segmentado).
-export function Abas({ itens, valor, onChange, rotulo }) {
+export function Abas({ itens, valor, onChange, rotulo, className = '' }) {
   return (
-    <div role="tablist" aria-label={rotulo} className="flex gap-1 overflow-x-auto rounded-xl bg-cream-200 p-1">
+    <div role="tablist" aria-label={rotulo} className={`flex gap-1 overflow-x-auto rounded-xl bg-cream-200 p-1 ${className}`}>
       {itens.map((a) => {
         const ativo = valor === a.id
         return (

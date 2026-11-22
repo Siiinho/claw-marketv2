@@ -196,3 +196,18 @@ export const seloOfertaById = (id) => SELOS_OFERTA.find((s) => s.id === id) || n
 
 // Selo do produto: o escolhido pelo operador ou, sem escolha, "Oferta".
 export const seloDoProduto = (produto) => seloOfertaById(produto?.seloOferta) || SELOS_OFERTA[0]
+
+// ---- baixas (troca com fornecedor ou perda) ----
+// Um vencido fica resolvido quando a baixa zerou o estoque daquela validade.
+export const loteResolvido = (p) => Boolean(p?.baixaValidade) && p.baixaValidade === p.validade
+export const precisaDecisao = (p) => {
+  const d = diasParaVencer(p?.validade)
+  return d != null && d < 0 && !loteResolvido(p)
+}
+export const dataCadastro = (p) => p?.cadastradoEm || p?.adicionadoFilaEm || null
+export const todasBaixas = (produtos = []) =>
+  produtos
+    .flatMap((p) => (p.baixas || []).map((b) => ({ ...b, produtoId: p.id, produto: p })))
+    .sort((a, b) => String(b.em).localeCompare(String(a.em)))
+export const valorPerdasRegistradas = (produtos = []) =>
+  produtos.reduce((s, p) => s + (p.baixas || []).filter((b) => b.tipo === 'perda').reduce((a, b) => a + (Number(b.valor) || 0), 0), 0)

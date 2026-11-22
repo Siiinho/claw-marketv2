@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
 import { Icon, Botao, Indicador, Secao } from '../components/ui'
 import {
-  SETORES, setorById, statusValidade, pesoTotalKg, formatBRL,
+  SETORES, setorById, statusValidade, pesoUnitarioKg, pesoTotalKg, formatBRL,
   FATOR_CO2, KG_POR_REFEICAO,
 } from '../lib/utils'
 import { exportarPDF } from '../lib/exportar'
@@ -28,6 +28,15 @@ export default function Sustentabilidade() {
       const kg = pesoTotalKg(p)
       const acao = !!ofertaDoProduto(p.id) || p.naFila || !!p.precoPromo
       const total = (p.precoNormal || 0) * (p.estoque || 0)
+
+      // Perdas já descartadas pela aba Produtos (as trocas voltam ao fornecedor e não contam).
+      for (const b of p.baixas || []) {
+        if (b.tipo !== 'perda') continue
+        const kgB = pesoUnitarioKg(p.nome) * (Number(b.quantidade) || 0)
+        kgDesperdicado += kgB
+        vlDesperdicado += Number(b.valor) || 0
+        if (setores[p.setor]) setores[p.setor].desp += kgB
+      }
 
       if (s.id === 'vencido') {
         kgDesperdicado += kg
