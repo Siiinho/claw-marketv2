@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/StoreContext'
-import { Icon, Botao, Campo, inputCls } from '../components/ui'
+import { Icon, Botao, Campo, inputCls, Secao, Rotulo } from '../components/ui'
 import { codigosComFotoDaLoja } from '../lib/catalogoBengala'
 import { enviarFotosCatalogoNuvem, nuvemAtiva } from '../lib/nuvem'
 
@@ -34,22 +34,17 @@ function FotosNaNuvem({ toast }) {
   }
   const pct = progresso?.total ? Math.round((progresso.feitos / progresso.total) * 100) : 0
   return (
-    <div className="card-bengala p-5">
-      <div className="mb-2 flex items-center gap-2">
-        <Icon name="CloudUpload" size={18} className="text-bengala" />
-        <h2 className="font-bold text-ink">Fotos dos produtos na nuvem</h2>
-      </div>
-      <p className="mb-3 text-sm text-ink-soft">Envia as fotos da pasta de imagens deste PC para a nuvem. Depois disso, a foto aparece ao bipar pelo celular e no encarte publicado. Só envia as que ainda não estão lá.</p>
+    <Secao className="lg:col-span-2" titulo="Fotos dos produtos na nuvem" descricao="Envia as fotos da pasta de imagens deste PC para a nuvem. Depois disso, a foto aparece ao bipar pelo celular e no encarte publicado. Só envia as que ainda não estão lá.">
       {progresso ? (
         <div className="mb-3">
-          <div className="h-3 overflow-hidden rounded-full bg-ink-soft/10"><div className="h-full bg-bengala transition-all" style={{ width: `${pct}%` }} /></div>
+          <div className="h-3 overflow-hidden rounded-full bg-cream-200"><div className="h-full bg-navy transition-[width] duration-300" style={{ width: `${pct}%` }} /></div>
           <div className="mt-1 text-xs text-ink-soft">{progresso.feitos} de {progresso.total} · {progresso.enviados} enviadas · {progresso.jaNaNuvem} já estavam · {progresso.semFoto} sem foto na pasta</div>
         </div>
       ) : null}
       {rodando
         ? <Botao variante="contorno" onClick={() => { sinal.current.parar = true }}><Icon name="Square" size={15} /> Parar</Botao>
-        : <Botao onClick={enviar}><Icon name="CloudUpload" size={16} /> Enviar fotos da mercadologia</Botao>}
-    </div>
+        : <Botao variante="escuro" onClick={enviar}><Icon name="CloudUpload" size={16} /> Enviar fotos da mercadologia</Botao>}
+    </Secao>
   )
 }
 export default function Config() {
@@ -71,50 +66,44 @@ export default function Config() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
-      <div className="card-bengala p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <Icon name="Store" size={18} className="text-bengala" />
-          <h2 className="font-bold text-ink">Informações do estabelecimento</h2>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Campo label="Nome do mercado"><input className={inputCls} value={f.nomeMercado} onChange={(e) => setF({ ...f, nomeMercado: e.target.value })} /></Campo>
-          <Campo label="Moeda">
-            <select className={inputCls} value={f.moeda} onChange={(e) => setF({ ...f, moeda: e.target.value })}>
-              <option value="BRL">Real (BRL)</option>
-              <option value="USD">Dólar (USD)</option>
-            </select>
-          </Campo>
-          <div className="sm:col-span-2"><Campo label="Link do jornal oficial"><input className={inputCls} value={f.jornalUrl} onChange={(e) => setF({ ...f, jornalUrl: e.target.value })} /></Campo></div>
-        </div>
+    <div className="space-y-5">
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+        <Secao titulo="Estabelecimento" descricao="Nome e link que aparecem no encarte e nas artes.">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Campo label="Nome do mercado"><input className={inputCls} value={f.nomeMercado} onChange={(e) => setF({ ...f, nomeMercado: e.target.value })} /></Campo>
+            <Campo label="Moeda">
+              <select className={inputCls} value={f.moeda} onChange={(e) => setF({ ...f, moeda: e.target.value })}>
+                <option value="BRL">Real (BRL)</option>
+                <option value="USD">Dólar (USD)</option>
+              </select>
+            </Campo>
+            <div className="sm:col-span-2"><Campo label="Link do jornal oficial"><input className={inputCls} value={f.jornalUrl} onChange={(e) => setF({ ...f, jornalUrl: e.target.value })} /></Campo></div>
+          </div>
+        </Secao>
+
+        <Secao titulo="Alertas e automação" descricao="Quando avisar sobre vencimento e quanto de desconto sugerir.">
+          <div className="space-y-5">
+            <div>
+              <Rotulo acao={<span className="num-tab text-sm font-semibold text-navy">{f.diasAlerta} dias</span>}>Avisar quando faltar</Rotulo>
+              <input type="range" min="1" max="30" value={f.diasAlerta} onChange={(e) => setF({ ...f, diasAlerta: Number(e.target.value) })} className="w-full accent-navy" aria-label="Dias de alerta de validade" />
+            </div>
+            <div>
+              <Rotulo acao={<span className="num-tab text-sm font-semibold text-navy">{f.descontoPadrao}%</span>}>Desconto padrão das ofertas automáticas</Rotulo>
+              <input type="range" min="5" max="80" step="5" value={f.descontoPadrao} onChange={(e) => setF({ ...f, descontoPadrao: Number(e.target.value) })} className="w-full accent-navy" aria-label="Desconto padrão" />
+            </div>
+            <label className="flex items-center gap-2.5">
+              <input type="checkbox" checked={f.sugestoesAuto} onChange={(e) => setF({ ...f, sugestoesAuto: e.target.checked })} className="h-5 w-5 accent-navy" />
+              <span className="text-sm font-medium text-ink">Sugerir ofertas automaticamente</span>
+            </label>
+          </div>
+        </Secao>
+
+        <FotosNaNuvem toast={toast} />
       </div>
 
-      <div className="card-bengala p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <Icon name="BellRing" size={18} className="text-bengala" />
-          <h2 className="font-bold text-ink">Alertas e automação</h2>
-        </div>
-        <div className="space-y-5">
-          <div>
-            <div className="mb-1 flex justify-between text-sm font-medium"><span>Dias de alerta de validade</span><span className="text-bengala">{f.diasAlerta} dias</span></div>
-            <input type="range" min="1" max="30" value={f.diasAlerta} onChange={(e) => setF({ ...f, diasAlerta: Number(e.target.value) })} className="w-full accent-bengala" />
-          </div>
-          <div>
-            <div className="mb-1 flex justify-between text-sm font-medium"><span>Desconto padrão (ofertas automáticas)</span><span className="text-bengala">{f.descontoPadrao}%</span></div>
-            <input type="range" min="5" max="80" step="5" value={f.descontoPadrao} onChange={(e) => setF({ ...f, descontoPadrao: Number(e.target.value) })} className="w-full accent-bengala" />
-          </div>
-          <label className="flex items-center gap-2.5">
-            <input type="checkbox" checked={f.sugestoesAuto} onChange={(e) => setF({ ...f, sugestoesAuto: e.target.checked })} className="h-4 w-4 accent-bengala" />
-            <span className="text-sm font-medium">Ativar sugestões automáticas de oferta</span>
-          </label>
-        </div>
-      </div>
-
-      <FotosNaNuvem toast={toast} />
-
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <button onClick={confirmarReset} className="rounded-lg border border-critical/25 bg-critical/5 px-3 py-2 text-sm font-medium text-critical hover:bg-critical/10">
-          <Icon name="TriangleAlert" size={14} className="mr-1 inline" /> Apagar dados locais deste aparelho
+      <div className="flex flex-col-reverse gap-3 border-t border-ink-soft/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+        <button onClick={confirmarReset} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-critical hover:bg-critical/10">
+          <Icon name="TriangleAlert" size={15} /> Apagar dados locais deste aparelho
         </button>
         <Botao onClick={salvar}><Icon name="Save" size={16} /> Salvar configurações</Botao>
       </div>

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
-import { Icon, StatusBadge, ProdutoThumb, Botao, PrecoVarejo, inputCls } from '../components/ui'
-import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, precoComRegra, labelDias, dataISOmaisDias } from '../lib/utils'
+import { Icon, StatusBadge, ProdutoThumb, Botao, PrecoVarejo, inputCls, Secao } from '../components/ui'
+import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, precoComRegra, labelDias, dataISOmaisDias, plural } from '../lib/utils'
 import EstrelaMercado from '../components/EstrelaMercado'
 import CadastroProdutoNovo from '../components/CadastroProdutoNovo'
 
@@ -209,7 +209,7 @@ export default function Scanner() {
     toast(
       jaEstavaNaFila
         ? `${resultado.nome}: validade atualizada; o produto já estava na fila.`
-        : `${resultado.nome}: confirmado na fila do jornal da Loja 3.`
+        : `${resultado.nome}: confirmado na fila do jornal.`
     )
     setVeredito(v)
     setResultado(atualizado)
@@ -267,28 +267,16 @@ export default function Scanner() {
   const naFilaSessao = historico.filter((h) => h.tipo === 'jornal').length
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div className="rounded-2xl bg-brick p-4 text-white shadow-sm">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-bengala">
-            <Icon name="ScanLine" size={22} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-offer px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-navy">
-              <Icon name="Store" size={11} /> Piloto · Loja 3
-            </div>
-            <h2 className="font-bold">Escanear para o jornal</h2>
-            <p className="text-sm text-cream/75">Bipe, confirme a validade e siga para o próximo. O resto é automático.</p>
-          </div>
-          <button onClick={() => navigate('/jornal')} className="shrink-0 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold hover:bg-white/20">
-            Ver fila
-          </button>
-        </div>
-      </div>
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+    <div className="min-w-0 space-y-4">
       {/* busca */}
-      <div className="card-bengala p-4">
-        <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-          <div className="relative min-w-[180px] flex-1 basis-full sm:basis-auto">
+      <Secao
+        titulo="Bipe o produto"
+        descricao="Confira a validade na embalagem e confirme. Ele entra na fila do jornal."
+        acao={<Botao variante="contorno" className="px-3" onClick={() => navigate('/jornal')}><Icon name="Newspaper" size={16} /> Ver jornal</Botao>}
+      >
+        <div className="flex gap-2">
+          <div className="relative min-w-0 flex-1">
             <Icon name="ScanLine" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" />
             <input
               ref={inputRef}
@@ -296,24 +284,25 @@ export default function Scanner() {
               value={codigo}
               onChange={(e) => setCodigo(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && buscar()}
-              placeholder="Bipe ou digite o código de barras..."
-              className={`${inputCls} pl-9`}
+              inputMode="numeric"
+              placeholder="Código de barras"
+              className={`${inputCls} min-h-11 pl-9 text-base`}
             />
           </div>
-          <Botao onClick={() => buscar()} disabled={buscando}>
-            <Icon name={buscando ? 'LoaderCircle' : 'Search'} size={16} className={buscando ? 'animate-spin' : ''} />
-            {buscando ? 'Buscando' : 'Buscar'}
+          <Botao onClick={() => buscar()} disabled={buscando} className="min-h-11 px-3 sm:px-4">
+            <Icon name={buscando ? 'LoaderCircle' : 'Search'} size={17} className={buscando ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">{buscando ? 'Buscando' : 'Buscar'}</span>
           </Botao>
-          <Botao variante={scanning ? 'perigo' : 'coral'} onClick={escanearCamera} title="Ler com a câmera">
-            <Icon name={scanning ? 'X' : 'Camera'} size={16} />
+          <Botao variante={scanning ? 'perigo' : 'contorno'} onClick={escanearCamera} aria-label={scanning ? 'Parar a câmera' : 'Ler com a câmera'} className="min-h-11 px-3 sm:px-4">
+            <Icon name={scanning ? 'X' : 'Camera'} size={17} />
             <span className="hidden sm:inline">{scanning ? 'Parar' : 'Câmera'}</span>
           </Botao>
         </div>
 
         {buscando && (
-          <div className="mt-3 flex items-center gap-2 rounded-xl bg-bengala/5 px-3 py-2 text-sm font-medium text-bengala">
-            <Icon name="LoaderCircle" size={16} className="animate-spin" />
-            Consultando o catálogo de produtos configurado...
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-cream-200 px-3 py-2 text-sm font-medium text-ink">
+            <Icon name="LoaderCircle" size={16} className="animate-spin text-navy" />
+            Consultando o catálogo de produtos…
           </div>
         )}
 
@@ -326,17 +315,17 @@ export default function Scanner() {
           </div>
         )}
 
-        {produtos.length > 0 && <div className="mt-3">
-          <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-soft">Atalhos rápidos</p>
+        {produtos.length > 0 && <div className="mt-4">
+          <p className="mb-1.5 text-sm font-semibold text-ink">Atalhos da loja</p>
           <div className="flex flex-wrap gap-1.5">
             {produtos.slice(0, 8).map((p) => (
-              <button key={p.id} onClick={() => buscar(p.codigoBarras)} className="rounded-lg bg-cream-200 px-2.5 py-1 text-xs text-ink hover:bg-coral/15 hover:text-coral-dark">
+              <button key={p.id} onClick={() => buscar(p.codigoBarras)} title={p.nome} className="num-tab min-h-8 rounded-full border border-ink-soft/20 bg-white px-3 text-xs text-ink hover:border-ink-soft/45">
                 {p.codigoBarras}
               </button>
             ))}
           </div>
         </div>}
-      </div>
+      </Secao>
 
       {resultado === null && (
         // Código que não existe em lugar nenhum: passo de cadastro e depois segue para validade e jornal.
@@ -361,18 +350,18 @@ export default function Scanner() {
 
       {/* produto + verificação de validade */}
       {resultado && (
-        <div className="anim-in card-bengala p-5">
+        <div className="anim-in card-bengala p-4 md:p-5">
           <div className="flex items-center gap-4">
             <ProdutoThumb produto={resultado} size={64} />
             <div className="min-w-0 flex-1">
-              <div className="text-lg font-bold text-ink">{resultado.nome}</div>
-              <div className="text-sm text-ink-soft">{resultado.marca} · {setorById(resultado.setor).nome} · {formatBRL(resultado.precoNormal)}</div>
-              <div className="mt-0.5 text-xs text-ink-soft">
-                Código interno {resultado.codigoInterno || '—'} · Barras {resultado.codigoBarras}
+              <div className="text-lg font-bold leading-snug text-navy">{resultado.nome}</div>
+              <div className="text-sm text-ink-soft">{[resultado.marca, setorById(resultado.setor).nome, formatBRL(resultado.precoNormal)].filter(Boolean).join(' · ')}</div>
+              <div className="num-tab mt-0.5 text-xs text-ink-soft">
+                {resultado.codigoInterno ? `Código interno ${resultado.codigoInterno} · ` : ''}Barras {resultado.codigoBarras}
               </div>
               <div className="mt-1"><StatusBadge validade={resultado.validade} /></div>
               {!resultado.imagem && (
-                <div className="mt-1 text-xs font-medium text-warning">Foto exata ainda não localizada para este código.</div>
+                <div className="mt-1 text-xs font-medium text-[#86590b]">Foto exata ainda não encontrada para este código.</div>
               )}
               {resultado.imagem && resultado.imagemCorrespondencia === 'codigo-exato' && (
                 <div className="mt-1 flex items-center gap-1 text-xs font-medium text-success">
@@ -385,14 +374,14 @@ export default function Scanner() {
           </div>
 
           {/* passo-chave: validade do lote visto na gôndola */}
-          <div className="mt-4 rounded-xl border-2 border-bengala/30 bg-bengala/5 p-3.5">
-            <div className="mb-2 flex items-center gap-2 text-sm font-bold text-ink">
-              <Icon name="CalendarSearch" size={17} className="text-bengala" />
+          <div className="mt-4 rounded-xl border border-navy/15 bg-cream p-3.5">
+            <div className="mb-2 flex items-center gap-2 text-sm font-bold text-navy">
+              <Icon name="CalendarSearch" size={17} />
               Qual a validade impressa na embalagem?
             </div>
             <div className="grid gap-2 sm:grid-cols-[1fr_1fr_100px]">
               <label>
-                <span className="mb-1 block text-xs font-medium text-ink-soft">Validade *</span>
+                <span className="mb-1 block text-sm font-medium text-ink">Validade <span className="text-bengala">*</span></span>
                 <input
                   type="date"
                   value={validadeLote}
@@ -403,11 +392,11 @@ export default function Scanner() {
                 />
               </label>
               <label>
-                <span className="mb-1 block text-xs font-medium text-ink-soft">Lote (opcional)</span>
+                <span className="mb-1 block text-sm font-medium text-ink">Lote (opcional)</span>
                 <input value={codigoLote} onChange={(e) => setCodigoLote(e.target.value)} className={`${inputCls} py-2.5`} placeholder="Ex.: L2407" />
               </label>
               <label>
-                <span className="mb-1 block text-xs font-medium text-ink-soft">Quantidade</span>
+                <span className="mb-1 block text-sm font-medium text-ink">Quantidade</span>
                 <input type="number" min="1" inputMode="numeric" value={quantidadeLote} onChange={(e) => setQuantidadeLote(e.target.value)} className={`${inputCls} py-2.5`} />
               </label>
             </div>
@@ -419,18 +408,18 @@ export default function Scanner() {
 
           {/* veredito */}
           {veredito?.tipo === 'jornal' && (
-            <div className="anim-in mt-3 overflow-hidden rounded-xl text-white" style={{ background: 'linear-gradient(135deg, #9e1f14, #e23a2e)' }}>
+            <div className="anim-in mt-3 overflow-hidden rounded-xl bg-bengala text-white">
               <div className="flex items-center gap-3 p-4">
-                <span className="chip flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20">
                   <Icon name="Newspaper" size={24} />
                 </span>
                 <div className="flex-1">
                   <div className="text-base font-bold leading-tight">
-                    {veredito.jaEstavaNaFila ? 'Validade atualizada na fila!' : 'Confirmado no jornal da Loja 3!'}
+                    {veredito.jaEstavaNaFila ? 'Validade atualizada na fila' : 'Confirmado na fila do jornal'}
                   </div>
                   <div className="text-sm text-white/85">
                     {labelDias(veredito.dias)}
-                    {veredito.desconto > 0 ? ` · regra aplicada: −${veredito.desconto}%` : ' · preço aguardando revisão'}
+                    {veredito.desconto > 0 ? ` · desconto de ${veredito.desconto}% pela faixa` : ' · confira o preço no jornal'}
                   </div>
                 </div>
                 <div className="text-right">
@@ -440,33 +429,33 @@ export default function Scanner() {
                   </div>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 bg-black/20 px-4 py-2 text-xs">
-                <span>{veredito.ofertaCriada ? 'Fila confirmada + oferta criada automaticamente' : 'Produto disponível imediatamente no Jornal de Ofertas'}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-black/20 px-4 py-2.5 text-xs">
+                <span>{veredito.ofertaCriada ? 'Entrou na fila e a oferta foi criada.' : 'Já aparece no Jornal de Ofertas.'}</span>
                 <div className="flex gap-1.5">
-                  <button onClick={desfazerUltimaConfirmacao} className="rounded-lg bg-white/10 px-3 py-1 font-medium hover:bg-white/20">Desfazer</button>
-                  <button onClick={() => navigate('/jornal')} className="rounded-lg bg-white/15 px-3 py-1 font-medium hover:bg-white/25">Ver jornal</button>
-                  <button onClick={proximo} className="rounded-lg bg-white px-3 py-1 font-bold text-bengala hover:bg-cream">Bipar próximo →</button>
+                  <button onClick={desfazerUltimaConfirmacao} className="min-h-9 rounded-lg bg-white/10 px-3 font-semibold hover:bg-white/20">Desfazer</button>
+                  <button onClick={() => navigate('/jornal')} className="min-h-9 rounded-lg bg-white/15 px-3 font-semibold hover:bg-white/25">Ver jornal</button>
+                  <button onClick={proximo} className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-white px-3 font-bold text-bengala hover:bg-cream">Bipar próximo <Icon name="ArrowRight" size={14} /></button>
                 </div>
               </div>
             </div>
           )}
           {veredito?.tipo === 'ok' && (
-            <div className="anim-in mt-3 flex items-center gap-3 rounded-xl p-4 text-white" style={{ background: 'linear-gradient(135deg, #1c6e48, #2e9e6b)' }}>
-              <span className="chip flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20">
+            <div className="anim-in mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-[#1c6e48] p-4 text-white">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20">
                 <Icon name="CheckCircle2" size={24} />
               </span>
               <div className="flex-1">
-                <div className="text-base font-bold leading-tight">Validade OK — sem ação</div>
+                <div className="text-base font-bold leading-tight">Validade boa, nada a fazer</div>
                 <div className="text-sm text-white/85">{labelDias(veredito.dias)} · fora das faixas de desconto</div>
               </div>
-              <button onClick={proximo} className="rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium hover:bg-white/25">Bipar próximo →</button>
+              <button onClick={proximo} className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-white px-3 text-xs font-bold text-[#1c6e48] hover:bg-cream">Bipar próximo <Icon name="ArrowRight" size={14} /></button>
             </div>
           )}
 
           {/* estoque (secundário) */}
           <div className="mt-4 flex items-end gap-2 border-t border-ink-soft/10 pt-3.5">
             <label className="flex-1">
-              <span className="mb-1 block text-xs font-medium text-ink-soft">Ajustar estoque (opcional)</span>
+              <span className="mb-1 block text-sm font-medium text-ink">Ajustar estoque (opcional)</span>
               <input type="number" className={inputCls} value={novoEstoque} onChange={(e) => setNovoEstoque(e.target.value)} />
             </label>
             <Botao variante="contorno" onClick={atualizarEstoque}><Icon name="Check" size={15} /> Salvar</Botao>
@@ -474,40 +463,41 @@ export default function Scanner() {
         </div>
       )}
 
+    </div>
+
       {/* sessão de bipes */}
-      {historico.length > 0 && (
-        <div className="card-bengala overflow-hidden">
-          <div className="flex items-center justify-between border-b border-ink-soft/10 px-4 py-2.5">
-            <h2 className="accent text-sm font-bold text-ink">Bipados nesta sessão</h2>
-            <div className="flex gap-2 text-xs">
-              <span className="rounded-full bg-cream-200 px-2.5 py-0.5 font-medium text-ink">{historico.length} verificados</span>
-              <span className="rounded-full bg-bengala/10 px-2.5 py-0.5 font-medium text-bengala">{naFilaSessao} pro jornal</span>
-            </div>
-          </div>
-          <div className="stagger divide-y divide-ink-soft/8">
-            {historico.map((h, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-2">
-                <ProdutoThumb produto={h} size={32} />
-                <span className="min-w-0 flex-1 whitespace-normal break-words text-sm leading-snug text-ink">{h.nome}</span>
-                {h.tipo === 'jornal' ? (
-                  <span className="flex items-center gap-1 rounded-full bg-bengala/10 px-2 py-0.5 text-xs font-bold text-bengala">
-                    <Icon name="Newspaper" size={12} /> {h.desconto > 0 ? `−${h.desconto}% · ` : ''}{h.quantidade} un. → jornal
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
-                    <Icon name="Check" size={12} /> OK
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="border-t border-ink-soft/10 bg-cream-200 p-3">
-            <Botao onClick={() => navigate('/jornal')} className="w-full justify-center">
-              <Icon name="Newspaper" size={16} /> Montar jornal com {naFilaSessao} {naFilaSessao === 1 ? 'produto' : 'produtos'}
-            </Botao>
-          </div>
-        </div>
-      )}
+      <Secao
+        titulo="Bipados agora"
+        descricao={historico.length ? `${plural(historico.length, 'conferido', 'conferidos')}, ${plural(naFilaSessao, 'foi para o jornal', 'foram para o jornal')}` : 'Os produtos que você conferir aparecem aqui.'}
+        corpo="mt-3"
+      >
+        {historico.length > 0 ? (
+          <>
+            <ul className="divide-y divide-ink-soft/10">
+              {historico.map((h, i) => (
+                <li key={i} className="flex items-center gap-3 py-2">
+                  <ProdutoThumb produto={h} size={32} />
+                  <span className="min-w-0 flex-1 break-words text-sm leading-snug text-ink">{h.nome}</span>
+                  {h.tipo === 'jornal' ? (
+                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-bengala/10 px-2 py-0.5 text-xs font-semibold text-bengala">
+                      <Icon name="Newspaper" size={12} /> {h.desconto > 0 ? `−${h.desconto}% · ` : ''}{h.quantidade} un.
+                    </span>
+                  ) : (
+                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-[#1c6e48]">
+                      <Icon name="Check" size={12} /> OK
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {naFilaSessao > 0 && (
+              <Botao variante="escuro" onClick={() => navigate('/jornal')} className="mt-3 w-full">
+                <Icon name="Newspaper" size={16} /> Montar jornal com {plural(naFilaSessao, 'produto', 'produtos')}
+              </Botao>
+            )}
+          </>
+        ) : null}
+      </Secao>
     </div>
   )
 }

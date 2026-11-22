@@ -131,7 +131,7 @@ export const FolhaCartazes = forwardRef(function FolhaCartazes({ itens, tamanho 
   const w = (FOLHA_A4.largura - margem * 2) / t.cols
   const h = (FOLHA_A4.altura - margem * 2) / t.lins
   return (
-    <div ref={ref} className="relative bg-white" style={{ width: FOLHA_A4.largura, height: FOLHA_A4.altura }}>
+    <div ref={ref} className="arte-fixa relative bg-white" style={{ width: FOLHA_A4.largura, height: FOLHA_A4.altura }}>
       {itens.map((p, i) => (
         <div
           key={p.id || i}

@@ -18,6 +18,12 @@ export const SETORES = [
 
 export const setorById = (id) => SETORES.find((s) => s.id === id) || SETORES[0]
 
+// Ilustração 3D de cada setor (Fluent Emoji da Microsoft, licença MIT, em public/setores).
+// 'todos' é o Geral, 'mercado-encarte' a estrela e 'compras' a lista de compras.
+const ILUSTRACAO_EXTRA = { todos: 'geral', compras: 'geral', 'mercado-encarte': 'estrela', outros: 'geral' }
+const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/'
+export const ilustracaoSetor = (id) => `${baseUrl}setores/${ILUSTRACAO_EXTRA[id] || (SETORES.some((s) => s.id === id) ? id : 'geral')}.webp`
+
 // ---- datas ----
 // O piloto opera em São Paulo. Usar a data civil da loja evita que um
 // coletor configurado em UTC considere um produto que vence hoje como vencido.
@@ -82,7 +88,7 @@ export const diaSemana = (iso) => {
 // <= 2 dias: crítico | <= 7 dias: atenção | > 7: normal | < 0: vencido
 export function statusValidade(iso) {
   const d = diasParaVencer(iso)
-  if (d == null) return { id: 'sem-validade', label: 'Sem validade', cor: '#6b5a54', bg: '#f3ead9', dias: null }
+  if (d == null) return { id: 'sem-validade', label: 'Sem validade', cor: '#3b4656', bg: '#e8edf3', dias: null }
   if (d < 0) return { id: 'vencido', label: 'Vencido', cor: '#7a241b', bg: '#f3dcd8', dias: d }
   if (d <= 2) return { id: 'critico', label: 'Crítico', cor: '#c42b2b', bg: '#fbe5e5', dias: d }
   if (d <= 7) return { id: 'atencao', label: 'Atenção', cor: '#a9740d', bg: '#fdf0d8', dias: d }
@@ -168,6 +174,9 @@ export function arquivoParaDataURL(file, max = 480) {
   })
 }
 
+// "1 produto" / "3 produtos": evita o "produto(s)" na interface
+export const plural = (n, singular, pluralForma) => `${n} ${n === 1 ? singular : pluralForma}`
+
 // ---- selos de oferta (aparecem no encarte impresso e no digital) ----
 // A validade do produto NUNCA vai para o encarte: o selo é o que o cliente vê.
 export const SELOS_OFERTA = [
@@ -187,3 +196,28 @@ export const seloOfertaById = (id) => SELOS_OFERTA.find((s) => s.id === id) || n
 
 // Selo do produto: o escolhido pelo operador ou, sem escolha, "Oferta".
 export const seloDoProduto = (produto) => seloOfertaById(produto?.seloOferta) || SELOS_OFERTA[0]
+
+// ---- baixas (troca com fornecedor ou perda) ----
+// Um vencido fica resolvido quando a baixa zerou o estoque daquela validade.
+export const loteResolvido = (p) => Boolean(p?.baixaValidade) && p.baixaValidade === p.validade
+export const precisaDecisao = (p) => {
+  const d = diasParaVencer(p?.validade)
+  return d != null && d < 0 && !loteResolvido(p)
+}
+export const dataCadastro = (p) => p?.cadastradoEm || p?.adicionadoFilaEm || null
+export const todasBaixas = (produtos = []) =>
+  produtos
+    .flatMap((p) => (p.baixas || []).map((b) => ({ ...b, produtoId: p.id, produto: p })))
+    .sort((a, b) => String(b.em).localeCompare(String(a.em)))
+export const valorPerdasRegistradas = (produtos = []) =>
+  produtos.reduce((s, p) => s + (p.baixas || []).filter((b) => b.tipo === 'perda').reduce((a, b) => a + (Number(b.valor) || 0), 0), 0)
+
+// ---- marcas que aceitam troca ou que são sempre perda (cadastro em Relatórios) ----
+// config.marcasTroca = { [chave]: { nome, regra: 'troca' | 'perda' } }
+export const chaveMarca = (marca) => String(marca || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, ' ')
+export const regraDaMarca = (config, marca) => (config?.marcasTroca || {})[chaveMarca(marca)]?.regra || null
+// Produto vencido ou perto de vencer que ainda precisa de troca ou perda.
+export const precisaTrocaOuPerda = (p, dias = 7) => {
+  const d = diasParaVencer(p?.validade)
+  return d != null && d <= dias && !loteResolvido(p)
+}

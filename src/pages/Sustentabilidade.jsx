@@ -1,28 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
-import { Icon, Botao } from '../components/ui'
+import { Icon, Botao, Indicador, Secao } from '../components/ui'
 import {
-  SETORES, setorById, statusValidade, pesoTotalKg, formatBRL,
+  SETORES, setorById, statusValidade, pesoUnitarioKg, pesoTotalKg, formatBRL,
   FATOR_CO2, KG_POR_REFEICAO,
 } from '../lib/utils'
 import { exportarPDF } from '../lib/exportar'
 
 const fmtKg = (v) => `${(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg`
 const fmtN = (v, d = 0) => (v || 0).toLocaleString('pt-BR', { maximumFractionDigits: d })
-
-function Metric({ icone, cor, valor, titulo, sub }) {
-  return (
-    <div className="card-bengala card-int p-4">
-      <div className="chip flex h-9 w-9 items-center justify-center rounded-lg" style={{ background: `${cor}1a`, color: cor }}>
-        <Icon name={icone} size={18} />
-      </div>
-      <div className="mt-3 text-2xl font-bold text-ink">{valor}</div>
-      <div className="text-sm font-medium text-ink">{titulo}</div>
-      {sub && <div className="text-xs text-ink-soft">{sub}</div>}
-    </div>
-  )
-}
 
 export default function Sustentabilidade() {
   const { produtos, ofertaDoProduto, config, toast } = useStore()
@@ -41,6 +28,15 @@ export default function Sustentabilidade() {
       const kg = pesoTotalKg(p)
       const acao = !!ofertaDoProduto(p.id) || p.naFila || !!p.precoPromo
       const total = (p.precoNormal || 0) * (p.estoque || 0)
+
+      // Perdas já descartadas pela aba Produtos (as trocas voltam ao fornecedor e não contam).
+      for (const b of p.baixas || []) {
+        if (b.tipo !== 'perda') continue
+        const kgB = pesoUnitarioKg(p.nome) * (Number(b.quantidade) || 0)
+        kgDesperdicado += kgB
+        vlDesperdicado += Number(b.valor) || 0
+        if (setores[p.setor]) setores[p.setor].desp += kgB
+      }
 
       if (s.id === 'vencido') {
         kgDesperdicado += kg
@@ -88,101 +84,97 @@ export default function Sustentabilidade() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-xl text-sm text-ink-soft">
-          Quanto a gestão de validade evitou de desperdício de alimentos — em quilos, CO₂ e refeições.
-          Use como relatório de impacto (ESG) para a rede e certificações.
+          Quanto a gestão de validade evitou de desperdício, em quilos, CO₂ e refeições. Serve como relatório de impacto (ESG) para a rede e para certificações.
         </p>
         <Botao onClick={exportar} disabled={exportando}>
-          <Icon name="FileDown" size={16} /> {exportando ? 'Gerando...' : 'Relatório PDF'}
+          <Icon name={exportando ? 'LoaderCircle' : 'FileDown'} size={16} className={exportando ? 'animate-spin' : ''} /> {exportando ? 'Gerando…' : 'Baixar relatório PDF'}
         </Botao>
       </div>
 
       <div ref={ref} className="space-y-5 rounded-2xl bg-cream p-1">
         {/* destaque: taxa de aproveitamento */}
-        <div className="anim-in overflow-hidden rounded-2xl p-5 text-white" style={{ background: 'linear-gradient(135deg, #1c6e48, #2e9e6b)' }}>
+        <div className="overflow-hidden rounded-2xl bg-[#1c6e48] p-5 text-white md:p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 text-sm" style={{ color: '#d9f2e6' }}>
+              <div className="flex items-center gap-2 text-sm text-[#d9f2e6]">
                 <Icon name="Leaf" size={16} /> Taxa de aproveitamento
               </div>
-              <div className="mt-1 text-5xl font-bold">{fmtN(d.taxa)}%</div>
-              <div className="text-sm" style={{ color: '#d9f2e6' }}>
-                {fmtKg(d.kgAproveitado)} em recuperação · {fmtKg(d.kgDesperdicado)} desperdiçados
+              <div className="num-tab display-bengala mt-1 text-[52px] leading-none">{fmtN(d.taxa)}%</div>
+              <div className="mt-1.5 text-sm text-[#d9f2e6]">
+                {fmtKg(d.kgAproveitado)} recuperados e {fmtKg(d.kgDesperdicado)} desperdiçados
               </div>
             </div>
-            <svg width="96" height="96" viewBox="0 0 36 36" className="shrink-0">
-              <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.28)" strokeWidth="3.4" />
+            <svg width="88" height="88" viewBox="0 0 36 36" className="hidden shrink-0 sm:block" aria-hidden="true">
+              <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="3.4" />
               <circle
                 cx="18" cy="18" r="15.9" fill="none" stroke="#ffffff" strokeWidth="3.4"
                 strokeLinecap="round" strokeDasharray={`${d.taxa} ${100 - d.taxa}`} strokeDashoffset="25"
                 transform="rotate(-90 18 18)"
               />
-              <text x="18" y="19.5" textAnchor="middle" fontSize="8" fontWeight="700" fill="#ffffff">{fmtN(d.taxa)}%</text>
             </svg>
           </div>
         </div>
 
         {/* métricas */}
-        <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Metric icone="Recycle" cor="#2e9e6b" valor={fmtKg(d.kgAproveitado)} titulo="Alimento aproveitado" sub={`${formatBRL(d.vlRecuperado)} recuperados`} />
-          <Metric icone="Trash2" cor="#c42b2b" valor={fmtKg(d.kgDesperdicado)} titulo="Alimento desperdiçado" sub={`${formatBRL(d.vlDesperdicado)} perdidos`} />
-          <Metric icone="Cloud" cor="#2e6fb0" valor={`${fmtN(d.co2Evitado, 1)} kg`} titulo="CO₂ evitado" sub={`vs. ${fmtN(d.co2Emitido, 1)} kg emitidos`} />
-          <Metric icone="Utensils" cor="#d9641f" valor={fmtN(d.refeicoes)} titulo="Refeições equivalentes" sub="ao alimento aproveitado" />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Indicador icone="Recycle" cor="var(--color-success)" valor={fmtKg(d.kgAproveitado)} rotulo="Alimento aproveitado" detalhe={`${formatBRL(d.vlRecuperado)} recuperados`} />
+          <Indicador icone="Trash2" cor="var(--color-critical)" valor={fmtKg(d.kgDesperdicado)} rotulo="Alimento desperdiçado" detalhe={`${formatBRL(d.vlDesperdicado)} perdidos`} />
+          <Indicador icone="Cloud" cor="var(--color-info)" valor={`${fmtN(d.co2Evitado, 1)} kg`} rotulo="CO₂ evitado" detalhe={`contra ${fmtN(d.co2Emitido, 1)} kg emitidos`} />
+          <Indicador icone="Utensils" cor="var(--color-coral-dark)" valor={fmtN(d.refeicoes)} rotulo="Refeições equivalentes" detalhe="ao alimento aproveitado" />
         </div>
 
         <div className="grid gap-5 lg:grid-cols-3">
           {/* impacto por setor */}
-          <div className="card-bengala p-5 lg:col-span-2">
-            <h2 className="accent mb-1 font-bold text-ink">Impacto por setor</h2>
-            <div className="mb-3 flex items-center gap-4 text-xs text-ink-soft">
-              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: '#2e9e6b' }} /> aproveitado</span>
-              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: '#c42b2b' }} /> desperdiçado</span>
-            </div>
+          <Secao
+            className="lg:col-span-2"
+            titulo="Impacto por setor"
+            acao={(
+              <div className="flex items-center gap-4 text-xs text-ink-soft">
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-success" /> aproveitado</span>
+                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-critical" /> desperdiçado</span>
+              </div>
+            )}
+          >
             {d.porSetor.length === 0 ? (
-              <p className="py-6 text-center text-sm text-ink-soft">Sem dados de perda/recuperação ainda.</p>
+              <p className="py-6 text-center text-sm text-ink-soft">Ainda não há dados de perda ou recuperação.</p>
             ) : (
               <div className="space-y-2.5">
                 {d.porSetor.map((s) => (
                   <div key={s.id} className="flex items-center gap-3">
-                    <span className="w-24 shrink-0 text-sm text-ink-soft">{s.nome}</span>
-                    <div className="flex h-5 flex-1 overflow-hidden rounded-full" style={{ background: '#f1ece2' }}>
-                      <div className="h-full" style={{ width: `${(s.aprov / maxSetor) * 100}%`, background: '#2e9e6b' }} />
-                      <div className="h-full" style={{ width: `${(s.desp / maxSetor) * 100}%`, background: '#c42b2b' }} />
+                    <span className="w-24 shrink-0 truncate text-sm text-ink">{s.nome}</span>
+                    <div className="flex h-3 flex-1 overflow-hidden rounded-full bg-cream-200">
+                      <div className="h-full bg-success" style={{ width: `${(s.aprov / maxSetor) * 100}%` }} />
+                      <div className="h-full bg-critical" style={{ width: `${(s.desp / maxSetor) * 100}%` }} />
                     </div>
-                    <span className="w-16 shrink-0 text-right text-xs text-ink-soft">{fmtKg(s.aprov + s.desp)}</span>
+                    <span className="num-tab w-16 shrink-0 text-right text-xs font-semibold text-ink">{fmtKg(s.aprov + s.desp)}</span>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </Secao>
 
           {/* em risco agora */}
-          <div className="rounded-xl p-5" style={{ background: '#fdf0d8', border: '1px solid #f2d49a' }}>
-            <div className="flex items-center gap-2">
-              <Icon name="AlertTriangle" size={18} style={{ color: '#a9740d' }} />
-              <h2 className="font-bold" style={{ color: '#7a5208' }}>Em risco agora</h2>
+          <div className="rounded-[var(--radius-bengala)] border border-warning/50 bg-[#fdf3df] p-4 md:p-5">
+            <div className="flex items-center gap-2 text-[#7a5208]">
+              <Icon name="TriangleAlert" size={18} />
+              <h2 className="text-base font-bold">Em risco agora</h2>
             </div>
-            <div className="mt-2 text-3xl font-bold" style={{ color: '#7a5208' }}>{fmtKg(d.kgRisco)}</div>
-            <p className="text-sm" style={{ color: '#8a6a1a' }}>
-              {formatBRL(d.vlRisco)} perto de vencer <strong>sem nenhuma ação</strong> (oferta, cartaz ou jornal).
+            <div className="num-tab display-bengala mt-2 text-[34px] leading-none text-[#7a5208]">{fmtKg(d.kgRisco)}</div>
+            <p className="mt-1.5 text-sm text-[#6b4f12]">
+              {formatBRL(d.vlRisco)} perto de vencer sem nenhuma ação (oferta, cartaz ou jornal).
             </p>
-            <div className="mt-3 flex flex-col gap-2">
-              <button onClick={() => navigate('/ofertas')} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-ink hover:brightness-95" style={{ background: '#ffffff' }}>
-                <Icon name="Tag" size={14} className="mr-1 inline" /> Criar ofertas →
-              </button>
-              <button onClick={() => navigate('/jornal')} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-ink hover:brightness-95" style={{ background: '#ffffff' }}>
-                <Icon name="Newspaper" size={14} className="mr-1 inline" /> Adicionar ao jornal →
-              </button>
+            <div className="mt-4 grid gap-2">
+              <Botao variante="contorno" className="justify-start" onClick={() => navigate('/ofertas')}><Icon name="Tag" size={16} /> Criar ofertas</Botao>
+              <Botao variante="contorno" className="justify-start" onClick={() => navigate('/jornal')}><Icon name="Newspaper" size={16} /> Pôr no jornal</Botao>
             </div>
           </div>
         </div>
 
         {/* metodologia */}
-        <p className="px-1 text-xs text-ink-soft">
-          <Icon name="Info" size={12} className="mr-1 inline" />
-          Metodologia: peso estimado pelo nome do produto; “aproveitado” = itens perto do vencimento com ação ativa;
-          “desperdiçado” = itens vencidos. Fatores: {FATOR_CO2} kg CO₂e por kg de alimento · {KG_POR_REFEICAO} kg ≈ 1 refeição.
+        <p className="px-1 text-xs leading-relaxed text-ink-soft">
+          Como calculamos: o peso é estimado pelo nome do produto. Aproveitado são os itens perto do vencimento com alguma ação ativa. Desperdiçado são os itens vencidos. Fatores: {FATOR_CO2} kg de CO₂e por kg de alimento e {KG_POR_REFEICAO} kg para cada refeição.
         </p>
       </div>
     </div>

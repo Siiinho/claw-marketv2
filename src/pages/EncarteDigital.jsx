@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Icon, Logo, PrecoVarejo } from '../components/ui'
-import { SETORES, setorById, formatBRL, formatData, MERCADO_ENCARTE, noMercadoEncarte, dataISOmaisDias } from '../lib/utils'
+import { Icon, Logo, PrecoVarejo, ImagemSetor, ImagemAba } from '../components/ui'
+import { SETORES, setorById, formatBRL, formatDataCurta, MERCADO_ENCARTE, noMercadoEncarte, dataISOmaisDias, plural } from '../lib/utils'
 import { carregarEncartePublicado, assinarEncarte, linkDoEncarte } from '../lib/encartePublico'
-import { temaCampanhaById, temasDoSetor } from '../lib/temasCampanha'
+import { temaCampanhaById, temasDoSetor, caminhoArte } from '../lib/temasCampanha'
 import SeloArte from '../components/SeloArte'
 import { SimboloClawMarket } from '../components/MarcaClawMarket'
 import { Escalado } from '../components/PaginaTemplate'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina, ehFormatoJornal, alturaUsada } from '../components/JornalMercado'
+import PrecoArte from '../components/PrecoArte'
 import { LOJAS } from '../data/seed'
 
 // Encarte digital público: a página que a tag NFC abre.
@@ -20,6 +21,23 @@ import { LOJAS } from '../data/seed'
 const horaCurta = (iso) =>
   iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''
 
+// Nomes do cadastro vêm em MAIÚSCULAS ("MARG DELICIA 500G C SAL"). Na tela do cliente
+// ficam mais fáceis de ler com só a primeira letra grande ("Marg Delicia 500g c Sal").
+// Nome que já tem minúsculas fica como está.
+const MINUSCULAS = new Set(['a', 'o', 'e', 'de', 'da', 'do', 'das', 'dos', 'com', 'sem', 'para', 'em', 'na', 'no', 'ao', 'c', 's', 'p', 'c/', 's/', 'p/'])
+const UNIDADES = new Set(['g', 'gr', 'kg', 'mg', 'ml', 'l', 'lt', 'un', 'und', 'unid', 'cx', 'pc', 'pct', 'cm', 'm'])
+const nomeLegivel = (nome = '') => {
+  const texto = String(nome || '').trim()
+  if (!texto || /[a-zà-ÿ]/.test(texto)) return texto
+  return texto.split(/\s+/).map((palavra, i) => {
+    const min = palavra.toLocaleLowerCase('pt-BR')
+    const unidade = min.match(/^(\d+(?:[.,]\d+)?)?([a-z]+)$/)
+    if (unidade && UNIDADES.has(unidade[2]) && (unidade[1] || i > 0)) return min.replace(/(^|\d)(l|lt)$/, '$1L')
+    if (/^\d/.test(min) || (i > 0 && MINUSCULAS.has(min))) return min
+    return min.charAt(0).toLocaleUpperCase('pt-BR') + min.slice(1)
+  }).join(' ')
+}
+
 function TagSelo({ produto, grande = false }) {
   return <SeloArte produto={produto} largura={grande ? 150 : 96} />
 }
@@ -30,13 +48,17 @@ function FotoProduto({ produto, className = '' }) {
     return <img src={produto.imagem} alt={produto.nome} loading="lazy" decoding="async" className={`h-full w-full object-contain ${className}`} />
   }
   return (
-    <div className={`flex h-full w-full items-center justify-center ${className}`} style={{ color: setor.cor }}>
-      <Icon name={setor.icone} size={48} />
+    <div className={`flex h-full w-full items-center justify-center rounded-xl ${className}`} style={{ background: `${setor.cor}12` }}>
+      <ImagemSetor id={setor.id} size={72} className="opacity-90" />
     </div>
   )
 }
 
-function SeloPreco({ valor, tema, grande = false }) {
+function SeloPreco({ valor, tema, grande = false, estilo }) {
+  // Mesmo estilo de preço escolhido no jornal (só o número, faixa…); sem escolha, o balão.
+  if (estilo && estilo !== 'oval') {
+    return <span className="inline-block"><PrecoArte valor={valor} tema={tema} estilo={estilo} k={grande ? 0.7 : 0.44} semUnidade /></span>
+  }
   return (
     <span
       className={`inline-flex items-center justify-center rounded-[50%] ${grande ? 'px-7 py-3' : 'px-4 py-1.5'}`}
@@ -51,35 +73,34 @@ function CartaoProduto({ produto, onAbrir, tema, indice = 0, compras }) {
   const desconto = Number(produto.descontoJornal) || 0
   const temDe = desconto > 0 && Number(produto.precoNormal) > Number(produto.precoJornal)
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onAbrir(produto)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAbrir(produto) } }}
-      className="cm-cartao group cursor-pointer relative flex flex-col overflow-hidden rounded-2xl border-2 border-navy/15 bg-white text-left shadow-sm focus:outline-none focus-visible:ring-4 focus-visible:ring-offer"
-      style={{ '--cm-i': Math.min(indice, 12) }}
-      aria-label={`Ver oferta: ${produto.nome}`}
-    >
-      <div className="relative aspect-square w-full bg-white p-3">
-        <FotoProduto produto={produto} />
-        <div className="absolute left-2 top-2"><TagSelo produto={produto} /></div>
-        {desconto > 0 && (
-          <span className="absolute right-2 top-2 flex h-12 w-12 items-center justify-center rounded-full bg-bengala text-sm font-black text-white shadow">
-            -{desconto}%
-          </span>
-        )}
-      </div>
-      <div className="flex flex-1 flex-col gap-1 border-t-2 border-navy/10 p-3">
-        <div className="line-clamp-3 text-[15px] font-extrabold uppercase leading-tight text-navy">{produto.nome}</div>
-        {produto.gramagem && <div className="text-xs font-semibold text-ink-soft">{produto.gramagem}</div>}
-        <div className="mt-auto pt-1">
-          {temDe && (
-            <div className="text-sm font-bold text-ink-soft">
-              De <span className="line-through">{formatBRL(produto.precoNormal)}</span>
-            </div>
+    // A entrada (cm-cartao) fica por fora; o levantar e o apertar ficam no cartão de dentro,
+    // para as duas animações não brigarem pela mesma propriedade.
+    <div className="cm-cartao h-full" style={{ '--cm-i': Math.min(indice, 12) }}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onAbrir(produto)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAbrir(produto) } }}
+        className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl bg-white text-left shadow-[0_1px_2px_rgba(16,24,40,.06),0_6px_16px_rgba(16,24,40,.06)] ring-1 ring-black/[0.06] transition-[transform,box-shadow] duration-200 ease-out focus:outline-none focus-visible:ring-4 focus-visible:ring-offer active:scale-[0.98] motion-reduce:transition-none [@media(hover:hover)]:hover:-translate-y-0.5 [@media(hover:hover)]:hover:shadow-[0_2px_4px_rgba(16,24,40,.06),0_12px_24px_rgba(16,24,40,.10)]"
+        aria-label={`Ver oferta: ${produto.nome}`}
+      >
+        <div className="relative aspect-square w-full p-3">
+          <FotoProduto produto={produto} />
+          <div className="absolute left-1.5 top-1.5"><TagSelo produto={produto} /></div>
+          {desconto > 0 && (
+            <span className="num-tab absolute right-2 top-2 rounded-full bg-bengala px-2 py-1 text-xs font-black text-white">
+              -{desconto}%
+            </span>
           )}
-          <div className="mt-1 flex items-end justify-between gap-1">
-            <span className="cm-preco-lista"><SeloPreco valor={produto.precoJornal} tema={tema} /></span>
+        </div>
+        <div className="flex flex-1 flex-col px-3 pb-3">
+          <div className="line-clamp-2 min-h-[2.6em] text-[15px] font-semibold leading-[1.3] text-ink">{nomeLegivel(produto.nome)}</div>
+          {produto.gramagem && <div className="mt-0.5 text-[13px] text-ink-soft">{produto.gramagem}</div>}
+          <div className="mt-auto flex items-end justify-between gap-2 pt-3">
+            <div className="min-w-0">
+              {temDe && <div className="text-xs font-semibold text-ink-soft">De <span className="line-through">{formatBRL(produto.precoNormal)}</span></div>}
+              <span className="cm-preco-lista"><SeloPreco valor={produto.precoJornal} tema={tema} estilo={produto.estiloPreco} /></span>
+            </div>
             {compras && <BotaoLista produto={produto} compras={compras} />}
           </div>
         </div>
@@ -118,14 +139,29 @@ function useListaCompras() {
 
 function BotaoLista({ produto, compras, grande = false }) {
   const na = compras.tem(produto.id)
+  const base = 'flex shrink-0 items-center justify-center gap-2 font-bold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.96] motion-reduce:transition-none'
+  if (grande) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); compras.alternar(produto) }}
+        aria-pressed={na}
+        aria-label={na ? `Adicionado: ${produto.nome}. Toque para remover` : `Adicionar ${produto.nome}`}
+        className={`${base} h-14 w-full rounded-2xl px-4 text-[17px] ${na ? 'bg-[#0f7a40] text-white' : 'bg-navy text-white hover:bg-navy-light'}`}
+      >
+        <Icon name={na ? 'CircleCheck' : 'ShoppingCart'} size={20} strokeWidth={2.25} /> {na ? 'Adicionado' : 'Adicionar'}
+      </button>
+    )
+  }
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); compras.alternar(produto) }}
       aria-pressed={na}
-      className={`flex items-center justify-center gap-1.5 rounded-xl border-2 font-black ${grande ? 'px-3 py-3 text-base' : 'px-2 py-1.5 text-xs'} ${na ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-navy bg-white text-navy'}`}
+      aria-label={na ? `Remover ${produto.nome}` : `Adicionar ${produto.nome}`}
+      className={`${base} h-10 w-10 rounded-full ${na ? 'bg-[#0f7a40] text-white' : 'bg-cream text-navy hover:bg-cream-200'}`}
     >
-      <Icon name={na ? 'ListChecks' : 'ListPlus'} size={grande ? 20 : 15} /> {na ? 'Na lista' : grande ? 'Pôr na lista de compras' : 'Lista'}
+      <Icon name={na ? 'Check' : 'Plus'} size={20} strokeWidth={2.4} />
     </button>
   )
 }
@@ -148,56 +184,56 @@ function ListaCompras({ compras, loja, encarte }) {
   }
   if (!lista.length) {
     return (
-      <div className="rounded-3xl bg-white px-4 py-14 text-center">
-        <Icon name="ListPlus" size={48} className="mx-auto text-navy" />
-        <p className="mt-3 text-xl font-black text-navy">Sua lista de compras está vazia</p>
-        <p className="mt-1 text-base text-ink-soft">Toque em "Lista" nas ofertas para guardar o que você vai levar. Ela fica salva neste celular.</p>
+      <div className="rounded-3xl bg-white px-6 py-14 text-center shadow-sm ring-1 ring-black/5">
+        <ImagemSetor id="compras" size={72} className="mx-auto" />
+        <p className="mt-4 text-xl font-extrabold text-navy">Sua lista está vazia</p>
+        <p className="mx-auto mt-1 max-w-sm text-base text-ink-soft">Toque no <span className="font-bold text-navy">+</span> de uma oferta para guardar o que você vai levar. A lista fica salva neste celular.</p>
       </div>
     )
   }
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl bg-white p-4 shadow">
+      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
         <div className="flex items-end justify-between gap-3">
           <div>
             <div className="text-sm font-bold text-ink-soft">{lista.length} {lista.length === 1 ? 'item' : 'itens'} · {pegos} no carrinho</div>
-            <div className="text-2xl font-black text-navy">Total estimado {formatBRL(total)}</div>
+            <div className="text-2xl font-extrabold tracking-[-0.01em] text-navy">Total estimado <span className="num-tab">{formatBRL(total)}</span></div>
           </div>
           <Icon name="ShoppingCart" size={34} className="text-bengala" />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" onClick={compartilhar} className="flex items-center justify-center gap-2 rounded-xl border-2 border-navy px-3 py-2.5 text-sm font-black text-navy"><Icon name="Share2" size={18} /> Enviar lista</button>
-          <button type="button" onClick={pegos ? compras.limparPegos : compras.limparTudo} className="flex items-center justify-center gap-2 rounded-xl border-2 border-critical/40 px-3 py-2.5 text-sm font-black text-critical"><Icon name="Trash2" size={18} /> {pegos ? 'Tirar os pegos' : 'Limpar lista'}</button>
+          <button type="button" onClick={compartilhar} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-cream px-3 text-sm font-bold text-navy transition-[transform,background-color] duration-150 ease-out hover:bg-cream-200 active:scale-[0.97]"><Icon name="Share2" size={18} /> Enviar lista</button>
+          <button type="button" onClick={pegos ? compras.limparPegos : compras.limparTudo} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#fdeeee] px-3 text-sm font-bold text-critical transition-[transform,background-color] duration-150 ease-out hover:bg-[#fbe1e1] active:scale-[0.97]"><Icon name="Trash2" size={18} /> {pegos ? 'Tirar os pegos' : 'Limpar lista'}</button>
         </div>
       </div>
       {grupos.map((g) => (
         <section key={g.setor.id}>
-          <h2 className="mb-2 flex items-center gap-2 rounded-xl px-4 py-2 text-base font-black uppercase text-white" style={{ background: g.setor.cor }}>
-            <Icon name={g.setor.icone} size={20} /> {g.setor.nome}
+          <h2 className="mb-2 flex items-center gap-2.5 px-1 text-lg font-extrabold text-navy">
+            <ImagemSetor id={g.setor.id} size={30} /> {g.setor.nome}
           </h2>
           <div className="space-y-2">
             {g.itens.map((i) => (
-              <div key={i.id} className={`flex items-center gap-3 rounded-2xl bg-white p-3 shadow-sm ${i.pego ? 'opacity-60' : ''}`}>
+              <div key={i.id} className={`flex items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-black/[0.05] transition-opacity duration-200 ${i.pego ? 'opacity-60' : ''}`}>
                 <button type="button" onClick={() => compras.mudar(i.id, { pego: !i.pego })} aria-pressed={i.pego} aria-label={i.pego ? 'Desmarcar' : 'Marcar como pego'}
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 ${i.pego ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-navy/30 bg-white text-transparent'}`}>
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-[1.5px] transition-colors duration-150 ${i.pego ? 'border-[#0f7a40] bg-[#0f7a40] text-white' : 'border-black/20 bg-white text-transparent'}`}>
                   <Icon name="Check" size={20} />
                 </button>
                 {i.imagem ? <img src={i.imagem} alt="" className="h-12 w-12 shrink-0 object-contain" /> : null}
                 <div className="min-w-0 flex-1">
-                  <div className={`text-sm font-extrabold uppercase leading-tight text-navy ${i.pego ? 'line-through' : ''}`}>{i.nome}</div>
-                  <div className="text-sm font-bold text-bengala">{formatBRL(i.preco)}{i.unidade ? ` ${i.unidade}` : ''}</div>
+                  <div className={`text-[15px] font-semibold leading-snug text-ink ${i.pego ? 'line-through' : ''}`}>{nomeLegivel(i.nome)}</div>
+                  <div className="num-tab text-sm font-bold text-bengala">{formatBRL(i.preco)}{i.unidade ? ` ${i.unidade}` : ''}</div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <button type="button" onClick={() => (i.qtd > 1 ? compras.mudar(i.id, { qtd: i.qtd - 1 }) : compras.remover(i.id))} className="h-8 w-8 rounded-lg border-2 border-navy/20 text-lg font-black text-navy" aria-label="Menos">−</button>
-                  <span className="w-6 text-center text-base font-black text-navy">{i.qtd}</span>
-                  <button type="button" onClick={() => compras.mudar(i.id, { qtd: i.qtd + 1 })} className="h-8 w-8 rounded-lg border-2 border-navy/20 text-lg font-black text-navy" aria-label="Mais">+</button>
+                  <button type="button" onClick={() => (i.qtd > 1 ? compras.mudar(i.id, { qtd: i.qtd - 1 }) : compras.remover(i.id))} className="flex h-9 w-9 items-center justify-center rounded-full bg-cream text-navy transition-[transform,background-color] duration-150 ease-out hover:bg-cream-200 active:scale-[0.94]" aria-label={i.qtd > 1 ? 'Menos um' : 'Tirar da lista'}><Icon name={i.qtd > 1 ? 'Minus' : 'Trash2'} size={16} strokeWidth={2.25} /></button>
+                  <span className="num-tab w-7 text-center text-base font-bold text-navy">{i.qtd}</span>
+                  <button type="button" onClick={() => compras.mudar(i.id, { qtd: i.qtd + 1 })} className="flex h-9 w-9 items-center justify-center rounded-full bg-cream text-navy transition-[transform,background-color] duration-150 ease-out hover:bg-cream-200 active:scale-[0.94]" aria-label="Mais um"><Icon name="Plus" size={16} strokeWidth={2.25} /></button>
                 </div>
               </div>
             ))}
           </div>
         </section>
       ))}
-      <p className="text-center text-xs font-semibold text-white" style={{ textShadow: '0 1px 2px rgba(0,0,0,.5)' }}>Preços do encarte. O total é uma estimativa.{loja?.endereco ? ` ${loja.endereco}.` : ''}</p>
+      <p className="text-center text-xs font-semibold text-ink-soft">Preços do encarte. O total é uma estimativa.{loja?.endereco ? ` ${loja.endereco}.` : ''}</p>
     </div>
   )
 }
@@ -284,83 +320,92 @@ function PreviewProduto({ produto, lista, onTrocar, onFechar, tema, encarte, loj
       onClick={() => ir(alvo, lado)}
       disabled={!alvo}
       aria-label={lado > 0 ? 'Próxima oferta' : 'Oferta anterior'}
-      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-navy text-white disabled:opacity-25"
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-navy transition-[transform,background-color] duration-150 ease-out hover:bg-cream active:scale-[0.94] disabled:pointer-events-none disabled:opacity-25"
     >
-      <Icon name={lado > 0 ? 'ChevronRight' : 'ChevronLeft'} size={26} />
+      <Icon name={lado > 0 ? 'ChevronRight' : 'ChevronLeft'} size={22} strokeWidth={2.25} />
     </button>
   )
+  const temDe = desconto > 0 && Number(produto.precoNormal) > Number(produto.precoJornal)
+  const botaoLeve = 'flex h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[15px] font-bold transition-[transform,background-color] duration-150 ease-out active:scale-[0.97]'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overscroll-none bg-black/70 backdrop-blur-sm sm:items-center sm:p-6" onClick={onFechar} role="dialog" aria-modal="true" aria-label={produto.nome}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center overscroll-none bg-black/60 backdrop-blur-[2px] sm:items-center sm:p-6" onClick={onFechar} role="dialog" aria-modal="true" aria-label={nomeLegivel(produto.nome)}>
       <div
-        className="cm-folha cm-folha-altura flex w-full flex-col overflow-hidden rounded-t-3xl bg-white sm:max-w-lg sm:rounded-3xl"
+        className="cm-folha cm-folha-altura flex w-full flex-col overflow-hidden rounded-t-[28px] bg-white shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.35)] sm:max-w-lg sm:rounded-[28px]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* topo fixo: o botão de fechar fica sempre à vista */}
-        <div className="relative z-10 flex shrink-0 touch-none items-center justify-between gap-2 border-b border-navy/10 bg-white px-4 pb-2 pt-3" onTouchStart={inicioPuxar} onTouchEnd={fimPuxar}>
-          <div className="mx-auto mb-1 h-1.5 w-12 rounded-full bg-navy/20 sm:hidden" aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 6 }} />
-          <span className="mt-2 rounded-full px-3 py-1 text-xs font-black uppercase text-white" style={{ background: setor.cor }}>{setor.nome}</span>
-          {lista.length > 1 && <span className="mt-2 text-sm font-black text-navy" aria-live="polite">{indice + 1} de {lista.length}</span>}
-          <button type="button" onClick={onFechar} className="mt-2 flex h-11 shrink-0 items-center justify-center gap-1 rounded-full bg-navy px-4 text-sm font-black text-white" aria-label="Fechar">
-            <Icon name="X" size={20} /> Fechar
+        {/* topo fixo: setor, passar de oferta e fechar ficam sempre à vista */}
+        <div className="relative z-10 flex shrink-0 touch-none items-center gap-1 bg-white px-4 pb-2 pt-5 sm:pt-4" onTouchStart={inicioPuxar} onTouchEnd={fimPuxar}>
+          <div className="absolute inset-x-0 top-2 mx-auto h-1 w-10 rounded-full bg-black/15 sm:hidden" aria-hidden="true" />
+          <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-ink-soft">
+            <ImagemSetor id={setor.id} size={24} /> <span className="truncate">{setor.nome}</span>
+          </span>
+          {lista.length > 1 && (
+            <div className="ml-auto flex items-center">
+              {botaoSeta(anterior, -1)}
+              <span className="num-tab min-w-[3.75rem] text-center text-sm font-semibold text-ink-soft" aria-live="polite">{indice + 1} de {lista.length}</span>
+              {botaoSeta(proximo, 1)}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={onFechar}
+            aria-label="Fechar"
+            className={`${lista.length > 1 ? 'ml-1' : 'ml-auto'} flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cream text-navy transition-[transform,background-color] duration-150 ease-out hover:bg-cream-200 active:scale-[0.94]`}
+          >
+            <Icon name="X" size={20} strokeWidth={2.25} />
           </button>
         </div>
 
         {/* só o conteúdo rola, sem arrastar a página de trás */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))]" onTouchStart={inicioToque} onTouchEnd={fimToque}>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1.25rem,env(safe-area-inset-bottom))]" onTouchStart={inicioToque} onTouchEnd={fimToque}>
 
         <div key={produto.id} className="cm-troca-produto" style={{ '--cm-lado': direcao }}>
-          <div className="relative mx-4 mt-3 h-[30vh] min-h-48 overflow-hidden rounded-2xl sm:aspect-square sm:h-auto border-2 border-navy/10 bg-white p-4" style={{ background: `radial-gradient(circle at 50% 45%, #fff 0 45%, ${setor.cor}1f 100%)` }}>
-            <div className="cm-foto-preview h-full w-full"><FotoProduto produto={produto} /></div>
+          {/* foto sobre fundo claro; o branco da foto some (multiply) e não fica um quadrado branco */}
+          <div className="relative mx-4 mt-1 h-[32vh] min-h-52 overflow-hidden rounded-3xl bg-cream p-6 sm:aspect-[4/3] sm:h-auto">
+            <div className="cm-foto-preview h-full w-full bg-cream"><FotoProduto produto={produto} className="mix-blend-multiply" /></div>
             {desconto > 0 && (
-              <span className="cm-preco-preview absolute right-3 top-3 flex h-16 w-16 items-center justify-center rounded-full bg-bengala text-lg font-black text-white shadow-lg">
+              <span className="cm-preco-preview num-tab absolute right-3 top-3 rounded-full bg-bengala px-3 py-1.5 text-[15px] font-extrabold text-white">
                 -{desconto}%
               </span>
             )}
             <div className="absolute left-2 top-2"><TagSelo produto={produto} /></div>
           </div>
-          <div className="space-y-3 px-5 pt-4">
-            <h2 className="text-2xl font-black uppercase leading-tight text-navy">{produto.nome}</h2>
+
+          <div className="px-5 pt-5">
+            <h2 className="text-balance text-[22px] font-extrabold leading-[1.2] tracking-[-0.01em] text-ink">{nomeLegivel(produto.nome)}</h2>
             {(produto.marca || produto.gramagem) && (
-              <p className="text-base font-semibold text-ink-soft">{[produto.marca, produto.gramagem].filter(Boolean).join(' · ')}</p>
+              <p className="mt-1 text-[15px] text-ink-soft">{[produto.marca, produto.gramagem].filter(Boolean).join(' · ')}</p>
             )}
-            <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ background: tema.fundo }}>
-              {desconto > 0 && (
-                <div className="text-base font-bold text-white/85">
-                  De <span className="line-through">{formatBRL(produto.precoNormal)}</span> por
-                </div>
-              )}
-              <div className="mt-1"><span className="cm-preco-preview inline-block"><SeloPreco valor={produto.precoJornal} tema={tema} grande /></span></div>
+            <div className="mt-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+              <div>
+                {temDe && <p className="text-sm text-ink-soft">De <span className="num-tab line-through">{formatBRL(produto.precoNormal)}</span> por</p>}
+                <span className="cm-preco-preview inline-block">
+                  <PrecoVarejo valor={produto.precoJornal} className="text-[54px]" cor={tema.precoCor || '#d81e29'} />
+                </span>
+              </div>
               {economia > 0.009 && (
-                <div className="mt-3 text-base font-black" style={{ color: tema.corDestaque }}>Você economiza {formatBRL(economia)}</div>
+                <span className="mb-2 rounded-full bg-[#e7f5ec] px-3 py-1.5 text-sm font-bold text-[#0f6b3a]">Você economiza <span className="num-tab">{formatBRL(economia)}</span></span>
               )}
             </div>
           </div>
         </div>
 
-        <div className="space-y-3 px-5 pt-4">
+        <div className="mt-5 space-y-2.5 px-5">
           {compras && <BotaoLista produto={produto} compras={compras} grande />}
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={compartilhar} className="flex items-center justify-center gap-2 rounded-xl border-2 border-navy px-3 py-3 text-base font-black text-navy">
-              <Icon name={copiado ? 'Check' : 'Share2'} size={20} /> {copiado ? 'Link copiado' : 'Compartilhar'}
+          <div className="grid grid-cols-2 gap-2.5">
+            <button type="button" onClick={compartilhar} className={`${botaoLeve} bg-cream text-navy hover:bg-cream-200 ${linkWhats ? '' : 'col-span-2'}`}>
+              <Icon name={copiado ? 'Check' : 'Share2'} size={19} strokeWidth={2.25} /> {copiado ? 'Link copiado' : 'Compartilhar'}
             </button>
-            {linkWhats ? (
-              <a href={linkWhats} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-xl bg-[#128c4a] px-3 py-3 text-base font-black text-white">
-                <Icon name="MessageCircle" size={20} /> WhatsApp
+            {linkWhats && (
+              <a href={linkWhats} target="_blank" rel="noreferrer" className={`${botaoLeve} bg-[#e7f5ec] text-[#0f6b3a] hover:bg-[#d9efe2]`}>
+                <Icon name="MessageCircle" size={19} strokeWidth={2.25} /> WhatsApp
               </a>
-            ) : <span />}
+            )}
           </div>
-          {lista.length > 1 && (
-            <div className="flex items-center justify-between gap-3">
-              {botaoSeta(anterior, -1)}
-              <span className="text-center text-xs font-bold text-ink-soft">Deslize para o lado para ver outras ofertas</span>
-              {botaoSeta(proximo, 1)}
-            </div>
-          )}
-          <p className="text-sm text-ink-soft">Oferta válida enquanto durar o estoque. Imagem ilustrativa.</p>
-          <button type="button" onClick={onFechar} className="w-full rounded-xl border-2 border-navy/20 px-3 py-3 text-base font-black text-navy">
-            Voltar ao encarte
-          </button>
+          <p className="pt-2 text-[13px] leading-relaxed text-ink-soft">
+            {encarte?.periodoDe ? `Oferta válida de ${formatDataCurta(encarte.periodoDe)} a ${formatDataCurta(encarte.periodoAte)} ou enquanto durarem os estoques.` : 'Oferta válida enquanto durarem os estoques.'} Imagem ilustrativa.
+          </p>
         </div>
         </div>
       </div>
@@ -382,6 +427,64 @@ function PaginaViva({ children }) {
   return <div ref={ref} className={visivel ? '' : 'cm-pausado'}>{children}</div>
 }
 
+// Ação da loja no topo (WhatsApp, mapa). Só uma é a principal: branca e cheia.
+function AcaoLoja({ href, icone, principal = false, escuro = '#000000', children }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 text-[15px] font-black transition-transform duration-150 ease-out active:scale-[0.97] ${principal ? 'bg-white text-navy shadow-[0_6px_18px_-8px_rgba(0,0,0,0.5)]' : 'text-white ring-1 ring-white/40'}`}
+      style={principal ? undefined : { background: `${escuro}b3` }}
+    >
+      <Icon name={icone} size={19} strokeWidth={2.25} /> {children}
+    </a>
+  )
+}
+
+// Aba de setor: ilustração grande num quadrado na cor do setor, nome embaixo e o número de ofertas.
+function AbaSetor({ aba, ativa, onEscolher }) {
+  return (
+    <button
+      type="button"
+      onClick={onEscolher}
+      aria-pressed={ativa}
+      aria-label={`${aba.nome}, ${plural(aba.n, 'oferta', 'ofertas')}`}
+      className="group flex w-[78px] shrink-0 flex-col items-center gap-1.5 rounded-2xl px-1 pb-1 pt-2 transition-transform duration-150 ease-out active:scale-[0.96]"
+    >
+      <span
+        className={`relative flex h-14 w-14 items-center justify-center rounded-2xl transition-shadow duration-150 ${ativa ? 'ring-[2.5px] ring-navy ring-offset-2' : ''}`}
+        style={{ background: `${aba.cor}1c` }}
+      >
+        <span className="transition-transform duration-200 ease-out [@media(hover:hover)]:group-hover:-translate-y-0.5">
+          <ImagemSetor id={aba.id} size={38} />
+        </span>
+        <span className={`num-tab absolute -right-2 -top-2 min-w-[22px] rounded-full px-1.5 text-center text-[11px] font-black leading-[22px] ring-2 ring-white ${ativa ? 'bg-navy text-white' : 'bg-white text-navy shadow-sm'}`}>
+          {aba.n}
+        </span>
+      </span>
+      <span className={`line-clamp-2 text-center text-[12px] font-extrabold leading-tight ${ativa ? 'text-navy' : 'text-ink-soft'}`}>{aba.nome}</span>
+    </button>
+  )
+}
+
+// Título de cada bloco de ofertas: ilustração do setor, nome e quantidade.
+function TituloSecao({ id, nome, detalhe, idTitulo }) {
+  const setor = setorById(id)
+  const cor = id === 'mercado-encarte' ? MERCADO_ENCARTE.cor : id === 'todos' ? '#082b4f' : setor.cor
+  return (
+    <div className="mb-4 flex items-center gap-3">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl" style={{ background: `${cor}1c` }}>
+        <ImagemSetor id={id} size={34} />
+      </span>
+      <div className="min-w-0">
+        <h2 id={idTitulo} className="truncate text-[22px] font-extrabold leading-tight tracking-[-0.01em] text-navy md:text-[26px]">{nome}</h2>
+        {detalhe && <p className="text-sm font-semibold text-ink-soft">{detalhe}</p>}
+      </div>
+    </div>
+  )
+}
+
 export default function EncarteDigital() {
   const [encarte, setEncarte] = useState(null)
   const [carregando, setCarregando] = useState(true)
@@ -391,6 +494,8 @@ export default function EncarteDigital() {
   const [params, setParams] = useSearchParams()
   const [acabouDeAtualizar, setAcabouDeAtualizar] = useState(false)
   const [modo, setModo] = useState('encarte')
+  const conteudoRef = useRef(null)
+  const navRef = useRef(null)
 
   useEffect(() => {
     let ativo = true
@@ -400,6 +505,8 @@ export default function EncarteDigital() {
       const novo = await carregarEncartePublicado()
       if (!ativo) return
       setCarregando(false)
+      // Leitura vazia ou com erro depois de já mostrar ofertas: mantém o que está na tela.
+      if (versaoAtual !== null && !(novo?.itens?.length)) return
       if (novo?.versao === versaoAtual) return
       if (versaoAtual !== null) {
         setAcabouDeAtualizar(true)
@@ -419,7 +526,10 @@ export default function EncarteDigital() {
   const temaDoSetor = (id) => temaCampanhaById(encarte?.temasSetor?.[id] || temasDoSetor(id)[0]?.id || encarte?.tema)
   // Mercado Encarte: só as ofertas marcadas para hoje (somem sozinhas no dia seguinte).
   const hoje = dataISOmaisDias(0)
-  const ofertasDoDia = useMemo(() => itens.filter((p) => noMercadoEncarte(p, hoje)), [itens, hoje])
+  // A loja pode esconder o Geral e o Mercado Encarte do site (chaves no passo 1 do Jornal).
+  const geralNoSite = encarte?.mostrarGeral !== false
+  const mercadoNoSite = encarte?.mostrarMercado !== false
+  const ofertasDoDia = useMemo(() => (mercadoNoSite ? itens.filter((p) => noMercadoEncarte(p, hoje)) : []), [itens, hoje, mercadoNoSite])
   const ehMercado = setorFiltro === MERCADO_ENCARTE.id
   useEffect(() => { if (ehMercado && encarte && !ofertasDoDia.length) setSetorFiltro('todos') }, [ehMercado, encarte, ofertasDoDia.length])
   const tema = setorFiltro !== 'todos' && setorFiltro !== 'compras' ? temaDoSetor(setorFiltro) : temaGeral
@@ -460,122 +570,191 @@ export default function EncarteDigital() {
   }, [setParams])
   const listaPreview = aberto && !visiveis.some((p) => p.id === aberto.id) ? itens : visiveis
 
+  const reduzido = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  // Troca de aba: se o cliente já desceu a página, volta para o começo das ofertas (logo abaixo da barra fixa).
+  const mudar = (fn) => {
+    fn()
+    const el = conteudoRef.current
+    if (!el) return
+    const topo = el.getBoundingClientRect().top + window.scrollY - (navRef.current?.offsetHeight || 0)
+    if (window.scrollY > topo) window.scrollTo({ top: topo, behavior: reduzido ? 'auto' : 'smooth' })
+  }
+  const vista = setorFiltro === 'compras' ? 'compras' : modo
+  const escolherVista = (id) => mudar(() => {
+    if (id === 'compras') { setSetorFiltro('compras'); return }
+    setModo(id)
+    if (setorFiltro === 'compras') setSetorFiltro('todos')
+  })
+  const abas = [
+    ...(ofertasDoDia.length ? [{ id: MERCADO_ENCARTE.id, nome: 'Ofertas de hoje', cor: MERCADO_ENCARTE.cor, n: ofertasDoDia.length }] : []),
+    ...(geralNoSite ? [{ id: 'todos', nome: 'Todas', cor: '#082b4f', n: itens.length }] : []),
+    ...setoresPresentes.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor, n: itens.filter((p) => p.setor === s.id).length })),
+  ]
+  const abaAtual = abas.find((a) => a.id === setorFiltro)
+  // Aba escondida pela loja (ou que sumiu): abre a primeira que existe.
+  useEffect(() => {
+    if (!encarte || setorFiltro === 'compras' || !abas.length || abas.some((a) => a.id === setorFiltro)) return
+    setSetorFiltro(abas[0].id)
+  }, [encarte, setorFiltro, abas])
+  const periodo = encarte?.periodoDe ? `${formatDataCurta(encarte.periodoDe)} a ${formatDataCurta(encarte.periodoAte)}` : ''
+  const arteTitulo = caminhoArte(temaGeral, 'titulo')
+  const whats = soDigitos(loja?.whatsapp)
+  const linkWhats = whats ? `https://wa.me/${whats.length <= 11 ? `55${whats}` : whats}?text=${encodeURIComponent('Olá! Vi o encarte digital e quero saber mais.')}` : null
+  const linkMapa = loja?.endereco ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${loja.nome}, ${loja.endereco}, ${loja.cidade || ''}`)}` : null
+  const tituloConteudo = vista === 'compras' ? null : ehMercado
+    ? { id: 'mercado-encarte', nome: 'Ofertas de hoje', detalhe: diasMercado.length ? `Escolhidas pela loja para ${formatDataCurta(diasMercado[0])}${diasMercado.length > 1 && diasMercado[diasMercado.length - 1] !== diasMercado[0] ? ` a ${formatDataCurta(diasMercado[diasMercado.length - 1])}` : ''}` : '' }
+    : setorFiltro === 'todos'
+      ? { id: 'todos', nome: 'Todas as ofertas', detalhe: plural(itens.length, 'oferta', 'ofertas') }
+      : { id: setorFiltro, nome: setorById(setorFiltro).nome, detalhe: plural(visiveis.length, 'oferta', 'ofertas') }
+
   return (
-    <div className="min-h-screen" style={{ background: tema.fundo, backgroundAttachment: 'fixed' }}>
-      <header className="bg-black/30 text-white backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 pb-3 pt-[max(.75rem,env(safe-area-inset-top))]">
-          <div className="flex min-w-0 items-center gap-3">
-            <Logo h={40} chip />
-            <div className="min-w-0">
-              <div className="truncate text-base font-black uppercase sm:text-lg">{tema.titulo} {tema.destaque}</div>
-              {ehMercado
-                ? <div className="text-xs font-bold text-white/85 sm:text-sm">Ofertas de cada dia, de {formatData(diasMercado[0] || hoje)} a {formatData(diasMercado[diasMercado.length - 1] || hoje)}</div>
-                : encarte?.periodoDe && <div className="text-xs font-bold text-white/85 sm:text-sm">Válido de {formatData(encarte.periodoDe)} a {formatData(encarte.periodoAte)}</div>}
-            </div>
-          </div>
-          {encarte?.publicadoEm && (
-            <span className="flex shrink-0 items-center gap-2 rounded-full bg-black/35 px-3 py-1.5 text-xs font-bold">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+    <div className="min-h-screen bg-cream pb-[calc(4.5rem+env(safe-area-inset-bottom))] text-ink md:pb-0">
+      {/* Topo: a grande ideia da campanha da semana, o período e as duas ações da loja */}
+      <header className="relative overflow-hidden text-white" style={{ background: carregando ? 'linear-gradient(160deg,#082b4f,#123f6b)' : temaGeral.fundo }}>
+        <div className="mx-auto max-w-6xl px-4 pb-6 pt-[max(1rem,env(safe-area-inset-top))] md:pb-8">
+          <div className="flex items-center justify-between gap-3">
+            <Logo h={44} chip />
+            {encarte?.publicadoEm && (
+              <span className="flex shrink-0 items-center gap-2 rounded-full bg-black/30 px-3 py-1.5 text-xs font-bold" role="status">
+                <span className="relative flex h-2 w-2" aria-hidden="true">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#7dffa8] opacity-75 motion-reduce:animate-none" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-[#7dffa8]" />
+                </span>
+                {acabouDeAtualizar ? 'Atualizado agora' : `Atualizado às ${horaCurta(encarte.publicadoEm)}`}
               </span>
-              <span className="hidden sm:inline">{acabouDeAtualizar ? 'Atualizado agora' : `Atualizado às ${horaCurta(encarte.publicadoEm)}`}</span>
-              <span className="sm:hidden">{acabouDeAtualizar ? 'Agora' : horaCurta(encarte.publicadoEm)}</span>
-            </span>
+            )}
+          </div>
+
+          {carregando ? (
+            <div className="mt-6 flex items-center gap-4" aria-hidden="true">
+              <div className="h-36 w-40 shrink-0 animate-pulse rounded-2xl bg-white/15 motion-reduce:animate-none md:h-52 md:w-60" />
+              <div className="flex-1 space-y-3">
+                <div className="h-4 w-2/3 animate-pulse rounded bg-white/15 motion-reduce:animate-none" />
+                <div className="h-8 w-full animate-pulse rounded bg-white/15 motion-reduce:animate-none" />
+              </div>
+            </div>
+          ) : (
+            <div className="cm-hero-entra mt-5 flex items-center gap-4 md:gap-8">
+              {arteTitulo ? (
+                <>
+                  <h1 className="sr-only">{temaGeral.titulo} {temaGeral.destaque} · {loja.nome}</h1>
+                  <img
+                    src={arteTitulo}
+                    alt=""
+                    aria-hidden="true"
+                    decoding="async"
+                    className="aspect-[565/500] w-[44%] max-w-[260px] shrink-0 select-none rounded-2xl object-cover [mask-image:radial-gradient(120%_100%_at_50%_45%,#000_62%,transparent)] md:w-[260px]"
+                  />
+                </>
+              ) : (
+                <h1 className="display-bengala w-[48%] shrink-0 text-[clamp(2.2rem,10vw,4.25rem)] uppercase leading-[0.88] md:w-auto">
+                  <span className="block" style={{ color: temaGeral.corTitulo }}>{temaGeral.titulo}</span>
+                  <span className="block" style={{ color: temaGeral.corDestaque }}>{temaGeral.destaque}</span>
+                </h1>
+              )}
+              <div className="min-w-0 flex-1">
+                {periodo && (
+                  <>
+                    <p className="text-[13px] font-bold text-white/90 md:text-base">Ofertas válidas de</p>
+                    <p className="display-bengala text-[clamp(1.9rem,8.5vw,3.25rem)] uppercase leading-none" style={{ color: temaGeral.corDestaque }}>{periodo}</p>
+                    <p className="mt-1 text-[13px] font-semibold text-white/90 md:text-base">ou enquanto durarem os estoques</p>
+                  </>
+                )}
+                <div className="mt-5 hidden flex-wrap gap-2 md:flex">
+                  {linkWhats && <AcaoLoja href={linkWhats} icone="MessageCircle" principal>Chamar no WhatsApp</AcaoLoja>}
+                  {linkMapa && <AcaoLoja href={linkMapa} icone="MapPin" escuro={temaGeral.contorno}>Como chegar</AcaoLoja>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!carregando && (linkWhats || linkMapa) && (
+            <div className="mt-5 grid grid-cols-2 gap-2 md:hidden">
+              {linkWhats && <AcaoLoja href={linkWhats} icone="MessageCircle" principal>WhatsApp</AcaoLoja>}
+              {linkMapa && <AcaoLoja href={linkMapa} icone="MapPin" escuro={temaGeral.contorno}>Como chegar</AcaoLoja>}
+            </div>
           )}
         </div>
       </header>
 
       {itens.length > 0 && (
-        <nav className="sticky top-0 z-20 border-b-2 border-navy/10 bg-white/95 backdrop-blur" aria-label="Jornais do mercado">
-          {/* 1ª linha: um jornal para cada setor, mais o Geral com tudo */}
-          <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 pb-2 pt-3">
-            {ofertasDoDia.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSetorFiltro(MERCADO_ENCARTE.id)}
-                aria-pressed={ehMercado}
-                className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 px-4 py-2 text-sm font-black uppercase shadow ${ehMercado ? 'border-[#ffd60a] text-[#ffd60a] ring-2 ring-[#c1121f]' : 'border-[#c1121f] text-white'}`}
-                style={{ background: 'linear-gradient(120deg,#c1121f,#fb5607)' }}
-              >
-                <Icon name="Star" size={16} fill="#ffd60a" color="#ffd60a" /> Mercado Encarte ({ofertasDoDia.length})
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setSetorFiltro('todos')}
-              aria-pressed={setorFiltro === 'todos'}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 px-4 py-2 text-sm font-black ${setorFiltro === 'todos' ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}
-            >
-              <Icon name="Store" size={16} /> Geral ({itens.length})
-            </button>
-            {setoresPresentes.map((s) => {
-              const n = itens.filter((p) => p.setor === s.id).length
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setSetorFiltro(s.id)}
-                  aria-pressed={setorFiltro === s.id}
-                  className="flex shrink-0 items-center gap-1.5 rounded-full border-2 px-4 py-2 text-sm font-black"
-                  style={setorFiltro === s.id ? { background: s.cor, borderColor: s.cor, color: '#fff' } : { borderColor: `${s.cor}66`, color: s.corTag, background: '#fff' }}
-                >
-                  <Icon name={s.icone} size={16} /> {s.nome} ({n})
-                </button>
-              )
-            })}
-          </div>
-          {/* 2ª linha: jeito de ver e a lista de compras */}
-          <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 pb-3">
-            <div className="flex shrink-0 overflow-hidden rounded-full border-2 border-navy" role="group" aria-label="Modo de visualização">
-              {[['encarte', 'Encarte'], ['lista', 'Produtos']].map(([id, rotulo]) => (
-                <button key={id} type="button" onClick={() => { setModo(id); if (setorFiltro === 'compras') setSetorFiltro('todos') }} aria-pressed={modo === id && setorFiltro !== 'compras'} className={`px-3 py-1.5 text-sm font-black ${modo === id && setorFiltro !== 'compras' ? 'bg-navy text-white' : 'bg-white text-navy'}`}>
-                  {rotulo}
-                </button>
+        <nav ref={navRef} className="sticky top-0 z-20 border-b border-black/[0.06] bg-white/95 backdrop-blur" aria-label="Jornais do mercado">
+          <div className="mx-auto flex max-w-6xl items-center gap-3 md:px-4">
+            {/* Um jornal para cada setor, mais as ofertas de hoje e o jornal com tudo */}
+            <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto px-3 py-2.5 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] [scrollbar-width:none] md:px-0 md:[mask-image:none] [&::-webkit-scrollbar]:hidden">
+              {abas.map((a) => (
+                <AbaSetor key={a.id} aba={a} ativa={setorFiltro === a.id} onEscolher={() => mudar(() => setSetorFiltro(a.id))} />
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => setSetorFiltro('compras')}
-              aria-pressed={setorFiltro === 'compras'}
-              className={`ml-auto flex shrink-0 items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-sm font-black ${setorFiltro === 'compras' ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-[#128c4a]/50 bg-white text-[#128c4a]'}`}
-            >
-              <Icon name="ShoppingCart" size={16} /> Minha lista{compras.lista.length ? ` (${compras.lista.length})` : ''}
-            </button>
+            <div className="hidden shrink-0 items-center gap-2 md:flex">
+              <div className="flex rounded-full bg-cream p-1" role="group" aria-label="Jeito de ver">
+                {[['encarte', 'Encarte'], ['lista', 'Produtos']].map(([id, rotulo]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => escolherVista(id)}
+                    aria-pressed={vista === id}
+                    className={`flex h-9 items-center gap-1.5 rounded-full pl-2 pr-4 text-sm font-bold transition-[transform,background-color] duration-150 ease-out active:scale-[0.96] ${vista === id ? 'bg-white text-navy shadow-sm ring-1 ring-black/[0.06]' : 'text-ink-soft hover:text-navy'}`}
+                  >
+                    <ImagemAba id={id} size={22} />
+                    {rotulo}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => escolherVista('compras')}
+                aria-pressed={vista === 'compras'}
+                aria-label={compras.lista.length ? `Minha lista, ${plural(compras.lista.length, 'item', 'itens')}` : undefined}
+                className={`flex h-11 items-center gap-2 rounded-full px-4 text-sm font-black transition-transform duration-150 ease-out active:scale-[0.96] ${vista === 'compras' ? 'bg-[#0f7a40] text-white' : 'bg-white text-[#0f7a40] ring-1 ring-[#0f7a40]/40'}`}
+              >
+                <ImagemAba id="compras" size={22} /> Minha lista
+                {compras.lista.length > 0 && <span className={`num-tab min-w-[22px] rounded-full px-1.5 text-center text-xs leading-[22px] ${vista === 'compras' ? 'bg-white text-[#0f7a40]' : 'bg-[#0f7a40] text-white'}`}>{compras.lista.length}</span>}
+              </button>
+            </div>
           </div>
         </nav>
       )}
 
-      <main className="mx-auto max-w-6xl px-3 py-5 sm:px-4">
+      <main ref={conteudoRef} className="mx-auto max-w-6xl px-3 py-5 sm:px-4 md:py-7">
         {carregando ? (
-          <p className="py-20 text-center text-lg font-bold text-white">Carregando ofertas…</p>
-        ) : !itens.length ? (
-          <div className="rounded-3xl bg-white px-4 py-16 text-center">
-            <Icon name="Newspaper" size={48} className="mx-auto text-navy" />
-            <p className="mt-3 text-xl font-black text-navy">Nenhuma oferta publicada ainda.</p>
-            <p className="mt-1 text-base text-ink-soft">Assim que o mercado publicar, as ofertas aparecem aqui.</p>
-          </div>
-        ) : setorFiltro === 'compras' ? (
-          <ListaCompras compras={compras} loja={loja} encarte={encarte} />
-        ) : modo === 'encarte' ? (
-          <div className="grid gap-6 lg:grid-cols-2">
-            {paginas.map((pagina, i) => (
-              <div key={`${encarte.versao}-${setorFiltro}-${i}`} className="min-w-0 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-black/10">
-                <PaginaViva>
-                  <Escalado largura={tamanho.largura} altura={ehFormatoJornal(layout) ? alturaUsada(pagina) : tamanho.altura}>
-                    <PaginaEncarte animado compacto tema={tema} pagina={pagina} encarte={encarteDaAba} loja={loja} fundo={fundoDoTema} layout={layout} numero={i + 1} total={paginas.length} onAbrir={abrir} />
-                  </Escalado>
-                </PaginaViva>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" aria-label="Carregando ofertas">
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className="overflow-hidden rounded-2xl bg-white p-3 ring-1 ring-black/[0.06]">
+                <div className="aspect-square animate-pulse rounded-xl bg-black/[0.05] motion-reduce:animate-none" />
+                <div className="mt-3 h-3.5 w-4/5 animate-pulse rounded bg-black/[0.06] motion-reduce:animate-none" />
+                <div className="mt-2 h-3.5 w-1/2 animate-pulse rounded bg-black/[0.06] motion-reduce:animate-none" />
               </div>
             ))}
           </div>
+        ) : !itens.length ? (
+          <div className="mx-auto max-w-md rounded-3xl bg-white px-6 py-14 text-center ring-1 ring-black/[0.06]">
+            <ImagemSetor id="geral" size={88} className="mx-auto" />
+            <p className="mt-4 text-xl font-black text-navy">Nenhuma oferta publicada ainda</p>
+            <p className="mt-1 text-base text-ink-soft">Assim que o mercado publicar, as ofertas aparecem aqui sozinhas.</p>
+          </div>
+        ) : vista === 'compras' ? (
+          <ListaCompras compras={compras} loja={loja} encarte={encarte} />
+        ) : vista === 'encarte' ? (
+          <>
+            <TituloSecao id={tituloConteudo.id} nome={tituloConteudo.nome} detalhe={paginas.length > 1 ? `${tituloConteudo.detalhe ? `${tituloConteudo.detalhe} · ` : ''}${plural(paginas.length, 'página', 'páginas')}` : tituloConteudo.detalhe} />
+            <div className="grid gap-5 lg:grid-cols-2 lg:gap-6">
+              {paginas.map((pagina, i) => (
+                <div key={`${encarte.versao}-${setorFiltro}-${i}`} className="min-w-0 overflow-hidden rounded-2xl shadow-[0_10px_30px_-12px_rgba(8,43,79,0.35)] ring-1 ring-black/[0.06]">
+                  <PaginaViva>
+                    <Escalado largura={tamanho.largura} altura={ehFormatoJornal(layout) ? alturaUsada(pagina) : tamanho.altura}>
+                      <PaginaEncarte animado compacto tema={tema} pagina={pagina} encarte={encarteDaAba} loja={loja} fundo={fundoDoTema} layout={layout} numero={i + 1} total={paginas.length} onAbrir={abrir} />
+                    </Escalado>
+                  </PaginaViva>
+                </div>
+              ))}
+            </div>
+          </>
         ) : (
-          <div key={encarte.versao} className="space-y-8">
+          <div key={encarte.versao} className="space-y-9">
             {grupos.map((g) => (
               <section key={g.setor.id} aria-labelledby={`sec-${g.setor.id}`}>
-                <h2 id={`sec-${g.setor.id}`} className="mb-3 flex items-center gap-2 rounded-xl px-4 py-2.5 text-lg font-black uppercase tracking-wide text-white" style={{ background: g.setor.cor }}>
-                  <Icon name={g.setor.icone} size={22} /> {g.setor.nome}
-                </h2>
+                <TituloSecao id={ehMercado ? 'mercado-encarte' : g.setor.id} nome={ehMercado ? 'Ofertas de hoje' : g.setor.nome} detalhe={plural(g.itens.length, 'oferta', 'ofertas')} idTitulo={`sec-${g.setor.id}`} />
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   {g.itens.map((p, i) => <CartaoProduto key={p.id} produto={p} indice={i} onAbrir={abrir} tema={tema} compras={compras} />)}
                 </div>
@@ -585,17 +764,67 @@ export default function EncarteDigital() {
         )}
       </main>
 
-      <footer className="mx-auto max-w-6xl px-4 pb-10 pt-2 text-center text-sm font-semibold text-white" style={{ textShadow: '0 1px 2px rgba(0,0,0,.5)' }}>
-        Ofertas válidas enquanto durar o estoque. Imagens ilustrativas.
-        <div className="mt-4 flex items-center justify-center gap-1.5 text-xs font-bold text-white/90">
-          <SimboloClawMarket tamanho={18} /> Encarte digital por ClawMarket
+      <footer className="mx-auto max-w-6xl px-3 pb-10 sm:px-4">
+        <div className="rounded-3xl bg-white px-5 py-6 ring-1 ring-black/[0.06] md:flex md:items-start md:justify-between md:gap-8 md:px-8">
+          <div className="flex items-start gap-4">
+            <Logo h={48} />
+            <div className="min-w-0 text-sm leading-relaxed text-ink-soft">
+              <p className="text-base font-black text-navy">{loja.nome}</p>
+              {loja.endereco && <p>{loja.endereco}{loja.cidade ? ` · ${loja.cidade}` : ''}</p>}
+              {(loja.telefone || loja.whatsapp) && (
+                <p>
+                  {loja.telefone && <>Tel. {loja.telefone}</>}
+                  {loja.telefone && loja.whatsapp && ' · '}
+                  {loja.whatsapp && <>WhatsApp {loja.whatsapp}</>}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="mt-5 border-t border-black/[0.06] pt-4 text-xs leading-relaxed text-ink-soft md:mt-0 md:max-w-sm md:border-0 md:pt-0 md:text-right">
+            <p>{periodo ? `Ofertas válidas de ${periodo} ou enquanto durarem os estoques.` : 'Ofertas válidas enquanto durarem os estoques.'} Imagens ilustrativas.</p>
+            <p className="mt-3 flex items-center gap-1.5 font-bold text-navy md:justify-end">
+              <SimboloClawMarket tamanho={18} /> Encarte digital por ClawMarket
+            </p>
+            <p className="mt-1">Ilustrações: Fluent Emoji (Microsoft, MIT)</p>
+          </div>
         </div>
       </footer>
 
+      {/* Celular: as três vistas ficam no alcance do polegar */}
+      {itens.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-black/[0.08] bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+          <div className="mx-auto grid max-w-md grid-cols-3" role="group" aria-label="Jeito de ver">
+            {[['encarte', 'Encarte'], ['lista', 'Produtos'], ['compras', 'Minha lista']].map(([id, rotulo]) => {
+              const ativa = vista === id
+              const cor = id === 'compras' ? '#0f7a40' : '#082b4f'
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => escolherVista(id)}
+                  aria-pressed={ativa}
+                  aria-label={id === 'compras' && compras.lista.length ? `Minha lista, ${plural(compras.lista.length, 'item', 'itens')}` : undefined}
+                  className="flex h-[4.5rem] flex-col items-center justify-center gap-1 text-[12px] font-bold transition-transform duration-150 ease-out active:scale-[0.96]"
+                  style={{ color: ativa ? cor : '#3b4656' }}
+                >
+                  <span className="relative flex h-9 w-14 items-center justify-center rounded-full transition-colors duration-150" style={{ background: ativa ? `${cor}17` : 'transparent' }}>
+                    <ImagemAba id={id} size={28} className={ativa ? '' : 'opacity-90'} />
+                    {id === 'compras' && compras.lista.length > 0 && (
+                      <span className="num-tab absolute -right-0.5 -top-1 min-w-[20px] rounded-full bg-[#0f7a40] px-1 text-center text-[11px] leading-[20px] text-white ring-2 ring-white">{compras.lista.length}</span>
+                    )}
+                  </span>
+                  {rotulo}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {acabouDeAtualizar && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]" role="status">
-          <div className="cm-faixa-nova flex items-center gap-2 rounded-full bg-offer px-5 py-3 text-base font-black uppercase text-navy shadow-2xl ring-4 ring-white">
-            <Icon name="Sparkles" size={20} /> Ofertas atualizadas agora!
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4 md:bottom-0 md:pb-6" role="status">
+          <div className="cm-faixa-nova flex items-center gap-2 rounded-full bg-navy px-5 py-3 text-sm font-black text-white shadow-2xl">
+            <Icon name="Sparkles" size={18} color="#ffc928" /> Ofertas atualizadas agora
           </div>
         </div>
       )}

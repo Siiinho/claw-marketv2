@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { useStore, podeEditar } from '../store/StoreContext'
-import { Icon, PrecoVarejo, StatusBadge, ProdutoThumb, EmptyState, Botao, Modal, Campo, inputCls, Pill } from '../components/ui'
-import { SETORES, setorById, statusValidade, formatBRL, arquivoParaDataURL, dataISOmaisDias, noMercadoEncarte } from '../lib/utils'
+import { Icon, StatusBadge, ProdutoThumb, EmptyState, Botao, Modal, Campo, inputCls, Pill, Abas, Segmentado, Acao } from '../components/ui'
+import {
+  SETORES, setorById, statusValidade, formatBRL, formatData, formatDataCurta, arquivoParaDataURL, dataISOmaisDias, noMercadoEncarte,
+  diasParaVencer, plural, loteResolvido, precisaDecisao, dataCadastro, todasBaixas, regraDaMarca,
+} from '../lib/utils'
 import {
   buscarImagemProduto,
   buscarProdutoCatalogo,
@@ -10,20 +13,79 @@ import {
   urlBuscaGoogleImagens,
 } from '../lib/produtoApi'
 import { importarPlanilha } from '../lib/importarCatalogo'
+import ModalBaixa from '../components/ModalBaixa'
 
 const vazio = {
   nome: '', marca: '', gramagem: '', setor: 'mercearia', estoque: 0, validade: '',
   precoNormal: '', precoPromo: '', codigoBarras: '', imagem: null,
 }
 
+const RECENTE_DIAS = 7
+
+const TONS_AVISO = {
+  vencido: { borda: 'border-[#7a241b]/25', fundo: 'bg-[#f3dcd8]/70', cor: '#7a241b' },
+  critico: { borda: 'border-[#c42b2b]/25', fundo: 'bg-[#fbe5e5]/70', cor: '#a61f1f' },
+}
+function Aviso({ tom, icone, titulo, texto, acao }) {
+  const t = TONS_AVISO[tom]
+  return (
+    <div role="status" className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 sm:flex-nowrap sm:p-4 ${t.borda} ${t.fundo}`}>
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white" style={{ color: t.cor }}>
+        <Icon name={icone} size={20} strokeWidth={2.1} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[15px] font-bold leading-snug" style={{ color: t.cor }}>{titulo}</p>
+        <p className="mt-0.5 text-sm leading-snug text-ink">{texto}</p>
+      </div>
+      <div className="w-full sm:w-auto [&>button]:w-full">{acao}</div>
+    </div>
+  )
+}
+
+function Explica({ icone, cor, titulo, texto }) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-ink-soft/15 bg-white p-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cream-200" style={{ color: cor }}><Icon name={icone} size={18} strokeWidth={2} /></span>
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-ink">{titulo}</p>
+        <p className="text-sm leading-snug text-ink-soft">{texto}</p>
+      </div>
+    </div>
+  )
+}
+
+function Preco({ p }) {
+  return (
+    <div className="num-tab whitespace-nowrap">
+      <div className={`font-bold ${p.precoPromo ? 'text-success' : 'text-ink'}`}>{formatBRL(p.precoPromo || p.precoNormal)}</div>
+      {p.precoPromo ? <div className="text-xs text-ink-soft line-through">{formatBRL(p.precoNormal)}</div> : null}
+    </div>
+  )
+}
+
+// "hoje", "ontem", "há 3 dias" ou a data.
+function quando(iso) {
+  const t = Date.parse(iso || '')
+  if (!Number.isFinite(t)) return ''
+  const d = new Date(t)
+  const dia = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const n = Math.round((dia(new Date()) - dia(d)) / 86400000)
+  if (n <= 0) return `hoje, ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+  if (n === 1) return 'ontem'
+  if (n < 7) return `há ${n} dias`
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+}
+
 export default function Produtos() {
-  const { produtos, usuario, lojas, lojaAtiva, salvarProduto, excluirProduto, toggleFila, toast } = useStore()
+  const { produtos, usuario, lojas, lojaAtiva, config, salvarProduto, excluirProduto, desfazerBaixa, toggleFila, toast } = useStore()
   const lojaNome = (id) => lojas.find((l) => l.id === id)?.nome || '—'
   const { busca } = useOutletContext()
   const editavel = podeEditar(usuario.papel)
 
   const [fSetor, setFSetor] = useState('')
-  const [fStatus, setFStatus] = useState('')
+  const [aba, setAba] = useState('todos')
+  const [diasJanela, setDiasJanela] = useState(() => Number(config?.diasAlerta) || 7)
+  const [baixa, setBaixa] = useState(null) // { produto, tipo: 'troca' | 'perda' }
   const [form, setForm] = useState(null)
   const [excluindo, setExcluindo] = useState(null)
   const [buscandoCatalogo, setBuscandoCatalogo] = useState(false)
@@ -60,7 +122,7 @@ export default function Produtos() {
       salvarProduto({ ...p, loja: lojaPadrao })
       if (i % 10 === 0) setImportacao((s) => ({ ...s, progresso: i + 1 }))
     }
-    toast(`${prods.length} produto(s) importado(s) do catálogo!`)
+    toast(`${prods.length === 1 ? '1 produto importado' : `${prods.length} produtos importados`} do catálogo!`)
     setImportacao(null)
   }
 
@@ -149,15 +211,53 @@ export default function Produtos() {
     }
   }
 
+  const RECENTE_MS = RECENTE_DIAS * 86400000
+  const ehRecente = (p, agora) => { const c = Date.parse(dataCadastro(p) || ''); return Number.isFinite(c) && c >= agora - RECENTE_MS }
+  const naJanela = (p) => { const d = diasParaVencer(p.validade); return d != null && d >= 0 && d <= diasJanela && !loteResolvido(p) }
+
+  const contagem = useMemo(() => {
+    const agora = Date.now()
+    let recentes = 0, vencendo = 0, vencidos = 0, urgentes = 0
+    for (const p of produtos) {
+      if (ehRecente(p, agora)) recentes++
+      if (naJanela(p)) vencendo++
+      if (precisaDecisao(p)) vencidos++
+      const d = diasParaVencer(p.validade)
+      if (d != null && d >= 0 && d <= 2 && !p.naFila && !loteResolvido(p)) urgentes++
+    }
+    return { recentes, vencendo, vencidos, urgentes }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [produtos, diasJanela])
+
+  const passaFiltro = (p, b) => {
+    if (fSetor && p.setor !== fSetor) return false
+    if (b && !`${p.nome} ${p.marca}`.toLowerCase().includes(b)) return false
+    return true
+  }
+
   const lista = useMemo(() => {
     const b = (busca || '').toLowerCase().trim()
-    return produtos.filter((p) => {
-      if (fSetor && p.setor !== fSetor) return false
-      if (fStatus && statusValidade(p.validade).id !== fStatus) return false
-      if (b && !`${p.nome} ${p.marca}`.toLowerCase().includes(b)) return false
+    const agora = Date.now()
+    let r = produtos.filter((p) => {
+      if (!passaFiltro(p, b)) return false
+      if (aba === 'recentes') return ehRecente(p, agora)
+      if (aba === 'vencendo') return naJanela(p)
+      if (aba === 'vencidos') return precisaDecisao(p)
       return true
     })
-  }, [produtos, fSetor, fStatus, busca])
+    if (aba === 'recentes') r = [...r].sort((x, y) => String(dataCadastro(y)).localeCompare(String(dataCadastro(x))))
+    if (aba === 'vencendo' || aba === 'vencidos') r = [...r].sort((x, y) => diasParaVencer(x.validade) - diasParaVencer(y.validade))
+    return r
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [produtos, fSetor, busca, aba, diasJanela])
+
+  const baixas = useMemo(() => {
+    const b = (busca || '').toLowerCase().trim()
+    return todasBaixas(produtos).filter((x) => passaFiltro(x.produto, b))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [produtos, fSetor, busca])
+  const somaBaixas = (tipo) => baixas.filter((x) => x.tipo === tipo).reduce((s, x) => s + (Number(x.valor) || 0), 0)
+  const contaBaixas = (tipo) => baixas.filter((x) => x.tipo === tipo).reduce((s, x) => s + (Number(x.quantidade) || 0), 0)
 
   const abrirNovo = () => setForm({ ...vazio, loja: lojaAtiva !== 'todas' ? lojaAtiva : lojas[0].id })
   const abrirEditar = (p) =>
@@ -183,6 +283,12 @@ export default function Produtos() {
     excluirProduto(excluindo.id)
     toast('Produto excluído.', 'info')
     setExcluindo(null)
+  }
+
+  const abrirBaixa = (p, tipo) => setBaixa({ produto: p, tipo })
+  const desfazer = (x) => {
+    desfazerBaixa(x.produtoId, x.id)
+    toast(`Desfeito: ${plural(Number(x.quantidade) || 0, 'unidade voltou', 'unidades voltaram')} ao estoque de ${x.produto.nome}.`, 'info')
   }
 
   const aoEnviarFoto = async (e) => {
@@ -217,138 +323,242 @@ export default function Produtos() {
     salvarProduto({ id: p.id, encarteMercadoDia: ligar ? dataISOmaisDias(0) : null })
     toast(ligar ? `${p.nome} entrou nos estrelados (Mercado Encarte de hoje).` : `${p.nome} saiu dos estrelados.`, 'info')
   }
-  const BotaoEstrela = ({ p }) => (p.naFila ? (
-    <button type="button" onClick={() => alternarEstrela(p)} aria-pressed={noMercadoEncarte(p)}
-      title={noMercadoEncarte(p) ? 'Tirar a estrela (Mercado Encarte)' : 'Dar estrela: Mercado Encarte de hoje'}
-      className={`rounded-lg p-1.5 ${noMercadoEncarte(p) ? 'bg-[#c1121f] text-[#ffd60a]' : 'text-ink-soft/60 hover:bg-[#c1121f]/10 hover:text-[#c1121f]'}`}>
-      <Icon name="Star" size={16} fill={noMercadoEncarte(p) ? '#ffd60a' : 'none'} />
-    </button>
-  ) : null)
+  const AcoesProduto = ({ p }) => {
+    const vencido = precisaDecisao(p)
+    const estrela = noMercadoEncarte(p)
+    const sugestao = regraDaMarca(config, p.marca)
+    return (
+      <>
+        {vencido ? (
+          <>
+            {[
+              <Acao key="troca" tom="troca" ativo={sugestao === 'troca'} icone="Repeat" onClick={() => abrirBaixa(p, 'troca')} aria-label={`Trocar ${p.nome} no fornecedor`} title={sugestao === 'troca' ? 'Sugerido: a marca aceita troca' : undefined}>Trocar no fornecedor</Acao>,
+              <Acao key="perda" tom="perda" ativo={sugestao === 'perda'} icone="PackageX" onClick={() => abrirBaixa(p, 'perda')} aria-label={`Descartar ${p.nome} como perda`} title={sugestao === 'perda' ? 'Sugerido: a marca não aceita troca' : undefined}>Descartar</Acao>,
+            ][sugestao === 'perda' ? 'reverse' : 'slice']()}
+          </>
+        ) : (
+          <>
+            <Acao
+              tom="jornal"
+              ativo={!!p.naFila}
+              icone={p.naFila ? 'Check' : 'Newspaper'}
+              onClick={() => adicionarFila(p)}
+              aria-pressed={!!p.naFila}
+              data-acao="jornal"
+              title={p.naFila ? 'Está na fila do jornal. Toque para tirar.' : 'Mandar para a fila do jornal de ofertas'}
+            >
+              {p.naFila ? 'No jornal' : 'Pôr no jornal'}
+            </Acao>
+            {p.naFila && (
+              <Acao
+                tom="estrela"
+                ativo={estrela}
+                icone="Star"
+                iconeFill={estrela ? 'var(--color-offer)' : 'none'}
+                onClick={() => alternarEstrela(p)}
+                aria-pressed={estrela}
+                title="Estrela: entra no Mercado Encarte (oferta de hoje)"
+              >
+                {estrela ? 'Com estrela' : 'Dar estrela'}
+              </Acao>
+            )}
+            {naJanela(p) && (
+              <Acao tom="troca" icone="Repeat" onClick={() => abrirBaixa(p, 'troca')} aria-label={`Pedir troca de ${p.nome} ao fornecedor`}>Pedir troca</Acao>
+            )}
+          </>
+        )}
+        {editavel && <Acao icone="Pencil" onClick={() => abrirEditar(p)} aria-label={`Editar ${p.nome}`}>Editar</Acao>}
+      </>
+    )
+  }
+
+  const opcoesDias = [...new Set([2, 7, 15, 30, Number(config?.diasAlerta) || 7])].sort((a, b) => a - b)
+  const abas = [
+    { id: 'todos', rotulo: 'Todos', icone: 'LayoutList' },
+    { id: 'recentes', rotulo: 'Adicionados recentemente', rotuloCurto: 'Recentes', icone: 'Clock', badge: contagem.recentes },
+    { id: 'vencendo', rotulo: `Vence em ${diasJanela} dias`, rotuloCurto: `Vence em ${diasJanela}d`, icone: 'CalendarClock', badge: contagem.vencendo },
+    { id: 'vencidos', rotulo: 'Vencidos', icone: 'CalendarX', badge: contagem.vencidos },
+    { id: 'baixas', rotulo: 'Trocas e perdas', icone: 'ClipboardList' },
+  ]
+  const vazioPorAba = {
+    todos: ['Nenhum produto encontrado', 'Ajuste o setor ou a busca, ou cadastre um novo produto.'],
+    recentes: ['Nada novo nos últimos 7 dias', 'Os produtos cadastrados, importados ou bipados aparecem aqui primeiro.'],
+    vencendo: [`Nada vence nos próximos ${diasJanela} dias`, 'Troque a quantidade de dias acima para olhar mais longe.'],
+    vencidos: ['Nenhum vencido esperando decisão', 'Quando um produto vencer, ele aparece aqui para você trocar ou descartar.'],
+  }
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <select value={fSetor} onChange={(e) => setFSetor(e.target.value)} className={`${inputCls} w-auto`}>
+      <Abas itens={abas} valor={aba} onChange={setAba} rotulo="Listas de produtos" className="flex-wrap md:flex-nowrap" />
+
+      {contagem.vencidos > 0 && aba !== 'vencidos' && aba !== 'baixas' ? (
+        <Aviso
+          tom="vencido"
+          icone="TriangleAlert"
+          titulo={`${plural(contagem.vencidos, 'produto vencido', 'produtos vencidos')} esperando decisão`}
+          texto="Escolha para cada um: trocar no fornecedor ou descartar como perda."
+          acao={<Botao variante="escuro" onClick={() => setAba('vencidos')}>Decidir agora</Botao>}
+        />
+      ) : contagem.urgentes > 0 && aba === 'todos' ? (
+        <Aviso
+          tom="critico"
+          icone="AlarmClock"
+          titulo={`${plural(contagem.urgentes, 'produto vence', 'produtos vencem')} em até 2 dias fora do jornal`}
+          texto="Ponha no jornal para vender a tempo ou peça troca ao fornecedor antes de vencer."
+          acao={<Botao variante="escuro" onClick={() => { setDiasJanela(2); setAba('vencendo') }}>Ver quais são</Botao>}
+        />
+      ) : null}
+
+      {aba === 'vencidos' && lista.length > 0 && (
+        <div className="hidden gap-2 sm:grid sm:grid-cols-2">
+          <Explica icone="Repeat" cor="var(--color-info)" titulo="Trocar no fornecedor" texto="O fornecedor recolhe ou troca. Sai do estoque e não conta como perda." />
+          <Explica icone="PackageX" cor="var(--color-critical)" titulo="Descartar" texto="Sai do estoque e entra como perda nos relatórios e no desperdício." />
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2.5">
+        <select value={fSetor} onChange={(e) => setFSetor(e.target.value)} aria-label="Setor" className={`${inputCls.replace('w-full ', '')} min-w-0 flex-1 sm:w-auto sm:flex-none`}>
           <option value="">Todos os setores</option>
           {SETORES.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
         </select>
-        <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} className={`${inputCls} w-auto`}>
-          <option value="">Todos os status</option>
-          <option value="critico">Crítico (até 2 dias)</option>
-          <option value="atencao">Atenção (até 7 dias)</option>
-          <option value="normal">Normal</option>
-          <option value="vencido">Vencido</option>
-        </select>
-        <span className="text-sm text-ink-soft">{lista.length} resultado(s)</span>
+        {aba === 'vencendo' && (
+          <Segmentado
+            rotulo="Vence em quantos dias"
+            opcoes={opcoesDias.map((n) => [n, `${n} dias`])}
+            valor={diasJanela}
+            onChange={setDiasJanela}
+          />
+        )}
+        <span className="num-tab text-sm font-semibold text-ink-soft">
+          {aba === 'baixas' ? plural(baixas.length, 'registro', 'registros') : plural(lista.length, 'produto', 'produtos')}
+        </span>
         {editavel && (
-          <div className="ml-auto flex gap-2">
-            <Botao variante="contorno" onClick={abrirImport}><Icon name="Upload" size={16} /> Importar planilha</Botao>
-            <Botao onClick={abrirNovo}><Icon name="Plus" size={16} /> Novo Produto</Botao>
+          <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto">
+            <Botao variante="contorno" onClick={abrirImport}><Icon name="Upload" size={16} /> <span className="sm:hidden">Importar</span><span className="hidden sm:inline">Importar planilha</span></Botao>
+            <Botao onClick={abrirNovo}><Icon name="Plus" size={16} /> Novo produto</Botao>
           </div>
         )}
       </div>
 
-      <div className="card-bengala overflow-hidden">
-        {lista.length === 0 ? (
-          <div className="p-6">
-            <EmptyState
-              titulo="Nenhum produto encontrado"
-              descricao="Ajuste os filtros ou cadastre um novo produto."
-              acao={editavel && <Botao onClick={abrirNovo}><Icon name="Plus" size={16} /> Novo Produto</Botao>}
-            />
-          </div>
-        ) : (
-          <>
-            {/* tabela desktop */}
-            <table className="hidden w-full text-sm md:table">
-              <thead>
-                <tr className="border-b border-ink-soft/10 text-left text-xs uppercase tracking-wide text-ink-soft">
-                  <th className="px-4 py-3 font-medium">Produto</th>
-                  <th className="px-4 py-3 font-medium">Setor</th>
-                  <th className="px-4 py-3 font-medium">Estoque</th>
-                  <th className="px-4 py-3 font-medium">Validade</th>
-                  <th className="px-4 py-3 text-right font-medium">Normal</th>
-                  <th className="px-4 py-3 text-right font-medium">Promo</th>
-                  <th className="px-4 py-3 text-right font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="stagger divide-y divide-ink-soft/8">
-                {lista.map((p) => (
-                  <tr key={p.id} className="hover:bg-cream-200/50">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <ProdutoThumb produto={p} size={40} />
-                        <div className="min-w-0">
-                          <div className="font-medium text-ink">{p.nome}</div>
-                          <div className="text-xs text-ink-soft">{p.marca}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-ink-soft">
-                      <div>{setorById(p.setor).nome}</div>
-                      <div className="text-xs text-ink-soft/70">{lojaNome(p.loja)}</div>
-                    </td>
-                    <td className="px-4 py-3">{p.estoque}</td>
-                    <td className="px-4 py-3"><StatusBadge validade={p.validade} /></td>
-                    <td className="px-4 py-3 text-right">{formatBRL(p.precoNormal)}</td>
-                    <td className="px-4 py-3 text-right text-success">{p.precoPromo ? formatBRL(p.precoPromo) : '—'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => adicionarFila(p)}
-                          title={p.naFila ? 'Na fila do jornal' : 'Adicionar à fila do jornal'}
-                          className={`rounded-lg p-1.5 ${p.naFila ? 'bg-coral/15 text-coral' : 'text-ink-soft hover:bg-cream-200'}`}
-                        >
-                          <Icon name={p.naFila ? 'Check' : 'Newspaper'} size={16} />
-                        </button>
-                        <BotaoEstrela p={p} />
-                        {editavel && (
-                          <>
-                            <button onClick={() => abrirEditar(p)} className="rounded-lg p-1.5 text-ink-soft hover:bg-cream-200" title="Editar">
-                              <Icon name="Pencil" size={16} />
-                            </button>
-                            <button onClick={() => setExcluindo(p)} className="rounded-lg p-1.5 text-critical hover:bg-critical/10" title="Excluir">
-                              <Icon name="Trash2" size={16} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* cards mobile */}
-            <div className="stagger divide-y divide-ink-soft/8 md:hidden">
-              {lista.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 p-3">
-                  <ProdutoThumb produto={p} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium text-ink">{p.nome}</div>
-                    <div className="text-xs text-ink-soft">{p.marca} · {setorById(p.setor).nome} · {p.estoque}un</div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <StatusBadge validade={p.validade} />
-                      <span className="text-sm font-medium">{formatBRL(p.precoPromo || p.precoNormal)}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <button onClick={() => adicionarFila(p)} className={`rounded-lg p-1.5 ${p.naFila ? 'bg-coral/15 text-coral' : 'text-ink-soft'}`}>
-                      <Icon name="Newspaper" size={16} />
-                    </button>
-                    <BotaoEstrela p={p} />
-                    {editavel && (
-                      <button onClick={() => abrirEditar(p)} className="rounded-lg p-1.5 text-ink-soft">
-                        <Icon name="Pencil" size={16} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+      {aba === 'baixas' ? (
+        <div className="card-bengala overflow-hidden">
+          {baixas.length === 0 ? (
+            <div className="p-6">
+              <EmptyState icon="ClipboardList" titulo="Nenhuma troca ou perda registrada" descricao="Na aba Vencidos, cada produto tem os botões Trocar no fornecedor e Descartar." />
             </div>
-          </>
-        )}
-      </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 border-b border-ink-soft/10">
+                <div className="p-4">
+                  <div className="text-sm font-semibold text-ink-soft">Perdas registradas</div>
+                  <div className="num-tab display-bengala mt-1 text-[24px] leading-tight text-critical">{formatBRL(somaBaixas('perda'))}</div>
+                  <div className="num-tab text-xs text-ink-soft">{plural(contaBaixas('perda'), 'unidade descartada', 'unidades descartadas')}</div>
+                </div>
+                <div className="border-l border-ink-soft/10 p-4">
+                  <div className="text-sm font-semibold text-ink-soft">Trocas no fornecedor</div>
+                  <div className="num-tab display-bengala mt-1 text-[24px] leading-tight text-info">{formatBRL(somaBaixas('troca'))}</div>
+                  <div className="num-tab text-xs text-ink-soft">{plural(contaBaixas('troca'), 'unidade devolvida', 'unidades devolvidas')}, sem perda</div>
+                </div>
+              </div>
+              <ul className="divide-y divide-ink-soft/8">
+                {baixas.map((x) => (
+                  <li key={x.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                    <ProdutoThumb produto={x.produto} size={40} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold text-ink">{x.produto.nome}</div>
+                      <div className="text-xs text-ink-soft">
+                        {[quando(x.em), x.validade && `validade ${formatDataCurta(x.validade)}`, x.usuarioNome, x.motivo].filter(Boolean).join(' · ')}
+                      </div>
+                    </div>
+                    <Pill cor={x.tipo === 'perda' ? '#a61f1f' : '#1f5c99'} bg={x.tipo === 'perda' ? '#fbe5e5' : '#e3eefa'}>
+                      {x.tipo === 'perda' ? 'Perda' : 'Troca'}
+                    </Pill>
+                    <div className="num-tab w-24 text-right">
+                      <div className="font-bold text-ink">{formatBRL(x.valor)}</div>
+                      <div className="text-xs text-ink-soft">{plural(Number(x.quantidade) || 0, 'un', 'un')}</div>
+                    </div>
+                    {editavel && <Acao icone="Undo2" onClick={() => desfazer(x)} aria-label={`Desfazer registro de ${x.produto.nome}`}>Desfazer</Acao>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="card-bengala overflow-hidden">
+          {lista.length === 0 ? (
+            <div className="p-6">
+              <EmptyState
+                icon={aba === 'vencidos' ? 'CircleCheck' : 'Inbox'}
+                titulo={vazioPorAba[aba][0]}
+                descricao={vazioPorAba[aba][1]}
+                acao={aba === 'todos' && editavel && <Botao onClick={abrirNovo}><Icon name="Plus" size={16} /> Novo produto</Botao>}
+              />
+            </div>
+          ) : (
+            <>
+              {/* tabela (telas largas) */}
+              <table className="hidden w-full text-sm lg:table">
+                <thead>
+                  <tr className="border-b border-ink-soft/10 bg-cream/60 text-left text-xs text-ink-soft">
+                    <th className="px-4 py-3 font-semibold">Produto</th>
+                    <th className="px-4 py-3 text-right font-semibold">Estoque</th>
+                    <th className="px-4 py-3 font-semibold">Validade</th>
+                    <th className="px-4 py-3 text-right font-semibold">Preço</th>
+                    <th className="px-4 py-3 text-right font-semibold">O que fazer</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-ink-soft/8">
+                  {lista.map((p) => (
+                    <tr key={p.id} className="hover:bg-cream-200/40">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <ProdutoThumb produto={p} size={44} />
+                          <div className="min-w-0">
+                            <div className="font-semibold text-ink">{p.nome}</div>
+                            <div className="text-xs text-ink-soft">
+                              {[p.marca, setorById(p.setor).nome, lojas.length > 1 && lojaNome(p.loja), aba === 'recentes' && dataCadastro(p) && `adicionado ${quando(dataCadastro(p))}`].filter(Boolean).join(' · ')}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="num-tab px-4 py-3 text-right font-semibold">{p.estoque ?? 0}<span className="ml-0.5 text-xs font-medium text-ink-soft">un</span></td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <StatusBadge validade={p.validade} />
+                        {p.validade && <div className="num-tab mt-1 text-xs text-ink-soft">{formatData(p.validade)}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-right"><Preco p={p} /></td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5"><AcoesProduto p={p} /></div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* cartões (celular e tablet) */}
+              <ul className="divide-y divide-ink-soft/10 lg:hidden">
+                {lista.map((p) => (
+                  <li key={p.id} className="px-3 py-3 sm:px-4">
+                    <div className="flex items-start gap-3">
+                      <ProdutoThumb produto={p} size={52} />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold leading-snug text-ink">{p.nome}</div>
+                        <div className="mt-0.5 text-xs text-ink-soft">
+                          {[p.marca, setorById(p.setor).nome, `${p.estoque ?? 0} un`, aba === 'recentes' && dataCadastro(p) && `adicionado ${quando(dataCadastro(p))}`].filter(Boolean).join(' · ')}
+                        </div>
+                        <div className="mt-1.5"><StatusBadge validade={p.validade} /></div>
+                      </div>
+                      <div className="shrink-0 text-right"><Preco p={p} /></div>
+                    </div>
+                    <div className="mt-2.5 flex flex-wrap gap-1.5"><AcoesProduto p={p} /></div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       {/* modal novo/editar */}
       <Modal
@@ -357,6 +567,11 @@ export default function Produtos() {
         titulo={form?.id ? 'Editar produto' : 'Novo produto'}
         footer={
           <>
+            {form?.id && editavel && (
+              <button type="button" onClick={() => { setExcluindo(form); setForm(null) }} className="mr-auto inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-[#a61f1f] hover:bg-critical/10">
+                <Icon name="Trash2" size={16} /> Excluir produto
+              </button>
+            )}
             <Botao variante="contorno" onClick={() => setForm(null)}>Cancelar</Botao>
             <Botao onClick={salvar}>Salvar</Botao>
           </>
@@ -483,6 +698,8 @@ export default function Produtos() {
         </p>
       </Modal>
 
+      <ModalBaixa pedido={baixa} onClose={() => setBaixa(null)} />
+
       {/* modal importar planilha (Cartaz Fácil / ERP) */}
       <Modal
         open={!!importacao}
@@ -520,7 +737,7 @@ export default function Produtos() {
             {importacao.res?.erro && <p className="text-sm text-critical">{importacao.res.erro}</p>}
             {importacao.res?.produtos?.length > 0 && (
               <div className="rounded-lg border border-success/25 bg-success/5 p-3">
-                <p className="text-sm font-medium text-success">{importacao.res.produtos.length} produto(s) detectado(s)</p>
+                <p className="text-sm font-medium text-success">{importacao.res.produtos.length === 1 ? '1 produto detectado' : `${importacao.res.produtos.length} produtos detectados`}</p>
                 <ul className="mt-1 max-h-28 overflow-y-auto text-xs text-ink-soft">
                   {importacao.res.produtos.slice(0, 8).map((p, i) => (
                     <li key={i} className="truncate">• {p.nome} — {setorById(p.setor).nome} — {formatBRL(p.precoNormal)}</li>

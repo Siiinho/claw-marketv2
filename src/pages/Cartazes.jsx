@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
-import { Icon, EmptyState, Botao, Campo, inputCls } from '../components/ui'
+import { Icon, EmptyState, Botao, Campo, Rotulo, inputCls } from '../components/ui'
 import CentralArtes from '../components/CentralArtes'
 import { percentDesc, dataISOmaisDias } from '../lib/utils'
 
@@ -46,24 +46,25 @@ export default function Cartazes() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="card-bengala grid gap-3 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
-        <div>
-          <h2 className="text-lg font-black text-ink">Cartazes e etiquetas</h2>
-          <p className="text-sm text-ink-soft">Escolha o tamanho, marque os produtos e baixe o PDF para imprimir. O selo de cada produto é o escolhido no jornal, e a foto entra quando o produto tem uma.</p>
-        </div>
-        <Campo label="Oferta válida de"><input type="date" className={inputCls} value={periodoDe} onChange={(e) => setPeriodoDe(e.target.value)} /></Campo>
-        <Campo label="até"><input type="date" className={inputCls} value={periodoAte} min={periodoDe} onChange={(e) => setPeriodoAte(e.target.value)} /></Campo>
-      </div>
-      <CentralArtes
-        saidas={['cartaz', 'etiqueta']}
-        saidaInicial="cartaz"
-        itens={itens}
-        titulo="Cartazes de oferta"
-        encarte={{ periodoDe, periodoAte: periodoAte >= periodoDe ? periodoAte : periodoDe }}
-        loja={loja}
-        toast={toast}
-      />
-    </div>
+    <CentralArtes
+      saidas={['cartaz', 'etiqueta']}
+      saidaInicial="cartaz"
+      subtitulo="O selo de cada produto é o escolhido no jornal, e a foto entra quando o produto tem uma."
+      itens={itens}
+      titulo="Cartazes de oferta"
+      encarte={{ periodoDe, periodoAte: periodoAte >= periodoDe ? periodoAte : periodoDe }}
+      loja={loja}
+      toast={toast}
+      onBipar={() => navigate('/scanner')}
+      ajustes={(
+        <>
+          <Rotulo>Oferta válida</Rotulo>
+          <div className="grid max-w-md grid-cols-2 gap-2">
+            <Campo label="De"><input type="date" className={inputCls} value={periodoDe} onChange={(e) => setPeriodoDe(e.target.value)} /></Campo>
+            <Campo label="Até"><input type="date" className={inputCls} value={periodoAte} min={periodoDe} onChange={(e) => setPeriodoAte(e.target.value)} /></Campo>
+          </div>
+        </>
+      )}
+    />
   )
 }

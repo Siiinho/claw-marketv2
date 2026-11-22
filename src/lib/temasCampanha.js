@@ -19,6 +19,8 @@ const P = {
   roxo: { fundo: 'linear-gradient(160deg,#2a0f3d 0%,#7b3fa0 55%,#ff9f1c 100%)', contorno: '#2a0f3d', precoFundo: '#ffd23f', precoCor: '#5c3070', precoSombra: '#2a0f3d', faixa: '#ffd23f', faixaTexto: '#2a0f3d', corTitulo: '#ffffff', corDestaque: '#ffd23f' },
   gelo: { fundo: 'linear-gradient(160deg,#03243f 0%,#1a6fa8 50%,#9ad8ff 100%)', contorno: '#03243f', precoFundo: '#ffd23f', precoCor: '#1a597a', precoSombra: '#03243f', faixa: '#ffd23f', faixaTexto: '#03243f', corTitulo: '#ffffff', corDestaque: '#bdf0ff' },
   cinza: { fundo: 'linear-gradient(160deg,#1d252e 0%,#4b5a69 55%,#f4a259 100%)', contorno: '#1d252e', precoFundo: '#ffd23f', precoCor: '#b3170f', precoSombra: '#1d252e', faixa: '#ffd23f', faixaTexto: '#1d252e', corTitulo: '#ffffff', corDestaque: '#ffd23f' },
+  preto: { fundo: 'linear-gradient(160deg,#050505 0%,#1c1c1f 55%,#b8860b 100%)', contorno: '#000000', precoFundo: '#ffd23f', precoCor: '#111111', precoSombra: '#000000', faixa: '#d81e29', faixaTexto: '#ffffff', corTitulo: '#ffffff', corDestaque: '#ffd23f' },
+  natal: { fundo: 'linear-gradient(160deg,#5c0a0a 0%,#b3121f 50%,#0f6b2f 100%)', contorno: '#4a0808', precoFundo: '#ffd84d', precoCor: '#b3121f', precoSombra: '#4a0808', faixa: '#0f6b2f', faixaTexto: '#ffffff', corTitulo: '#ffffff', corDestaque: '#ffd84d' },
   chocolate: { fundo: 'linear-gradient(160deg,#2b0f05 0%,#7a2e0e 50%,#f2a93b 100%)', contorno: '#2b0f05', precoFundo: '#ffd84d', precoCor: '#7a2e0e', precoSombra: '#2b0f05', faixa: '#ffd84d', faixaTexto: '#2b0f05', corTitulo: '#fff6d6', corDestaque: '#ffd84d' },
 }
 
@@ -48,13 +50,23 @@ const ARTE_X = {
   'economia-verdade': [0, 645],
   'fire': [0, 500],
   'abril': [505, 1080],
+  // selos gerados no Google Flow (21/11/2026), só a arte do título sobre o fundo desfocado
+  'validade': [490, 1060],
+  'validade-2': [495, 1055],
+  // Black Friday e Natal: selos do Google Flow (22/11/2026), só a big idea
+  'black-friday': [529, 1021],
+  'black-friday-2': [529, 1021],
+  'semana-black': [529, 1021],
+  'natal': [529, 1021],
+  'natal-ofertas': [529, 1021],
+  'feliz-natal': [529, 1021],
 }
 
 const t = (id, nome, grupo, paleta, logo, titulo, destaque, chamada) => ({
   id, nome, grupo, arte: id, arteX: ARTE_X[id], logo, titulo, destaque, chamada, ...P[paleta],
 })
 
-export const GRUPOS_TEMA = ['Setores', 'Açougue', 'Hortifruti', 'Semana', 'Fim de semana', 'Fim de mês', 'Datas', 'Geral']
+export const GRUPOS_TEMA = ['Setores', 'Açougue', 'Hortifruti', 'Semana', 'Fim de semana', 'Fim de mês', 'Datas', 'Validade', 'Geral']
 
 // Um template para cada setor da loja (em CSS, com o ícone do setor ao fundo). Açougue e
 // Hortifruti também têm os templates com arte, ligados ao setor por `setor`.
@@ -97,6 +109,12 @@ export const TEMAS_CAMPANHA = [
   t('fim-de-mes', 'Fim de Mês com Economia', 'Fim de mês', 'vermelho', 'd', 'Fim de Mês', 'com Economia', 'Ainda dá tempo de economizar!'),
   t('pascoa', 'Ofertas de Páscoa', 'Datas', 'chocolate', 'e', 'Ofertas de', 'Páscoa', 'Sua Páscoa ainda mais doce'),
   t('abril', 'Abril da Economia', 'Datas', 'vermelho', 'e', 'Abril da', 'Economia', 'Um mês mais que especial!'),
+  t('black-friday', 'Black Friday', 'Datas', 'preto', 'e', 'Black', 'Friday', 'Ofertas imperdíveis!'),
+  t('black-friday-2', 'Black Friday Explosão', 'Datas', 'preto', 'e', 'Black', 'Friday', 'Descontos de verdade!'),
+  t('semana-black', 'Semana Black', 'Datas', 'preto', 'e', 'Semana', 'Black', 'Ofertas a semana inteira!'),
+  t('natal', 'Ofertas de Natal', 'Datas', 'natal', 'e', 'Ofertas de', 'Natal', 'Sua ceia mais farta!'),
+  t('natal-ofertas', 'Natal de Ofertas', 'Datas', 'natal', 'e', 'Natal de', 'Ofertas', 'Preço baixo para a ceia!'),
+  t('feliz-natal', 'Feliz Natal', 'Datas', 'natal', 'e', 'Feliz', 'Natal', 'Ofertas especiais!'),
   t('explosao', 'Explosão de Ofertas', 'Geral', 'vermelho', 'd', 'Explosão de', 'Ofertas!', 'Os preços explodiram!'),
   t('ofertas-nota10', 'Ofertas Nota 10', 'Geral', 'vermelho', 'd', 'Ofertas', 'Nota 10!', 'Os descontos mais esperados'),
   t('nota10-verde', 'Ofertas Nota 10 Verde', 'Geral', 'verde', 'e', 'Ofertas', 'Nota 10!', 'Aqui você economiza de verdade!'),
@@ -105,6 +123,10 @@ export const TEMAS_CAMPANHA = [
   t('fire', 'Ofertas Fire', 'Geral', 'laranja', 'd', 'Ofertas', 'Fire!', 'Tá barato!'),
   t('so-aqui', 'Só Aqui Tem Economia', 'Geral', 'azul', 'e', 'Só aqui tem', 'Economia', 'Preço baixo de verdade'),
   t('economia-verdade', 'Economia de Verdade', 'Geral', 'laranja', 'd', 'Economia', 'de Verdade', 'Descontos nunca vistos!'),
+  // Ofertas de produtos perto do vencimento. Só o tema fala em validade: a data de cada
+  // produto continua fora do encarte (regra de encartePublico.js).
+  t('validade', 'Ofertas de Validade', 'Validade', 'vermelho', 'e', 'Ofertas de', 'Validade', 'Aproveite hoje!'),
+  t('validade-2', 'Ofertas de Validade 2', 'Validade', 'vermelho', 'e', 'Ofertas de', 'Validade', 'Leve agora e economize!'),
   ...TEMAS_SETOR,
   {
     id: 'mercado', nome: 'Cores do mercado', grupo: 'Geral', titulo: 'Ofertas', destaque: 'da Semana', chamada: 'Economia de verdade!',

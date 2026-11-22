@@ -6,15 +6,33 @@ export default function EstrelaMercado({ ativo, onChange, className = '', texto 
   return (
     <button
       type="button"
+      role="switch"
       onClick={() => onChange(!ativo)}
-      aria-pressed={ativo}
+      aria-checked={ativo}
       title="Produto com estrela entra na lista do Mercado Encarte (oferta de hoje)"
-      className={`flex min-h-11 items-center gap-2 rounded-lg border-2 px-3 py-2 text-left text-sm font-black ${ativo ? 'border-[#c1121f] text-white' : 'border-[#c1121f]/35 bg-white text-[#c1121f]'} ${className}`}
-      style={ativo ? { background: 'linear-gradient(120deg,#c1121f,#fb5607)', color: '#fff' } : undefined}
+      className={`flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm ${ativo ? 'border-bengala/40 bg-bengala/[0.06]' : 'border-ink-soft/20 bg-white hover:border-ink-soft/40'} ${className}`}
     >
-      <Icon name="Star" size={18} fill={ativo ? '#ffd60a' : 'none'} className={ativo ? 'text-[#ffd60a]' : ''} />
-      <span className="min-w-0 flex-1">{texto}</span>
-      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${ativo ? 'bg-white/25' : 'bg-[#c1121f]/10'}`}>{ativo ? 'Ligada' : 'Desligada'}</span>
+      <Icon name="Star" size={18} fill={ativo ? 'var(--color-offer)' : 'none'} className={`shrink-0 ${ativo ? 'text-bengala' : 'text-ink-soft'}`} />
+      <span className="min-w-0 flex-1 font-semibold text-ink">{texto}</span>
+      <span aria-hidden="true" className={`relative h-6 w-10 shrink-0 rounded-full transition-colors duration-200 ${ativo ? 'bg-bengala' : 'bg-ink-soft/25'}`}>
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out ${ativo ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+      </span>
+    </button>
+  )
+}
+
+// Botão de estrela de um produto (listas do jornal, produtos e scanner). Mesmo desenho em todo lugar.
+export function BotaoEstrela({ ativo, onClick, nome, className = '' }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={ativo}
+      aria-label={`${ativo ? 'Tirar a estrela de' : 'Dar estrela para'} ${nome}`}
+      title="Estrela: entra no Mercado Encarte (oferta de hoje)"
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${ativo ? 'bg-bengala text-offer' : 'text-ink-soft hover:bg-bengala/10 hover:text-bengala'} ${className}`}
+    >
+      <Icon name="Star" size={17} fill={ativo ? 'var(--color-offer)' : 'none'} />
     </button>
   )
 }

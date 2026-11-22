@@ -225,11 +225,22 @@ mesma variável em *Environment Variables*. Nunca use o prefixo `VITE_` nessa ch
 3. **Publicar agora** manda o encarte para `server/encarteServidor.js`, que guarda a versão
    em `dados/encarte/encarte.json` e as fotos em `dados/encarte/img/` (fora do Git).
 4. Todo celular com o link aberto recebe a versão nova na hora (Server-Sent Events em
-   `/api/encarte/eventos`), mostra a faixa "Ofertas atualizadas agora!" e remonta o encarte.
+   `/api/encarte/eventos`), mostra o aviso "Ofertas atualizadas agora" e remonta o encarte.
 
 Quem pode publicar: sem `ENCARTE_TOKEN` no `.env`, só o próprio PC e a rede local (pedidos
 vindos de túnel/proxy são recusados). Para publicar de fora, defina `ENCARTE_TOKEN` no `.env`
 do PC; o app pede a "Senha de publicação" e a guarda só naquele aparelho.
+
+### Layout da página pública
+
+- Topo com a arte do título da campanha da semana (a "grande ideia" do tema), o período
+  em letras grandes e duas ações da loja: **WhatsApp** (principal) e **Como chegar**.
+  Temas sem arte mostram o título em texto.
+- Barra fixa com um quadro por setor: ilustração do setor, nome e número de ofertas.
+  "Ofertas de hoje" aparece quando há ofertas do Mercado Encarte para o dia.
+- No celular, Encarte, Produtos e Minha lista ficam numa barra embaixo, no alcance do polegar.
+  No PC, ficam no lado direito da barra de setores.
+- Trocar de setor depois de descer a página volta para o começo das ofertas.
 
 ### Motion design e prévia de cada produto
 
@@ -278,7 +289,20 @@ período da campanha.
   **Antes de vender o ClawMarket para outros mercados, confirme que a licença desses
   templates permite esse uso, ou troque por artes próprias.**
 - Os temas ficam em `src/lib/temasCampanha.js`, separados por seção (Açougue, Hortifruti,
-  Semana, Fim de semana, Fim de mês, Datas, Geral).
+  Semana, Fim de semana, Fim de mês, Datas, Validade, Geral).
+- **Ofertas de Validade** e **Ofertas de Validade 2** (grupo Validade): selos "Ofertas de
+  Validade / Preço baixo, desperdício zero" gerados no Google Flow em 21/11/2026, seguindo
+  o estilo dos outros temas. Só a arte do título é nítida; o fundo é o mesmo desfoque.
+- `public/setores/*.webp`: ilustração 3D de cada setor (Fluent Emoji da Microsoft, licença
+  MIT, texto em `public/setores/LICENSE-fluentui-emoji.txt`). Aparecem nas abas do site,
+  nos títulos de cada setor, na lista de compras e no lugar da foto quando o produto não tem.
+- `public/abas/*.webp`: ícones 3D das abas do app e do site (também Fluent Emoji, MIT),
+  usados por `ImagemAba` em `src/components/ui.jsx`. O rótulo da aba vem sempre ao lado.
+- Fontes da interface (self-hosted em `src/assets/fonts`, licença OFL): Figtree para texto
+  e botões, Bricolage Grotesque para títulos (`.display-bengala`) e Archivo Narrow para
+  preços (`--font-preco`). O jornal A4 continua com a fonte própria (`--font-encarte`).
+  A escala de tipos e as cores com o contraste de cada uma estão no arquivo do Figma
+  "Fundação · fontes e cores".
 - Os selos (Oferta, Imperdível, Queima de estoque, Super oferta, Preço baixo, Leve mais,
   Só hoje, Exclusivo) são desenhados em `src/components/SeloArte.jsx` com a fonte livre
   Bangers (OFL, pacote `@fontsource/bangers`).

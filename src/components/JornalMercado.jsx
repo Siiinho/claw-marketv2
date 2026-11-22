@@ -1,7 +1,9 @@
 import { Icon, PrecoVarejo } from './ui'
 import { SETORES, setorById, formatData } from '../lib/utils'
 import { caminhoArte } from '../lib/temasCampanha'
-import PaginaTemplate, { unidadeDe, paginarTemplate, fonteQueCabe, contornoTexto, FaixaValidade, LogoEncarte, RodapeOficial, LARGURA, ALTURA } from './PaginaTemplate'
+import PaginaTemplate, { unidadeDe, paginarTemplate, fonteQueCabe, contornoTexto, FaixaValidade, LogoEncarte, RodapeOficial, ajusteDe, LARGURA, ALTURA } from './PaginaTemplate'
+import SeloArte from './SeloArte'
+import PrecoArte from './PrecoArte'
 
 // Formato "Jornal do mercado", como o jornal impresso do Bengala: página A4 em pé, topo com a
 // campanha, blocos "Ofertas válidas somente <dia>" com uma grade cheia de produtos e rodapé com
@@ -101,10 +103,26 @@ function Celula({ produto, tema, onAbrir, indice }) {
       {produto.imagem
         ? <img src={produto.imagem} alt="" className="cm-foto absolute object-contain" style={{ left: 2, top: 52, width: CELULA_W - 4, height: CELULA_H - 52 - 22, '--cm-i': indice }} />
         : <div className="absolute inset-x-0 text-center text-6xl font-black" style={{ top: 70, color: setorById(produto.setor).cor }}>•</div>}
-      <div className="cm-preco absolute flex items-end leading-none" style={{ right: 2, bottom: 4, padding: '4px 8px 3px', borderRadius: 8, background: tema.precoCor, border: `3px solid ${tema.precoFundo}`, transform: 'rotate(-3deg)', boxShadow: `3px 3px 0 ${tema.precoSombra}`, '--cm-i': indice }}>
-        <PrecoVarejo valor={produto.precoJornal} cor={tema.precoFundo} style={{ fontSize: 34, fontFamily: 'var(--font-encarte)', fontVariantNumeric: 'normal' }} />
-        <span style={{ marginLeft: 3, marginBottom: 3, fontSize: 12, fontWeight: 900, color: tema.precoFundo, fontFamily: 'var(--font-encarte)' }}>{unidadeDe(produto)}</span>
-      </div>
+      {/* Selo escolhido para o produto ("Oferta", "Só hoje"…), com o tamanho e a posição do editor. */}
+      {(() => {
+        const a = ajusteDe(produto, 'selo')
+        return (
+          <div className="pointer-events-none absolute inset-0" style={{ transform: `translate(${a.x * CELULA_W}px, ${a.y * CELULA_H}px) scale(${a.s})`, transformOrigin: '38px 66px' }}>
+            <SeloArte produto={produto} largura={76} className="cm-selo absolute" style={{ position: 'absolute', left: 0, top: 50, '--cm-i': indice }} />
+          </div>
+        )
+      })()}
+      {produto.estiloPreco ? (
+        // Estilo escolhido no produto (só o número, faixa…), no tamanho da célula do jornal.
+        <div className="cm-preco absolute" style={{ right: 4, bottom: 6, '--cm-i': indice }}>
+          <PrecoArte valor={produto.precoJornal} unidade={unidadeDe(produto)} tema={tema} estilo={produto.estiloPreco} k={0.56} />
+        </div>
+      ) : (
+        <div className="cm-preco absolute flex items-end leading-none" style={{ right: 2, bottom: 4, padding: '4px 8px 3px', borderRadius: 8, background: tema.precoCor, border: `3px solid ${tema.precoFundo}`, transform: 'rotate(-3deg)', boxShadow: `3px 3px 0 ${tema.precoSombra}`, '--cm-i': indice }}>
+          <PrecoVarejo valor={produto.precoJornal} cor={tema.precoFundo} style={{ fontSize: 34, fontFamily: 'var(--font-encarte)', fontVariantNumeric: 'normal' }} />
+          <span style={{ marginLeft: 3, marginBottom: 3, fontSize: 12, fontWeight: 900, color: tema.precoFundo, fontFamily: 'var(--font-encarte)' }}>{unidadeDe(produto)}</span>
+        </div>
+      )}
     </button>
   )
 }
@@ -123,7 +141,7 @@ export default function PaginaJornalMercado({ tema, blocos, encarte, loja, fundo
     : ''
   let indice = 0
   return (
-    <div className={`relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: JORNAL_W, height: altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
+    <div className={`arte-fixa relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: JORNAL_W, height: altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
       {imagemFundo && <img src={imagemFundo} alt="" className="cm-fundo absolute inset-x-0 top-0 w-full object-cover object-top" style={{ height: JORNAL_H }} />}
       {!imagemFundo && tema.icone && (
         <div aria-hidden="true" className="absolute" style={{ right: -90, top: -60, color: '#ffffff', opacity: 0.13, transform: 'rotate(-14deg)' }}>

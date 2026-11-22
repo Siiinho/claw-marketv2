@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Icon, PrecoVarejo } from './ui'
+import { Icon } from './ui'
 import { formatBRL, formatData, setorById } from '../lib/utils'
 import { caminhoArte } from '../lib/temasCampanha'
 import SeloArte from './SeloArte'
+import PrecoArte from './PrecoArte'
 import logoTransparente from '../assets/logo-bengala-transparente.png'
 
 // Logo do mercado direto sobre a arte do tema, sem caixa branca (arquivo PNG transparente).
@@ -13,7 +14,7 @@ export function LogoEncarte({ h = 110, escala = 1 }) {
 
 // Ajuste de cada produto na arte (feito no editor, como no Canva): posição em fração da
 // célula e escala, para o nome, a foto e o preço. Sem ajuste, tudo fica no lugar padrão.
-export const AJUSTE_PADRAO = { nome: { x: 0, y: 0, s: 1 }, foto: { x: 0, y: 0, s: 1 }, preco: { x: 0, y: 0, s: 1 } }
+export const AJUSTE_PADRAO = { nome: { x: 0, y: 0, s: 1 }, foto: { x: 0, y: 0, s: 1 }, preco: { x: 0, y: 0, s: 1 }, selo: { x: 0, y: 0, s: 1 } }
 export const ajusteDe = (produto, camada) => ({ ...AJUSTE_PADRAO[camada], ...(produto?.ajusteArte?.[camada] || {}) })
 
 function Camada({ nome, produto, estilo, origem, children }) {
@@ -103,22 +104,10 @@ export function unidadeDe(produto) {
 const temDesconto = (p) => Number(p.precoNormal) > Number(p.precoJornal) + 0.009
 
 function SeloPrecoOval({ produto, tema, k, indice = 0 }) {
-  const w = 186 * k
-  const h = 92 * k
-  // Sombra desenhada como elemento próprio: o box-shadow sai errado na exportação em PNG.
+  // Estilo do preço escolhido no produto (balão, só o número, faixa…); sem escolha, o balão.
   return (
-    <div className="cm-preco absolute" style={{ right: 8 * k + 5 * k, bottom: 8 * k + 7 * k, width: w, height: h, transform: 'rotate(-4deg)', '--cm-i': indice }}>
-      <div className="absolute" style={{ left: 5 * k, top: 7 * k, width: w, height: h, borderRadius: '50%', background: tema.precoSombra }} />
-      <div
-        className="absolute inset-0 flex items-center justify-center overflow-hidden"
-        style={{ borderRadius: '50%', background: tema.precoFundo, border: `${4 * k}px solid ${tema.precoSombra}` }}
-      >
-        <span aria-hidden="true" className="cm-brilho absolute inset-y-0 left-0" style={{ width: '30%', background: 'linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent)' }} />
-        <div className="flex items-end leading-none">
-          <PrecoVarejo valor={produto.precoJornal} style={{ fontSize: 60 * k, fontFamily: 'var(--font-encarte)', letterSpacing: '-0.01em', fontVariantNumeric: 'normal' }} cor={tema.precoCor} />
-          <span className="ml-1" style={{ marginBottom: 6 * k, fontSize: 18 * k, fontWeight: 900, fontFamily: 'var(--font-encarte)', color: tema.precoCor }}>{unidadeDe(produto)}</span>
-        </div>
-      </div>
+    <div className="cm-preco absolute" style={{ right: 8 * k + 5 * k, bottom: 8 * k + 7 * k, '--cm-i': indice }}>
+      <PrecoArte valor={produto.precoJornal} unidade={unidadeDe(produto)} tema={tema} estilo={produto.estiloPreco || 'oval'} k={k} />
     </div>
   )
 }
@@ -164,7 +153,9 @@ export function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
         <div className="absolute inset-x-0 text-center font-black" style={{ top: 90 * k, fontSize: 70 * k, color: setor.cor }}>•</div>
       )}
       </Camada>
-      <SeloArte produto={produto} largura={118 * k} className="cm-selo absolute" style={{ position: 'absolute', left: 2 * k, top: topoFoto - 4 * k, '--cm-i': indice }} />
+      <Camada nome="selo" produto={produto} estilo={estilo} origem={`${61 * k}px ${topoFoto + 16 * k}px`}>
+        <SeloArte produto={produto} largura={118 * k} className="cm-selo absolute" style={{ position: 'absolute', left: 2 * k, top: topoFoto - 4 * k, '--cm-i': indice }} />
+      </Camada>
       {k >= 1.2 && temDesconto(produto) && (
         <span
           className="absolute rounded-md bg-white/90 uppercase leading-none text-[#222]"
@@ -319,7 +310,7 @@ export default function PaginaTemplate({ tema, itens, encarte, loja, fundo, layo
   const tituloTop = f.tituloTop ? Math.max(f.tituloTop - 30, 32 + 160 * logo - 6) : 0
   const fonteTitulo = f.tituloTop ? Math.min(1, (topo - 120 - tituloTop) / (f.titulo * 0.9 + f.destaque * 0.95)) : 1
   return (
-    <div className={`relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: f.largura, height: f.altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
+    <div className={`arte-fixa relative overflow-hidden ${animado ? 'cm-animado' : ''}`} style={{ width: f.largura, height: f.altura, background: tema.fundo, fontFamily: 'var(--font-sans)' }}>
       {usarFundo && <img src={imagemFundo} alt="" className="cm-fundo absolute inset-0 h-full w-full object-cover" />}
       {/* templates de setor: o ícone do setor grande ao fundo */}
       {!usarFundo && tema.icone && (
