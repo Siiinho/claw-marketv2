@@ -114,7 +114,7 @@ export function SeloDesconto({ texto, size = 44, className = '', style }) {
 }
 
 // ---- pílula genérica ----
-export function Pill({ children, cor = '#566274', bg = '#e8edf3', className = '' }) {
+export function Pill({ children, cor = '#3b4656', bg = '#e8edf3', className = '' }) {
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${className}`}

@@ -88,7 +88,7 @@ export const diaSemana = (iso) => {
 // <= 2 dias: crítico | <= 7 dias: atenção | > 7: normal | < 0: vencido
 export function statusValidade(iso) {
   const d = diasParaVencer(iso)
-  if (d == null) return { id: 'sem-validade', label: 'Sem validade', cor: '#566274', bg: '#e8edf3', dias: null }
+  if (d == null) return { id: 'sem-validade', label: 'Sem validade', cor: '#3b4656', bg: '#e8edf3', dias: null }
   if (d < 0) return { id: 'vencido', label: 'Vencido', cor: '#7a241b', bg: '#f3dcd8', dias: d }
   if (d <= 2) return { id: 'critico', label: 'Crítico', cor: '#c42b2b', bg: '#fbe5e5', dias: d }
   if (d <= 7) return { id: 'atencao', label: 'Atenção', cor: '#a9740d', bg: '#fdf0d8', dias: d }

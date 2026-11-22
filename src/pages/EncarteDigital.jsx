@@ -20,6 +20,23 @@ import { LOJAS } from '../data/seed'
 const horaCurta = (iso) =>
   iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ''
 
+// Nomes do cadastro vêm em MAIÚSCULAS ("MARG DELICIA 500G C SAL"). Na tela do cliente
+// ficam mais fáceis de ler com só a primeira letra grande ("Marg Delicia 500g c Sal").
+// Nome que já tem minúsculas fica como está.
+const MINUSCULAS = new Set(['a', 'o', 'e', 'de', 'da', 'do', 'das', 'dos', 'com', 'sem', 'para', 'em', 'na', 'no', 'ao', 'c', 's', 'p', 'c/', 's/', 'p/'])
+const UNIDADES = new Set(['g', 'gr', 'kg', 'mg', 'ml', 'l', 'lt', 'un', 'und', 'unid', 'cx', 'pc', 'pct', 'cm', 'm'])
+const nomeLegivel = (nome = '') => {
+  const texto = String(nome || '').trim()
+  if (!texto || /[a-zà-ÿ]/.test(texto)) return texto
+  return texto.split(/\s+/).map((palavra, i) => {
+    const min = palavra.toLocaleLowerCase('pt-BR')
+    const unidade = min.match(/^(\d+(?:[.,]\d+)?)?([a-z]+)$/)
+    if (unidade && UNIDADES.has(unidade[2]) && (unidade[1] || i > 0)) return min.replace(/(^|\d)(l|lt)$/, '$1L')
+    if (/^\d/.test(min) || (i > 0 && MINUSCULAS.has(min))) return min
+    return min.charAt(0).toLocaleUpperCase('pt-BR') + min.slice(1)
+  }).join(' ')
+}
+
 function TagSelo({ produto, grande = false }) {
   return <SeloArte produto={produto} largura={grande ? 150 : 96} />
 }
@@ -72,8 +89,8 @@ function CartaoProduto({ produto, onAbrir, tema, indice = 0, compras }) {
           )}
         </div>
         <div className="flex flex-1 flex-col px-3 pb-3">
-          <div className="line-clamp-2 min-h-[2.5em] text-[14px] font-extrabold uppercase leading-[1.25] text-ink">{produto.nome}</div>
-          {produto.gramagem && <div className="mt-0.5 text-xs font-semibold text-ink-soft">{produto.gramagem}</div>}
+          <div className="line-clamp-2 min-h-[2.6em] text-[15px] font-semibold leading-[1.3] text-ink">{nomeLegivel(produto.nome)}</div>
+          {produto.gramagem && <div className="mt-0.5 text-[13px] text-ink-soft">{produto.gramagem}</div>}
           <div className="mt-auto flex items-end justify-between gap-2 pt-3">
             <div className="min-w-0">
               {temDe && <div className="text-xs font-semibold text-ink-soft">De <span className="line-through">{formatBRL(produto.precoNormal)}</span></div>}
@@ -117,7 +134,7 @@ function useListaCompras() {
 
 function BotaoLista({ produto, compras, grande = false }) {
   const na = compras.tem(produto.id)
-  const base = 'flex shrink-0 items-center justify-center gap-2 font-black transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.96] motion-reduce:transition-none'
+  const base = 'flex shrink-0 items-center justify-center gap-2 font-bold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.96] motion-reduce:transition-none'
   if (grande) {
     return (
       <button
@@ -125,7 +142,7 @@ function BotaoLista({ produto, compras, grande = false }) {
         onClick={(e) => { e.stopPropagation(); compras.alternar(produto) }}
         aria-pressed={na}
         aria-label={na ? `Adicionado: ${produto.nome}. Toque para remover` : `Adicionar ${produto.nome}`}
-        className={`${base} w-full rounded-xl px-3 py-3.5 text-base ${na ? 'bg-[#128c4a] text-white' : 'bg-navy text-white hover:bg-navy-light'}`}
+        className={`${base} h-14 w-full rounded-2xl px-4 text-[17px] ${na ? 'bg-[#128c4a] text-white' : 'bg-navy text-white hover:bg-navy-light'}`}
       >
         <Icon name={na ? 'CircleCheck' : 'ShoppingCart'} size={20} strokeWidth={2.25} /> {na ? 'Adicionado' : 'Adicionar'}
       </button>
@@ -137,7 +154,7 @@ function BotaoLista({ produto, compras, grande = false }) {
       onClick={(e) => { e.stopPropagation(); compras.alternar(produto) }}
       aria-pressed={na}
       aria-label={na ? `Remover ${produto.nome}` : `Adicionar ${produto.nome}`}
-      className={`${base} h-10 w-10 rounded-full border-2 ${na ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-navy/25 bg-white text-navy hover:border-navy'}`}
+      className={`${base} h-10 w-10 rounded-full ${na ? 'bg-[#128c4a] text-white' : 'bg-cream text-navy hover:bg-cream-200'}`}
     >
       <Icon name={na ? 'Check' : 'Plus'} size={20} strokeWidth={2.4} />
     </button>
@@ -175,13 +192,13 @@ function ListaCompras({ compras, loja, encarte }) {
         <div className="flex items-end justify-between gap-3">
           <div>
             <div className="text-sm font-bold text-ink-soft">{lista.length} {lista.length === 1 ? 'item' : 'itens'} · {pegos} no carrinho</div>
-            <div className="text-2xl font-black text-navy">Total estimado {formatBRL(total)}</div>
+            <div className="text-2xl font-extrabold tracking-[-0.01em] text-navy">Total estimado <span className="num-tab">{formatBRL(total)}</span></div>
           </div>
           <Icon name="ShoppingCart" size={34} className="text-bengala" />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" onClick={compartilhar} className="flex items-center justify-center gap-2 rounded-xl border-2 border-navy px-3 py-2.5 text-sm font-black text-navy"><Icon name="Share2" size={18} /> Enviar lista</button>
-          <button type="button" onClick={pegos ? compras.limparPegos : compras.limparTudo} className="flex items-center justify-center gap-2 rounded-xl border-2 border-critical/40 px-3 py-2.5 text-sm font-black text-critical"><Icon name="Trash2" size={18} /> {pegos ? 'Tirar os pegos' : 'Limpar lista'}</button>
+          <button type="button" onClick={compartilhar} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-cream px-3 text-sm font-bold text-navy transition-[transform,background-color] duration-150 ease-out hover:bg-cream-200 active:scale-[0.97]"><Icon name="Share2" size={18} /> Enviar lista</button>
+          <button type="button" onClick={pegos ? compras.limparPegos : compras.limparTudo} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#fdeeee] px-3 text-sm font-bold text-critical transition-[transform,background-color] duration-150 ease-out hover:bg-[#fbe1e1] active:scale-[0.97]"><Icon name="Trash2" size={18} /> {pegos ? 'Tirar os pegos' : 'Limpar lista'}</button>
         </div>
       </div>
       {grupos.map((g) => (
@@ -191,20 +208,20 @@ function ListaCompras({ compras, loja, encarte }) {
           </h2>
           <div className="space-y-2">
             {g.itens.map((i) => (
-              <div key={i.id} className={`flex items-center gap-3 rounded-2xl bg-white p-3 shadow-sm ${i.pego ? 'opacity-60' : ''}`}>
+              <div key={i.id} className={`flex items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-black/[0.05] transition-opacity duration-200 ${i.pego ? 'opacity-60' : ''}`}>
                 <button type="button" onClick={() => compras.mudar(i.id, { pego: !i.pego })} aria-pressed={i.pego} aria-label={i.pego ? 'Desmarcar' : 'Marcar como pego'}
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 ${i.pego ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-navy/30 bg-white text-transparent'}`}>
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-[1.5px] transition-colors duration-150 ${i.pego ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-black/20 bg-white text-transparent'}`}>
                   <Icon name="Check" size={20} />
                 </button>
                 {i.imagem ? <img src={i.imagem} alt="" className="h-12 w-12 shrink-0 object-contain" /> : null}
                 <div className="min-w-0 flex-1">
-                  <div className={`text-sm font-extrabold uppercase leading-tight text-navy ${i.pego ? 'line-through' : ''}`}>{i.nome}</div>
-                  <div className="text-sm font-bold text-bengala">{formatBRL(i.preco)}{i.unidade ? ` ${i.unidade}` : ''}</div>
+                  <div className={`text-[15px] font-semibold leading-snug text-ink ${i.pego ? 'line-through' : ''}`}>{nomeLegivel(i.nome)}</div>
+                  <div className="num-tab text-sm font-bold text-bengala">{formatBRL(i.preco)}{i.unidade ? ` ${i.unidade}` : ''}</div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <button type="button" onClick={() => (i.qtd > 1 ? compras.mudar(i.id, { qtd: i.qtd - 1 }) : compras.remover(i.id))} className="h-8 w-8 rounded-lg border-2 border-navy/20 text-lg font-black text-navy" aria-label="Menos">−</button>
-                  <span className="w-6 text-center text-base font-black text-navy">{i.qtd}</span>
-                  <button type="button" onClick={() => compras.mudar(i.id, { qtd: i.qtd + 1 })} className="h-8 w-8 rounded-lg border-2 border-navy/20 text-lg font-black text-navy" aria-label="Mais">+</button>
+                  <button type="button" onClick={() => (i.qtd > 1 ? compras.mudar(i.id, { qtd: i.qtd - 1 }) : compras.remover(i.id))} className="flex h-9 w-9 items-center justify-center rounded-full bg-cream text-navy transition-[transform,background-color] duration-150 ease-out hover:bg-cream-200 active:scale-[0.94]" aria-label={i.qtd > 1 ? 'Menos um' : 'Tirar da lista'}><Icon name={i.qtd > 1 ? 'Minus' : 'Trash2'} size={16} strokeWidth={2.25} /></button>
+                  <span className="num-tab w-7 text-center text-base font-bold text-navy">{i.qtd}</span>
+                  <button type="button" onClick={() => compras.mudar(i.id, { qtd: i.qtd + 1 })} className="flex h-9 w-9 items-center justify-center rounded-full bg-cream text-navy transition-[transform,background-color] duration-150 ease-out hover:bg-cream-200 active:scale-[0.94]" aria-label="Mais um"><Icon name="Plus" size={16} strokeWidth={2.25} /></button>
                 </div>
               </div>
             ))}
@@ -298,83 +315,92 @@ function PreviewProduto({ produto, lista, onTrocar, onFechar, tema, encarte, loj
       onClick={() => ir(alvo, lado)}
       disabled={!alvo}
       aria-label={lado > 0 ? 'Próxima oferta' : 'Oferta anterior'}
-      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-navy text-white disabled:opacity-25"
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-navy transition-[transform,background-color] duration-150 ease-out hover:bg-cream active:scale-[0.94] disabled:pointer-events-none disabled:opacity-25"
     >
-      <Icon name={lado > 0 ? 'ChevronRight' : 'ChevronLeft'} size={26} />
+      <Icon name={lado > 0 ? 'ChevronRight' : 'ChevronLeft'} size={22} strokeWidth={2.25} />
     </button>
   )
+  const temDe = desconto > 0 && Number(produto.precoNormal) > Number(produto.precoJornal)
+  const botaoLeve = 'flex h-12 items-center justify-center gap-2 rounded-2xl px-3 text-[15px] font-bold transition-[transform,background-color] duration-150 ease-out active:scale-[0.97]'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overscroll-none bg-black/70 backdrop-blur-sm sm:items-center sm:p-6" onClick={onFechar} role="dialog" aria-modal="true" aria-label={produto.nome}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center overscroll-none bg-black/60 backdrop-blur-[2px] sm:items-center sm:p-6" onClick={onFechar} role="dialog" aria-modal="true" aria-label={nomeLegivel(produto.nome)}>
       <div
-        className="cm-folha cm-folha-altura flex w-full flex-col overflow-hidden rounded-t-3xl bg-white sm:max-w-lg sm:rounded-3xl"
+        className="cm-folha cm-folha-altura flex w-full flex-col overflow-hidden rounded-t-[28px] bg-white shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.35)] sm:max-w-lg sm:rounded-[28px]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* topo fixo: o botão de fechar fica sempre à vista */}
-        <div className="relative z-10 flex shrink-0 touch-none items-center justify-between gap-2 border-b border-navy/10 bg-white px-4 pb-2 pt-3" onTouchStart={inicioPuxar} onTouchEnd={fimPuxar}>
-          <div className="mx-auto mb-1 h-1.5 w-12 rounded-full bg-navy/20 sm:hidden" aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 6 }} />
-          <span className="mt-2 flex items-center gap-1.5 text-sm font-extrabold text-navy"><ImagemSetor id={setor.id} size={26} /> {setor.nome}</span>
-          {lista.length > 1 && <span className="mt-2 text-sm font-black text-navy" aria-live="polite">{indice + 1} de {lista.length}</span>}
-          <button type="button" onClick={onFechar} className="mt-2 flex h-11 shrink-0 items-center justify-center gap-1 rounded-full bg-navy px-4 text-sm font-black text-white" aria-label="Fechar">
-            <Icon name="X" size={20} /> Fechar
+        {/* topo fixo: setor, passar de oferta e fechar ficam sempre à vista */}
+        <div className="relative z-10 flex shrink-0 touch-none items-center gap-1 bg-white px-4 pb-2 pt-5 sm:pt-4" onTouchStart={inicioPuxar} onTouchEnd={fimPuxar}>
+          <div className="absolute inset-x-0 top-2 mx-auto h-1 w-10 rounded-full bg-black/15 sm:hidden" aria-hidden="true" />
+          <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-ink-soft">
+            <ImagemSetor id={setor.id} size={24} /> <span className="truncate">{setor.nome}</span>
+          </span>
+          {lista.length > 1 && (
+            <div className="ml-auto flex items-center">
+              {botaoSeta(anterior, -1)}
+              <span className="num-tab min-w-[3.75rem] text-center text-sm font-semibold text-ink-soft" aria-live="polite">{indice + 1} de {lista.length}</span>
+              {botaoSeta(proximo, 1)}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={onFechar}
+            aria-label="Fechar"
+            className={`${lista.length > 1 ? 'ml-1' : 'ml-auto'} flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cream text-navy transition-[transform,background-color] duration-150 ease-out hover:bg-cream-200 active:scale-[0.94]`}
+          >
+            <Icon name="X" size={20} strokeWidth={2.25} />
           </button>
         </div>
 
         {/* só o conteúdo rola, sem arrastar a página de trás */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))]" onTouchStart={inicioToque} onTouchEnd={fimToque}>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1.25rem,env(safe-area-inset-bottom))]" onTouchStart={inicioToque} onTouchEnd={fimToque}>
 
         <div key={produto.id} className="cm-troca-produto" style={{ '--cm-lado': direcao }}>
-          <div className="relative mx-4 mt-3 h-[30vh] min-h-48 overflow-hidden rounded-2xl sm:aspect-square sm:h-auto border-2 border-navy/10 bg-white p-4" style={{ background: `radial-gradient(circle at 50% 45%, #fff 0 45%, ${setor.cor}1f 100%)` }}>
-            <div className="cm-foto-preview h-full w-full"><FotoProduto produto={produto} /></div>
+          {/* foto sobre fundo claro; o branco da foto some (multiply) e não fica um quadrado branco */}
+          <div className="relative mx-4 mt-1 h-[32vh] min-h-52 overflow-hidden rounded-3xl bg-cream p-6 sm:aspect-[4/3] sm:h-auto">
+            <div className="cm-foto-preview h-full w-full bg-cream"><FotoProduto produto={produto} className="mix-blend-multiply" /></div>
             {desconto > 0 && (
-              <span className="cm-preco-preview absolute right-3 top-3 flex h-16 w-16 items-center justify-center rounded-full bg-bengala text-lg font-black text-white shadow-lg">
+              <span className="cm-preco-preview num-tab absolute right-3 top-3 rounded-full bg-bengala px-3 py-1.5 text-[15px] font-extrabold text-white">
                 -{desconto}%
               </span>
             )}
             <div className="absolute left-2 top-2"><TagSelo produto={produto} /></div>
           </div>
-          <div className="space-y-3 px-5 pt-4">
-            <h2 className="text-2xl font-black uppercase leading-tight text-navy">{produto.nome}</h2>
+
+          <div className="px-5 pt-5">
+            <h2 className="text-balance text-[22px] font-extrabold leading-[1.2] tracking-[-0.01em] text-ink">{nomeLegivel(produto.nome)}</h2>
             {(produto.marca || produto.gramagem) && (
-              <p className="text-base font-semibold text-ink-soft">{[produto.marca, produto.gramagem].filter(Boolean).join(' · ')}</p>
+              <p className="mt-1 text-[15px] text-ink-soft">{[produto.marca, produto.gramagem].filter(Boolean).join(' · ')}</p>
             )}
-            <div className="relative overflow-hidden rounded-2xl p-4 text-white" style={{ background: tema.fundo }}>
-              {desconto > 0 && (
-                <div className="text-base font-bold text-white/85">
-                  De <span className="line-through">{formatBRL(produto.precoNormal)}</span> por
-                </div>
-              )}
-              <div className="mt-1"><span className="cm-preco-preview inline-block"><SeloPreco valor={produto.precoJornal} tema={tema} grande /></span></div>
+            <div className="mt-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+              <div>
+                {temDe && <p className="text-sm text-ink-soft">De <span className="num-tab line-through">{formatBRL(produto.precoNormal)}</span> por</p>}
+                <span className="cm-preco-preview inline-block">
+                  <PrecoVarejo valor={produto.precoJornal} className="text-[54px]" cor={tema.precoCor || '#d81e29'} />
+                </span>
+              </div>
               {economia > 0.009 && (
-                <div className="mt-3 text-base font-black" style={{ color: tema.corDestaque }}>Você economiza {formatBRL(economia)}</div>
+                <span className="mb-2 rounded-full bg-[#e7f5ec] px-3 py-1.5 text-sm font-bold text-[#0f6b3a]">Você economiza <span className="num-tab">{formatBRL(economia)}</span></span>
               )}
             </div>
           </div>
         </div>
 
-        <div className="space-y-3 px-5 pt-4">
+        <div className="mt-5 space-y-2.5 px-5">
           {compras && <BotaoLista produto={produto} compras={compras} grande />}
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={compartilhar} className="flex items-center justify-center gap-2 rounded-xl border-2 border-navy px-3 py-3 text-base font-black text-navy">
-              <Icon name={copiado ? 'Check' : 'Share2'} size={20} /> {copiado ? 'Link copiado' : 'Compartilhar'}
+          <div className="grid grid-cols-2 gap-2.5">
+            <button type="button" onClick={compartilhar} className={`${botaoLeve} bg-cream text-navy hover:bg-cream-200 ${linkWhats ? '' : 'col-span-2'}`}>
+              <Icon name={copiado ? 'Check' : 'Share2'} size={19} strokeWidth={2.25} /> {copiado ? 'Link copiado' : 'Compartilhar'}
             </button>
-            {linkWhats ? (
-              <a href={linkWhats} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-xl bg-[#128c4a] px-3 py-3 text-base font-black text-white">
-                <Icon name="MessageCircle" size={20} /> WhatsApp
+            {linkWhats && (
+              <a href={linkWhats} target="_blank" rel="noreferrer" className={`${botaoLeve} bg-[#e7f5ec] text-[#0f6b3a] hover:bg-[#d9efe2]`}>
+                <Icon name="MessageCircle" size={19} strokeWidth={2.25} /> WhatsApp
               </a>
-            ) : <span />}
+            )}
           </div>
-          {lista.length > 1 && (
-            <div className="flex items-center justify-between gap-3">
-              {botaoSeta(anterior, -1)}
-              <span className="text-center text-xs font-bold text-ink-soft">Deslize para o lado para ver outras ofertas</span>
-              {botaoSeta(proximo, 1)}
-            </div>
-          )}
-          <p className="text-sm text-ink-soft">{encarte?.periodoDe ? `Oferta válida de ${formatDataCurta(encarte.periodoDe)} a ${formatDataCurta(encarte.periodoAte)} ou enquanto durarem os estoques.` : 'Oferta válida enquanto durarem os estoques.'} Imagem ilustrativa.</p>
-          <button type="button" onClick={onFechar} className="w-full rounded-xl border-2 border-navy/20 px-3 py-3 text-base font-black text-navy">
-            Voltar ao encarte
-          </button>
+          <p className="pt-2 text-[13px] leading-relaxed text-ink-soft">
+            {encarte?.periodoDe ? `Oferta válida de ${formatDataCurta(encarte.periodoDe)} a ${formatDataCurta(encarte.periodoAte)} ou enquanto durarem os estoques.` : 'Oferta válida enquanto durarem os estoques.'} Imagem ilustrativa.
+          </p>
         </div>
         </div>
       </div>
@@ -447,7 +473,7 @@ function TituloSecao({ id, nome, detalhe, idTitulo }) {
         <ImagemSetor id={id} size={34} />
       </span>
       <div className="min-w-0">
-        <h2 id={idTitulo} className="truncate text-xl font-black uppercase tracking-wide text-navy md:text-2xl">{nome}</h2>
+        <h2 id={idTitulo} className="truncate text-[22px] font-extrabold leading-tight tracking-[-0.01em] text-navy md:text-[26px]">{nome}</h2>
         {detalhe && <p className="text-sm font-semibold text-ink-soft">{detalhe}</p>}
       </div>
     </div>
@@ -614,9 +640,9 @@ export default function EncarteDigital() {
               <div className="min-w-0 flex-1">
                 {periodo && (
                   <>
-                    <p className="text-[13px] font-bold text-white/85 md:text-base">Ofertas válidas de</p>
+                    <p className="text-[13px] font-bold text-white/90 md:text-base">Ofertas válidas de</p>
                     <p className="display-bengala text-[clamp(1.9rem,8.5vw,3.25rem)] uppercase leading-none" style={{ color: temaGeral.corDestaque }}>{periodo}</p>
-                    <p className="mt-1 text-[13px] font-semibold text-white/80 md:text-base">ou enquanto durarem os estoques</p>
+                    <p className="mt-1 text-[13px] font-semibold text-white/90 md:text-base">ou enquanto durarem os estoques</p>
                   </>
                 )}
                 <div className="mt-5 hidden flex-wrap gap-2 md:flex">
@@ -763,7 +789,7 @@ export default function EncarteDigital() {
                   aria-pressed={ativa}
                   aria-label={id === 'compras' && compras.lista.length ? `Minha lista, ${plural(compras.lista.length, 'item', 'itens')}` : undefined}
                   className="flex h-[4.5rem] flex-col items-center justify-center gap-1 text-[12px] font-extrabold transition-transform duration-150 ease-out active:scale-[0.96]"
-                  style={{ color: ativa ? cor : '#566274' }}
+                  style={{ color: ativa ? cor : '#3b4656' }}
                 >
                   <span className="relative flex h-8 w-14 items-center justify-center rounded-full transition-colors duration-150" style={{ background: ativa ? `${cor}17` : 'transparent' }}>
                     <Icon name={icone} size={22} strokeWidth={ativa ? 2.25 : 1.75} />
