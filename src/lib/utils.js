@@ -104,12 +104,22 @@ export const labelDias = (dias) => {
 }
 
 // ---- dinheiro ----
+// Preço pode chegar como texto ("5,99", "5.99", "R$ 5,99"): vira número; inválido vira null.
+export const paraNumero = (v) => {
+  if (v == null || v === '') return null
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  let t = String(v).replace(/[^\d,.-]/g, '')
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.')
+  const n = Number(t)
+  return t && Number.isFinite(n) ? n : null
+}
+
 export const formatBRL = (v) =>
-  (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  (paraNumero(v) ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 // quebra um valor em { reais, centavos } para o preço estilo varejo
 export const partesPreco = (v) => {
-  const fixed = (v ?? 0).toFixed(2)
+  const fixed = (paraNumero(v) ?? 0).toFixed(2)
   const [reais, centavos] = fixed.split('.')
   return { reais, centavos }
 }
