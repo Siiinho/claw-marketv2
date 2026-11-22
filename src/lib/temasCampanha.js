@@ -48,13 +48,16 @@ const ARTE_X = {
   'economia-verdade': [0, 645],
   'fire': [0, 500],
   'abril': [505, 1080],
+  // selos gerados no Google Flow (21/11/2026), só a arte do título sobre o fundo desfocado
+  'validade': [490, 1060],
+  'validade-2': [495, 1055],
 }
 
 const t = (id, nome, grupo, paleta, logo, titulo, destaque, chamada) => ({
   id, nome, grupo, arte: id, arteX: ARTE_X[id], logo, titulo, destaque, chamada, ...P[paleta],
 })
 
-export const GRUPOS_TEMA = ['Setores', 'Açougue', 'Hortifruti', 'Semana', 'Fim de semana', 'Fim de mês', 'Datas', 'Geral']
+export const GRUPOS_TEMA = ['Setores', 'Açougue', 'Hortifruti', 'Semana', 'Fim de semana', 'Fim de mês', 'Datas', 'Validade', 'Geral']
 
 // Um template para cada setor da loja (em CSS, com o ícone do setor ao fundo). Açougue e
 // Hortifruti também têm os templates com arte, ligados ao setor por `setor`.
@@ -105,6 +108,10 @@ export const TEMAS_CAMPANHA = [
   t('fire', 'Ofertas Fire', 'Geral', 'laranja', 'd', 'Ofertas', 'Fire!', 'Tá barato!'),
   t('so-aqui', 'Só Aqui Tem Economia', 'Geral', 'azul', 'e', 'Só aqui tem', 'Economia', 'Preço baixo de verdade'),
   t('economia-verdade', 'Economia de Verdade', 'Geral', 'laranja', 'd', 'Economia', 'de Verdade', 'Descontos nunca vistos!'),
+  // Ofertas de produtos perto do vencimento. Só o tema fala em validade: a data de cada
+  // produto continua fora do encarte (regra de encartePublico.js).
+  t('validade', 'Ofertas de Validade', 'Validade', 'vermelho', 'e', 'Ofertas de', 'Validade', 'Aproveite hoje!'),
+  t('validade-2', 'Ofertas de Validade 2', 'Validade', 'vermelho', 'e', 'Ofertas de', 'Validade', 'Leve agora e economize!'),
   ...TEMAS_SETOR,
   {
     id: 'mercado', nome: 'Cores do mercado', grupo: 'Geral', titulo: 'Ofertas', destaque: 'da Semana', chamada: 'Economia de verdade!',

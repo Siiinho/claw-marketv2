@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
-import { Icon, ProdutoThumb, EmptyState, Botao, Campo, inputCls, Modal, Secao, Rotulo, Abas, Escolha } from '../components/ui'
+import { Icon, ProdutoThumb, EmptyState, Botao, Campo, inputCls, Modal, Secao, Rotulo, Abas, Escolha, ImagemSetor } from '../components/ui'
 import { BotaoEstrela } from '../components/EstrelaMercado'
 import ScannerJornal from '../components/ScannerJornal'
 import CentralArtes from '../components/CentralArtes'
@@ -509,7 +509,7 @@ export default function Jornal() {
                       return (
                         <button key={s.id} type="button" onClick={() => setJornalSel(s.id)} aria-pressed={ativo}
                           className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-sm ${ativo ? 'border-navy bg-navy/[0.045] font-bold text-navy shadow-[inset_0_0_0_1px_var(--color-navy)]' : `border-ink-soft/20 bg-white font-semibold hover:border-ink-soft/45 ${n ? 'text-ink' : 'text-ink-soft'}`}`}>
-                          <Icon name={s.icone} size={16} className="shrink-0" style={{ color: s.corTag || s.cor }} />
+                          <ImagemSetor id={s.id} size={24} />
                           <span className="min-w-0 flex-1 truncate">{s.nome}</span>
                           <span className={`num-tab shrink-0 text-xs ${n ? 'font-bold text-ink' : 'text-ink-soft/70'}`}>{n}</span>
                         </button>

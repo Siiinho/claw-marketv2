@@ -1,7 +1,7 @@
 import * as Lucide from 'lucide-react'
 import { useEffect } from 'react'
 import { useStore } from '../store/StoreContext'
-import { partesPreco, statusValidade, labelDias, setorById } from '../lib/utils'
+import { partesPreco, statusValidade, labelDias, setorById, ilustracaoSetor } from '../lib/utils'
 import logoBengala from '../assets/logo.png'
 
 // ---- ícone dinâmico (lucide) — traço 1.75 p/ um visual mais fino e elegante ----
@@ -64,10 +64,28 @@ export function ProdutoThumb({ produto, size = 44 }) {
   return (
     <div
       className="flex items-center justify-center rounded-lg shrink-0"
-      style={{ width: size, height: size, background: `${setor.cor}1a`, color: setor.cor }}
+      style={{ width: size, height: size, background: `${setor.cor}14` }}
     >
-      <Icon name={setor.icone} size={size * 0.5} />
+      <ImagemSetor id={setor.id} size={Math.round(size * 0.62)} />
     </div>
+  )
+}
+
+// ---- ilustração 3D do setor (decorativa: o nome do setor vem sempre ao lado) ----
+export function ImagemSetor({ id, size = 40, className = '', style }) {
+  return (
+    <img
+      src={ilustracaoSetor(id)}
+      alt=""
+      aria-hidden="true"
+      width={size}
+      height={size}
+      loading="lazy"
+      decoding="async"
+      draggable={false}
+      className={`shrink-0 select-none object-contain ${className}`}
+      style={{ width: size, height: size, ...style }}
+    />
   )
 }
 

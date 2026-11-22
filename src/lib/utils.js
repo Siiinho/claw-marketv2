@@ -18,6 +18,12 @@ export const SETORES = [
 
 export const setorById = (id) => SETORES.find((s) => s.id === id) || SETORES[0]
 
+// Ilustração 3D de cada setor (Fluent Emoji da Microsoft, licença MIT, em public/setores).
+// 'todos' é o Geral, 'mercado-encarte' a estrela e 'compras' a lista de compras.
+const ILUSTRACAO_EXTRA = { todos: 'geral', compras: 'geral', 'mercado-encarte': 'estrela', outros: 'geral' }
+const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/'
+export const ilustracaoSetor = (id) => `${baseUrl}setores/${ILUSTRACAO_EXTRA[id] || (SETORES.some((s) => s.id === id) ? id : 'geral')}.webp`
+
 // ---- datas ----
 // O piloto opera em São Paulo. Usar a data civil da loja evita que um
 // coletor configurado em UTC considere um produto que vence hoje como vencido.
