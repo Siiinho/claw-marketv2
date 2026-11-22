@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useStore } from '../store/StoreContext'
-import { Icon, Botao, PrecoVarejo, StatusBadge, ProdutoThumb, EmptyState, inputCls } from '../components/ui'
+import { Icon, Botao, PrecoVarejo, StatusBadge, ProdutoThumb, EmptyState, inputCls, Secao } from '../components/ui'
 import {
-  setorById, diasParaVencer, formatBRL, regraDoProduto, precoComRegra, uid,
+  setorById, diasParaVencer, formatBRL, regraDoProduto, precoComRegra, uid, plural,
 } from '../lib/utils'
 
 export default function Precificacao() {
@@ -55,81 +55,80 @@ export default function Precificacao() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-xl text-sm text-ink-soft">
-          Defina faixas de desconto por proximidade do vencimento. O motor calcula o preço sugerido e
-          pode aplicar ofertas em massa — base para, no futuro, empurrar o preço direto no PDV.
+          Quanto mais perto do vencimento, maior o desconto. Ajuste as faixas, confira a prévia e aplique as ofertas de uma vez.
         </p>
         <Botao onClick={aplicarTodas} disabled={semOferta.length === 0}>
-          <Icon name="Wand2" size={16} /> Aplicar regras ({semOferta.length})
+          <Icon name="Wand2" size={16} /> Aplicar {semOferta.length ? plural(semOferta.length, 'oferta', 'ofertas') : 'ofertas'}
         </Botao>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
+      <div className="grid gap-5 lg:grid-cols-[380px_minmax(0,1fr)] lg:items-start">
         {/* editor de regras */}
-        <div className="card-bengala h-fit p-5">
-          <h2 className="mb-1 font-bold text-ink">Faixas de desconto</h2>
-          <p className="mb-3 text-xs text-ink-soft">Da mais próxima (maior desconto) para a mais distante.</p>
-          <div className="space-y-2">
+        <Secao titulo="Faixas de desconto" descricao="Faltando até tantos dias para vencer, o produto ganha tanto de desconto.">
+          <ul className="space-y-2">
             {[...regras].sort((a, b) => a.diasMax - b.diasMax).map((r) => (
-              <div key={r.id} className="flex items-center gap-2 rounded-lg bg-cream-200 p-2">
-                <span className="text-sm text-ink-soft">≤</span>
-                <input type="number" min="0" value={r.diasMax} onChange={(e) => editFaixa(r.id, 'diasMax', e.target.value)} className={`${inputCls} px-2 py-1.5`} style={{ width: '4rem', flex: 'none' }} />
-                <span className="text-sm text-ink-soft">dias →</span>
-                <input type="number" min="1" max="90" value={r.desconto} onChange={(e) => editFaixa(r.id, 'desconto', e.target.value)} className={`${inputCls} px-2 py-1.5`} style={{ width: '4rem', flex: 'none' }} />
-                <span className="text-sm font-medium text-bengala">% off</span>
-                <button onClick={() => removeFaixa(r.id)} className="ml-auto rounded p-1 text-critical hover:bg-critical/10"><Icon name="Trash2" size={15} /></button>
-              </div>
+              <li key={r.id} className="flex items-center gap-2 rounded-xl border border-ink-soft/15 bg-cream/60 p-2 text-sm text-ink">
+                <span className="pl-1">Até</span>
+                <input type="number" min="0" aria-label="Dias para vencer" value={r.diasMax} onChange={(e) => editFaixa(r.id, 'diasMax', e.target.value)} className={`${inputCls} num-tab px-2 py-1.5 text-center`} style={{ width: '3.5rem', flex: 'none' }} />
+                <span>dias</span>
+                <Icon name="ArrowRight" size={15} className="shrink-0 text-ink-soft" />
+                <input type="number" min="1" max="90" aria-label="Desconto em porcentagem" value={r.desconto} onChange={(e) => editFaixa(r.id, 'desconto', e.target.value)} className={`${inputCls} num-tab px-2 py-1.5 text-center`} style={{ width: '3.5rem', flex: 'none' }} />
+                <span className="font-semibold">% off</span>
+                <button onClick={() => removeFaixa(r.id)} aria-label="Remover faixa" className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-critical/10 hover:text-critical"><Icon name="Trash2" size={16} /></button>
+              </li>
             ))}
-          </div>
-          <button onClick={addFaixa} className="mt-2 flex items-center gap-1 text-sm font-medium text-info hover:underline">
-            <Icon name="Plus" size={15} /> Adicionar faixa
+          </ul>
+          <button onClick={addFaixa} className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-navy hover:bg-cream-200">
+            <Icon name="Plus" size={16} /> Adicionar faixa
           </button>
 
           <label className="mt-4 flex items-start gap-2.5 border-t border-ink-soft/10 pt-4">
-            <input type="checkbox" checked={usarNasSugestoes} onChange={(e) => setUsarNasSugestoes(e.target.checked)} className="mt-0.5 h-4 w-4 accent-bengala" />
-            <span className="text-sm text-ink">Usar estas regras nas <strong>sugestões automáticas</strong> de oferta (em vez do desconto fixo).</span>
+            <input type="checkbox" checked={usarNasSugestoes} onChange={(e) => setUsarNasSugestoes(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-navy" />
+            <span className="text-sm text-ink">Usar estas faixas nas sugestões de oferta, no lugar do desconto fixo.</span>
           </label>
 
-          <Botao className="mt-4 w-full" onClick={salvarRegras}><Icon name="Save" size={16} /> Salvar regras</Botao>
-        </div>
+          <Botao variante="escuro" className="mt-4 w-full" onClick={salvarRegras}><Icon name="Save" size={16} /> Salvar faixas</Botao>
+        </Secao>
 
         {/* prévia de preços */}
-        <div className="card-bengala overflow-hidden">
-          <div className="flex items-center justify-between border-b border-ink-soft/10 px-5 py-3.5">
-            <h2 className="font-bold text-ink">Prévia de preços</h2>
-            <span className="text-sm text-ink-soft">{candidatos.length} na regra</span>
-          </div>
+        <Secao
+          titulo="Prévia de preços"
+          descricao={candidatos.length ? `${plural(candidatos.length, 'produto entra', 'produtos entram')} nas faixas` : undefined}
+        >
           {candidatos.length === 0 ? (
-            <div className="p-6"><EmptyState icon="Percent" titulo="Nenhum produto nas faixas" descricao="Ajuste as faixas ou aguarde produtos se aproximarem do vencimento." /></div>
+            <EmptyState icon="Percent" titulo="Nenhum produto nas faixas" descricao="Ajuste as faixas ou espere os produtos chegarem perto do vencimento." />
           ) : (
-            <div className="divide-y divide-ink-soft/8">
-              {candidatos.map(({ p, dias, regra }) => {
+            <ul className="divide-y divide-ink-soft/10">
+              {candidatos.map(({ p, regra }) => {
                 const novo = precoComRegra(p.precoNormal, regra)
                 const temOferta = ofertaDoProduto(p.id)
                 return (
-                  <div key={p.id} className="flex items-center gap-3 px-5 py-3">
+                  <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
                     <ProdutoThumb produto={p} size={40} />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium text-ink">{p.nome}</div>
-                      <div className="flex items-center gap-2 text-xs text-ink-soft">
+                    <div className="min-w-0 flex-1 basis-44">
+                      <div className="break-words font-semibold leading-snug text-ink">{p.nome}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-soft">
                         <StatusBadge validade={p.validade} />
-                        <span className="rounded bg-cream-200 px-1.5 py-0.5">≤{regra.diasMax}d → −{regra.desconto}%</span>
+                        <span>faixa de até {regra.diasMax} dias, −{regra.desconto}%</span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-xs text-ink-soft line-through">{formatBRL(p.precoNormal)}</div>
-                      <PrecoVarejo valor={novo} className="text-lg text-bengala" />
+                    <div className="ml-auto flex items-center gap-3">
+                      <div className="text-right">
+                        <div className="num-tab text-xs text-ink-soft line-through">{formatBRL(p.precoNormal)}</div>
+                        <PrecoVarejo valor={novo} className="text-xl text-bengala" />
+                      </div>
+                      {temOferta ? (
+                        <span className="inline-flex min-h-10 w-24 items-center justify-center gap-1 text-sm font-semibold text-[#1c6e48]"><Icon name="Check" size={15} strokeWidth={2.25} /> Aplicada</span>
+                      ) : (
+                        <Botao variante="contorno" className="w-24" onClick={() => aplicarUm(p, regra)}>Aplicar</Botao>
+                      )}
                     </div>
-                    {temOferta ? (
-                      <span className="ml-2 w-20 shrink-0 text-center text-xs font-medium text-success">aplicada ✓</span>
-                    ) : (
-                      <Botao variante="contorno" className="ml-2 shrink-0 px-3 py-1.5" onClick={() => aplicarUm(p, regra)}>Aplicar</Botao>
-                    )}
-                  </div>
+                  </li>
                 )
               })}
-            </div>
+            </ul>
           )}
-        </div>
+        </Secao>
       </div>
     </div>
   )

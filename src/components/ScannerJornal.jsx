@@ -5,7 +5,7 @@ import { buscarImagemProduto, buscarProdutoAutomatizado } from '../lib/produtoAp
 import { dataISOmaisDias, noMercadoEncarte } from '../lib/utils'
 import { useLeitorCamera } from '../lib/useLeitorCamera'
 import { Botao, Icon, ProdutoThumb, inputCls } from './ui'
-import EstrelaMercado from './EstrelaMercado'
+import EstrelaMercado, { BotaoEstrela } from './EstrelaMercado'
 import CadastroProdutoNovo from './CadastroProdutoNovo'
 
 const CHAVE_ESTRELA = 'clawmarket.scanner.estrela'
@@ -29,7 +29,9 @@ function codigoLimpo(valor) {
   return String(valor || '').replace(/\D/g, '')
 }
 
-export default function ScannerJornal() {
+// `embutido`: vai dentro de um passo do gerador (sem card, sem título e sem a lista de recentes,
+// porque a lista do próprio passo já mostra a fila).
+export default function ScannerJornal({ embutido = false } = {}) {
   const {
     produtos,
     fila,
@@ -142,14 +144,16 @@ export default function ScannerJornal() {
   const abrirCamera = () => (camera.ativo ? camera.parar() : camera.abrir())
 
   return (
-    <section id="scanner-jornal" className="card-bengala scroll-mt-4 p-4">
-      <div className="mb-3 flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-bengala text-white"><Icon name="ScanBarcode" size={21} /></span>
-        <div>
-          <h3 className="font-bold text-ink">Scanner do Gerador de Jornal</h3>
-          <p className="text-xs text-ink-soft">Bipe ou digite sem sair desta tela. Produtos conhecidos entram direto na fila.</p>
+    <section id="scanner-jornal" className={embutido ? 'scroll-mt-4' : 'card-bengala scroll-mt-4 p-4'}>
+      {!embutido && (
+        <div className="mb-3 flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-bengala text-white"><Icon name="ScanBarcode" size={21} /></span>
+          <div>
+            <h3 className="font-bold text-ink">Scanner do Gerador de Jornal</h3>
+            <p className="text-xs text-ink-soft">Bipe ou digite sem sair desta tela. Produtos conhecidos entram direto na fila.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex gap-2">
         <div className="relative min-w-0 flex-1">
@@ -160,7 +164,7 @@ export default function ScannerJornal() {
             onChange={(evento) => setCodigo(evento.target.value)}
             onKeyDown={(evento) => { if (evento.key === 'Enter') { evento.preventDefault(); buscar() } }}
             inputMode="numeric"
-            placeholder="Digite ou bipe o código"
+            placeholder="Código de barras"
             className={`${inputCls} pl-9`}
           />
         </div>
@@ -168,7 +172,7 @@ export default function ScannerJornal() {
           <Icon name={buscando ? 'LoaderCircle' : 'Search'} size={17} className={buscando ? 'animate-spin' : ''} />
           <span className="hidden sm:inline">Adicionar</span>
         </Botao>
-        <button type="button" onClick={abrirCamera} aria-label={scanning ? 'Parar câmera' : 'Abrir câmera'} className={`rounded-lg border px-3 ${scanning ? 'border-critical bg-critical text-white' : 'border-bengala/25 bg-bengala/5 text-bengala'}`}>
+        <button type="button" onClick={abrirCamera} aria-label={scanning ? 'Parar câmera' : 'Abrir câmera'} className={`flex min-h-10 shrink-0 items-center justify-center rounded-lg border px-3 ${scanning ? 'border-critical bg-critical text-white' : 'border-ink-soft/25 bg-white text-ink hover:bg-cream-200'}`}>
           <Icon name={scanning ? 'CameraOff' : 'Camera'} size={19} />
         </button>
       </div>
@@ -196,10 +200,10 @@ export default function ScannerJornal() {
         />
       ) : null}
 
-      {recentes.length ? (
+      {!embutido && recentes.length ? (
         <div className="mt-4 border-t border-ink-soft/10 pt-3">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wide text-ink-soft">Adicionados recentemente</span>
+            <span className="text-sm font-semibold text-ink">Adicionados agora há pouco</span>
             {!expandido && restantes > 0 ? <button onClick={() => setExpandido(true)} className="rounded-full bg-bengala px-2 py-0.5 text-xs font-bold text-white">+{restantes}</button> : null}
             {expandido && recentes.length > 4 ? <button onClick={() => setExpandido(false)} className="text-xs font-bold text-bengala">Mostrar 4</button> : null}
           </div>
@@ -211,11 +215,8 @@ export default function ScannerJornal() {
                   <div className="truncate text-sm font-bold text-ink">{produto.nome}</div>
                   <div className="truncate text-xs text-ink-soft">{[produto.marca, produto.gramagem].filter(Boolean).join(' · ') || 'Na fila do jornal'}</div>
                 </div>
-                <button type="button" onClick={() => alternarEstrela(produto)} aria-pressed={noMercadoEncarte(produto)} aria-label={`${noMercadoEncarte(produto) ? 'Tirar a estrela de' : 'Dar estrela para'} ${produto.nome}`}
-                  className={`rounded p-1.5 ${noMercadoEncarte(produto) ? 'bg-[#c1121f] text-[#ffd60a]' : 'text-ink-soft/60 hover:bg-[#c1121f]/10 hover:text-[#c1121f]'}`}>
-                  <Icon name="Star" size={15} fill={noMercadoEncarte(produto) ? '#ffd60a' : 'none'} />
-                </button>
-                <button onClick={() => { removerDaFila(produto.id); toast(`${produto.nome} removido da fila.`, 'info') }} aria-label={`Remover ${produto.nome} da fila`} className="rounded p-1.5 text-critical hover:bg-critical/10"><Icon name="X" size={15} /></button>
+                <BotaoEstrela ativo={noMercadoEncarte(produto)} onClick={() => alternarEstrela(produto)} nome={produto.nome} />
+                <button onClick={() => { removerDaFila(produto.id); toast(`${produto.nome} removido da fila.`, 'info') }} aria-label={`Remover ${produto.nome} da fila`} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft/70 hover:bg-critical/10 hover:text-critical"><Icon name="X" size={16} /></button>
               </div>
             ))}
           </div>

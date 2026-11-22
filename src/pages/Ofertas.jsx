@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useStore, podeEditar } from '../store/StoreContext'
-import { Icon, PrecoVarejo, ProdutoThumb, EmptyState, Botao, Modal, Campo, inputCls, Pill } from '../components/ui'
-import { setorById, diasParaVencer, formatBRL, percentDesc, dataISOmaisDias, formatData, regraDoProduto } from '../lib/utils'
+import { Icon, PrecoVarejo, ProdutoThumb, EmptyState, Botao, Modal, Campo, inputCls, Pill, Secao } from '../components/ui'
+import { setorById, diasParaVencer, formatBRL, percentDesc, dataISOmaisDias, formatData, regraDoProduto, plural } from '../lib/utils'
 
 export default function Ofertas() {
   const { produtos, ofertas, usuario, config, criarOferta, adicionarNaFila, toggleOferta, excluirOferta, toast } = useStore()
@@ -54,34 +54,32 @@ export default function Ofertas() {
     <div className="space-y-5">
       {/* sugestões automáticas */}
       {config.sugestoesAuto && sugestoes.length > 0 && editavel && (
-        <div className="rounded-xl border border-success/30 bg-success/10 p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Icon name="Sparkles" size={18} className="text-success" />
-            <h2 className="font-bold text-ink">Sugestões automáticas</h2>
-            <span className="text-sm text-ink-soft">— produtos vencendo, sem oferta ativa</span>
-          </div>
+        <Secao
+          titulo="Sugestões para hoje"
+          descricao="Produtos perto do vencimento que ainda não têm oferta. Toque para criar."
+        >
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {sugestoes.map((p) => (
               <button
                 key={p.id}
                 onClick={() => criarRapida(p)}
-                className="flex items-center gap-2 rounded-lg border border-success/30 bg-white px-3 py-2 text-left transition hover:border-success hover:shadow-sm"
+                className="flex min-w-0 items-center gap-3 rounded-xl border border-ink-soft/20 bg-white p-2.5 text-left hover:border-ink-soft/45"
               >
-                <ProdutoThumb produto={p} size={36} />
+                <ProdutoThumb produto={p} size={40} />
                 <div className="min-w-0 flex-1">
-                  <div className="whitespace-normal break-words text-sm font-medium leading-snug text-ink">{p.nome}</div>
-                  <div className="text-xs text-success">Criar oferta {descontoSugerido(p)}%</div>
+                  <div className="break-words text-sm font-semibold leading-snug text-ink">{p.nome}</div>
+                  <div className="text-xs text-ink-soft">Desconto sugerido de {descontoSugerido(p)}%</div>
                 </div>
-                <Icon name="Plus" size={16} className="text-success" />
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bengala text-white"><Icon name="Plus" size={16} strokeWidth={2.25} /></span>
               </button>
             ))}
           </div>
-        </div>
+        </Secao>
       )}
 
-      <div className="flex items-center justify-between">
-        <h2 className="font-bold text-ink">Ofertas ({ofertas.length})</h2>
-        {editavel && <Botao onClick={abrirNova}><Icon name="Plus" size={16} /> Nova Oferta</Botao>}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-base font-bold text-navy">{ofertas.length ? plural(ofertas.length, 'oferta', 'ofertas') : 'Ofertas'}</h2>
+        {editavel && <Botao onClick={abrirNova}><Icon name="Plus" size={16} /> Nova oferta</Botao>}
       </div>
 
       {ofertas.length === 0 ? (
@@ -89,27 +87,27 @@ export default function Ofertas() {
           icon="Tag"
           titulo="Nenhuma oferta criada"
           descricao="Use as sugestões automáticas ou crie uma oferta manualmente."
-          acao={editavel && <Botao onClick={abrirNova}><Icon name="Plus" size={16} /> Nova Oferta</Botao>}
+          acao={editavel && <Botao onClick={abrirNova}><Icon name="Plus" size={16} /> Nova oferta</Botao>}
         />
       ) : (
-        <div className="stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {ofertas.map((o) => {
             const p = produtoDe(o.produtoId)
             if (!p) return null
             const novo = precoCalc(p.precoNormal, o.desconto)
             return (
               <div key={o.id} className="card-bengala card-int overflow-hidden">
-                <div className="relative flex items-center justify-center bg-cream-200 py-6">
-                  <span className="absolute left-3 top-3 rounded-full bg-coral px-2.5 py-1 text-sm font-bold text-white">
+                <div className="relative flex items-center justify-center bg-cream py-6">
+                  <span className="num-tab absolute left-3 top-3 rounded-full bg-bengala px-2.5 py-1 text-sm font-bold text-white">
                     -{o.desconto}%
                   </span>
-                  <span className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-xs font-medium ${o.ativa ? 'bg-success/20 text-success' : 'bg-ink-soft/15 text-ink-soft'}`}>
+                  <span className={`absolute right-3 top-3 rounded-full px-2 py-0.5 text-xs font-semibold ${o.ativa ? 'bg-success/15 text-[#1c6e48]' : 'bg-ink-soft/15 text-ink-soft'}`}>
                     {o.ativa ? 'Ativa' : 'Inativa'}
                   </span>
                   <ProdutoThumb produto={p} size={72} />
                 </div>
                 <div className="p-4">
-                  <div className="whitespace-normal break-words font-medium leading-snug text-ink">{p.nome}</div>
+                  <div className="break-words font-semibold leading-snug text-ink">{p.nome}</div>
                   <div className="text-xs text-ink-soft">{o.titulo}</div>
                   <div className="mt-2 flex items-end gap-2">
                     <span className="text-sm text-ink-soft line-through">{formatBRL(p.precoNormal)}</span>
@@ -118,12 +116,12 @@ export default function Ofertas() {
                   <div className="mt-1 text-xs text-ink-soft">Válida até {formatData(o.validade)}</div>
                   {editavel && (
                     <div className="mt-3 flex gap-2">
-                      <Botao variante="contorno" className="flex-1 py-1.5" onClick={() => toggleOferta(o.id)}>
+                      <Botao variante="contorno" className="flex-1" onClick={() => toggleOferta(o.id)}>
                         <Icon name={o.ativa ? 'Pause' : 'Play'} size={15} /> {o.ativa ? 'Pausar' : 'Ativar'}
                       </Botao>
-                      <Botao variante="fantasma" className="px-2 py-1.5 text-critical" onClick={() => { excluirOferta(o.id); toast('Oferta excluída.', 'info') }}>
-                        <Icon name="Trash2" size={15} />
-                      </Botao>
+                      <button type="button" aria-label={`Excluir oferta de ${p.nome}`} className="flex h-10 w-10 items-center justify-center rounded-lg text-ink-soft hover:bg-critical/10 hover:text-critical" onClick={() => { excluirOferta(o.id); toast('Oferta excluída.', 'info') }}>
+                        <Icon name="Trash2" size={16} />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -156,7 +154,7 @@ export default function Ofertas() {
                   <span>Desconto</span>
                   <span className="text-bengala">{modal.desconto}%</span>
                 </div>
-                <input type="range" min="5" max="80" step="5" value={modal.desconto} onChange={(e) => setModal({ ...modal, desconto: Number(e.target.value) })} className="w-full accent-bengala" />
+                <input type="range" min="5" max="80" step="5" value={modal.desconto} onChange={(e) => setModal({ ...modal, desconto: Number(e.target.value) })} className="w-full accent-navy" />
                 {p && (
                   <div className="mt-2 flex items-center gap-2 rounded-lg bg-cream-200 px-3 py-2">
                     <span className="text-sm text-ink-soft line-through">{formatBRL(p.precoNormal)}</span>

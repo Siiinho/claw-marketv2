@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { useStore, podeEditar } from '../store/StoreContext'
 import { Icon, PrecoVarejo, StatusBadge, ProdutoThumb, EmptyState, Botao, Modal, Campo, inputCls, Pill } from '../components/ui'
+import { BotaoEstrela as BotaoEstrelaMercado } from '../components/EstrelaMercado'
 import { SETORES, setorById, statusValidade, formatBRL, arquivoParaDataURL, dataISOmaisDias, noMercadoEncarte } from '../lib/utils'
 import {
   buscarImagemProduto,
@@ -217,13 +218,19 @@ export default function Produtos() {
     salvarProduto({ id: p.id, encarteMercadoDia: ligar ? dataISOmaisDias(0) : null })
     toast(ligar ? `${p.nome} entrou nos estrelados (Mercado Encarte de hoje).` : `${p.nome} saiu dos estrelados.`, 'info')
   }
-  const BotaoEstrela = ({ p }) => (p.naFila ? (
-    <button type="button" onClick={() => alternarEstrela(p)} aria-pressed={noMercadoEncarte(p)}
-      title={noMercadoEncarte(p) ? 'Tirar a estrela (Mercado Encarte)' : 'Dar estrela: Mercado Encarte de hoje'}
-      className={`rounded-lg p-1.5 ${noMercadoEncarte(p) ? 'bg-[#c1121f] text-[#ffd60a]' : 'text-ink-soft/60 hover:bg-[#c1121f]/10 hover:text-[#c1121f]'}`}>
-      <Icon name="Star" size={16} fill={noMercadoEncarte(p) ? '#ffd60a' : 'none'} />
+  const BotaoEstrela = ({ p }) => (p.naFila ? <BotaoEstrelaMercado ativo={noMercadoEncarte(p)} onClick={() => alternarEstrela(p)} nome={p.nome} /> : null)
+  const BotaoFila = ({ p }) => (
+    <button
+      type="button"
+      onClick={() => adicionarFila(p)}
+      aria-pressed={!!p.naFila}
+      aria-label={p.naFila ? `Tirar ${p.nome} da fila do jornal` : `Pôr ${p.nome} na fila do jornal`}
+      title={p.naFila ? 'Na fila do jornal' : 'Pôr na fila do jornal'}
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${p.naFila ? 'bg-navy/10 text-navy' : 'text-ink-soft hover:bg-cream-200 hover:text-navy'}`}
+    >
+      <Icon name={p.naFila ? 'Check' : 'Newspaper'} size={17} strokeWidth={p.naFila ? 2.25 : 1.75} />
     </button>
-  ) : null)
+  )
 
   return (
     <div className="space-y-4">
@@ -243,7 +250,7 @@ export default function Produtos() {
         {editavel && (
           <div className="ml-auto flex gap-2">
             <Botao variante="contorno" onClick={abrirImport}><Icon name="Upload" size={16} /> Importar planilha</Botao>
-            <Botao onClick={abrirNovo}><Icon name="Plus" size={16} /> Novo Produto</Botao>
+            <Botao onClick={abrirNovo}><Icon name="Plus" size={16} /> Novo produto</Botao>
           </div>
         )}
       </div>
@@ -254,7 +261,7 @@ export default function Produtos() {
             <EmptyState
               titulo="Nenhum produto encontrado"
               descricao="Ajuste os filtros ou cadastre um novo produto."
-              acao={editavel && <Botao onClick={abrirNovo}><Icon name="Plus" size={16} /> Novo Produto</Botao>}
+              acao={editavel && <Botao onClick={abrirNovo}><Icon name="Plus" size={16} /> Novo produto</Botao>}
             />
           </div>
         ) : (
@@ -262,17 +269,17 @@ export default function Produtos() {
             {/* tabela desktop */}
             <table className="hidden w-full text-sm md:table">
               <thead>
-                <tr className="border-b border-ink-soft/10 text-left text-xs uppercase tracking-wide text-ink-soft">
-                  <th className="px-4 py-3 font-medium">Produto</th>
-                  <th className="px-4 py-3 font-medium">Setor</th>
-                  <th className="px-4 py-3 font-medium">Estoque</th>
-                  <th className="px-4 py-3 font-medium">Validade</th>
-                  <th className="px-4 py-3 text-right font-medium">Normal</th>
-                  <th className="px-4 py-3 text-right font-medium">Promo</th>
-                  <th className="px-4 py-3 text-right font-medium">Ações</th>
+                <tr className="border-b border-ink-soft/10 bg-cream/60 text-left text-xs text-ink-soft">
+                  <th className="px-4 py-3 font-semibold">Produto</th>
+                  <th className="px-4 py-3 font-semibold">Setor</th>
+                  <th className="px-4 py-3 font-semibold">Estoque</th>
+                  <th className="px-4 py-3 font-semibold">Validade</th>
+                  <th className="px-4 py-3 text-right font-semibold">Normal</th>
+                  <th className="px-4 py-3 text-right font-semibold">Promo</th>
+                  <th className="px-4 py-3 text-right font-semibold">Ações</th>
                 </tr>
               </thead>
-              <tbody className="stagger divide-y divide-ink-soft/8">
+              <tbody className="divide-y divide-ink-soft/8">
                 {lista.map((p) => (
                   <tr key={p.id} className="hover:bg-cream-200/50">
                     <td className="px-4 py-3">
@@ -288,26 +295,20 @@ export default function Produtos() {
                       <div>{setorById(p.setor).nome}</div>
                       <div className="text-xs text-ink-soft/70">{lojaNome(p.loja)}</div>
                     </td>
-                    <td className="px-4 py-3">{p.estoque}</td>
+                    <td className="num-tab px-4 py-3">{p.estoque}</td>
                     <td className="px-4 py-3"><StatusBadge validade={p.validade} /></td>
-                    <td className="px-4 py-3 text-right">{formatBRL(p.precoNormal)}</td>
-                    <td className="px-4 py-3 text-right text-success">{p.precoPromo ? formatBRL(p.precoPromo) : '—'}</td>
+                    <td className="num-tab px-4 py-3 text-right">{formatBRL(p.precoNormal)}</td>
+                    <td className="num-tab px-4 py-3 text-right font-semibold text-success">{p.precoPromo ? formatBRL(p.precoPromo) : '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => adicionarFila(p)}
-                          title={p.naFila ? 'Na fila do jornal' : 'Adicionar à fila do jornal'}
-                          className={`rounded-lg p-1.5 ${p.naFila ? 'bg-coral/15 text-coral' : 'text-ink-soft hover:bg-cream-200'}`}
-                        >
-                          <Icon name={p.naFila ? 'Check' : 'Newspaper'} size={16} />
-                        </button>
+                        <BotaoFila p={p} />
                         <BotaoEstrela p={p} />
                         {editavel && (
                           <>
-                            <button onClick={() => abrirEditar(p)} className="rounded-lg p-1.5 text-ink-soft hover:bg-cream-200" title="Editar">
+                            <button onClick={() => abrirEditar(p)} aria-label={`Editar ${p.nome}`} title="Editar" className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-soft hover:bg-cream-200 hover:text-navy">
                               <Icon name="Pencil" size={16} />
                             </button>
-                            <button onClick={() => setExcluindo(p)} className="rounded-lg p-1.5 text-critical hover:bg-critical/10" title="Excluir">
+                            <button onClick={() => setExcluindo(p)} aria-label={`Excluir ${p.nome}`} title="Excluir" className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-soft hover:bg-critical/10 hover:text-critical">
                               <Icon name="Trash2" size={16} />
                             </button>
                           </>
@@ -320,25 +321,23 @@ export default function Produtos() {
             </table>
 
             {/* cards mobile */}
-            <div className="stagger divide-y divide-ink-soft/8 md:hidden">
+            <div className="divide-y divide-ink-soft/8 md:hidden">
               {lista.map((p) => (
-                <div key={p.id} className="flex items-center gap-3 p-3">
+                <div key={p.id} className="flex items-center gap-3 px-3 py-2.5">
                   <ProdutoThumb produto={p} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium text-ink">{p.nome}</div>
-                    <div className="text-xs text-ink-soft">{p.marca} · {setorById(p.setor).nome} · {p.estoque}un</div>
+                    <div className="text-xs text-ink-soft">{[p.marca, setorById(p.setor).nome, `${p.estoque} un`].filter(Boolean).join(' · ')}</div>
                     <div className="mt-1 flex items-center gap-2">
                       <StatusBadge validade={p.validade} />
                       <span className="text-sm font-medium">{formatBRL(p.precoPromo || p.precoNormal)}</span>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <button onClick={() => adicionarFila(p)} className={`rounded-lg p-1.5 ${p.naFila ? 'bg-coral/15 text-coral' : 'text-ink-soft'}`}>
-                      <Icon name="Newspaper" size={16} />
-                    </button>
+                  <div className="flex flex-col">
+                    <BotaoFila p={p} />
                     <BotaoEstrela p={p} />
                     {editavel && (
-                      <button onClick={() => abrirEditar(p)} className="rounded-lg p-1.5 text-ink-soft">
+                      <button onClick={() => abrirEditar(p)} aria-label={`Editar ${p.nome}`} className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-soft hover:bg-cream-200">
                         <Icon name="Pencil" size={16} />
                       </button>
                     )}

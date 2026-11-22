@@ -96,7 +96,7 @@ export default function EditorCelula({ produto, tema, ajuste, onChange }) {
       <div className="flex gap-1.5">
         {CAMADAS.map(([id, rotulo, icone]) => (
           <button key={id} type="button" onClick={() => setSelecionada(id)} aria-pressed={selecionada === id}
-            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border-2 px-2 py-1.5 text-xs font-black ${selecionada === id ? 'border-bengala bg-bengala text-white' : 'border-ink-soft/20 bg-white text-ink'}`}>
+            className={`flex min-h-9 flex-1 items-center justify-center gap-1 rounded-lg border px-2 text-xs font-semibold ${selecionada === id ? 'border-navy bg-navy text-white' : 'border-ink-soft/20 bg-white text-ink hover:border-ink-soft/45'}`}>
             <Icon name={icone} size={14} /> {rotulo}
           </button>
         ))}
@@ -134,17 +134,17 @@ export default function EditorCelula({ produto, tema, ajuste, onChange }) {
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs font-bold text-ink-soft">{CAMADAS.find((c) => c[0] === selecionada)[1]}: {Math.round(sel.s * 100)}%</span>
-        <button type="button" onClick={() => mudar(selecionada, { s: limitar(Math.round((sel.s - 0.1) * 10) / 10, 0.4, 2.5) })} className="h-8 w-8 rounded-lg border-2 border-ink-soft/20 bg-white font-black" aria-label="Diminuir">−</button>
-        <button type="button" onClick={() => mudar(selecionada, { s: limitar(Math.round((sel.s + 0.1) * 10) / 10, 0.4, 2.5) })} className="h-8 w-8 rounded-lg border-2 border-ink-soft/20 bg-white font-black" aria-label="Aumentar">+</button>
+        <span className="num-tab text-xs font-semibold text-ink">{CAMADAS.find((c) => c[0] === selecionada)[1]}: {Math.round(sel.s * 100)}%</span>
+        <button type="button" onClick={() => mudar(selecionada, { s: limitar(Math.round((sel.s - 0.1) * 10) / 10, 0.4, 2.5) })} className="flex h-9 w-9 items-center justify-center rounded-lg border border-ink-soft/25 bg-white text-ink hover:bg-cream-200" aria-label="Diminuir"><Icon name="Minus" size={14} /></button>
+        <button type="button" onClick={() => mudar(selecionada, { s: limitar(Math.round((sel.s + 0.1) * 10) / 10, 0.4, 2.5) })} className="flex h-9 w-9 items-center justify-center rounded-lg border border-ink-soft/25 bg-white text-ink hover:bg-cream-200" aria-label="Aumentar"><Icon name="Plus" size={14} /></button>
         {[['ArrowLeft', -0.03, 0], ['ArrowUp', 0, -0.03], ['ArrowDown', 0, 0.03], ['ArrowRight', 0.03, 0]].map(([icone, dx, dy]) => (
-          <button key={icone} type="button" onClick={() => mudar(selecionada, { x: limitar(sel.x + dx, -0.8, 0.8), y: limitar(sel.y + dy, -0.8, 0.8) })} className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-ink-soft/20 bg-white" aria-label={`Mover ${icone}`}>
+          <button key={icone} type="button" onClick={() => mudar(selecionada, { x: limitar(sel.x + dx, -0.8, 0.8), y: limitar(sel.y + dy, -0.8, 0.8) })} className="flex h-9 w-9 items-center justify-center rounded-lg border border-ink-soft/25 bg-white text-ink hover:bg-cream-200" aria-label={`Mover ${icone}`}>
             <Icon name={icone} size={14} />
           </button>
         ))}
-        <button type="button" onClick={() => onChange(null)} className="ml-auto rounded-lg px-2 py-1 text-xs font-bold text-critical">Voltar ao padrão</button>
+        <button type="button" onClick={() => onChange(null)} className="ml-auto min-h-9 rounded-lg px-2 text-xs font-semibold text-ink-soft hover:bg-cream-200 hover:text-ink">Voltar ao padrão</button>
       </div>
-      <p className="text-[11px] text-ink-soft">Arraste a parte escolhida para mudar de lugar e puxe as setas dos cantos para aumentar ou diminuir. Ex.: foto maior e preço menor.</p>
+      <p className="text-xs text-ink-soft">Arraste a parte escolhida para mudar de lugar e puxe as setas dos cantos para aumentar ou diminuir. Ex.: foto maior e preço menor.</p>
     </div>
   )
 }

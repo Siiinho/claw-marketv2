@@ -129,6 +129,7 @@ export function Botao({ children, variante = 'primario', className = '', ...prop
     primario: 'bg-bengala text-cream hover:bg-bengala-dark',
     coral: 'bg-coral text-white hover:bg-coral-dark',
     contorno: 'border border-ink-soft/25 bg-white text-ink hover:bg-cream-200',
+    escuro: 'bg-navy text-white hover:bg-navy-light',
     perigo: 'bg-critical text-white hover:brightness-90',
     fantasma: 'text-ink-soft hover:bg-cream-200',
   }[variante]
@@ -204,3 +205,135 @@ export function Campo({ label, children, obrigatorio }) {
 
 export const inputCls =
   'w-full rounded-lg border border-ink-soft/20 bg-white px-3 py-2 text-sm outline-none focus:border-bengala focus:ring-2 focus:ring-bengala/20'
+
+// ===== Peças comuns de página: o mesmo desenho em todas as abas =====
+
+// Seção (card) com título, descrição e ação à direita. `numero` vira o passo 1, 2, 3...
+export function Secao({ numero, titulo, descricao, acao, children, className = '', corpo = 'mt-4', as: Tag = 'section' }) {
+  const temCabecalho = titulo || acao
+  return (
+    <Tag className={`card-bengala min-w-0 p-4 md:p-5 ${className}`}>
+      {temCabecalho && (
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <div className="flex min-w-0 items-start gap-3">
+            {numero != null && (
+              <span className="num-tab flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">{numero}</span>
+            )}
+            <div className="min-w-0">
+              {titulo && <h2 className="text-base font-bold leading-7 text-navy">{titulo}</h2>}
+              {descricao && <p className="text-sm text-ink-soft">{descricao}</p>}
+            </div>
+          </div>
+          {acao && <div className="flex shrink-0 flex-wrap items-center gap-2">{acao}</div>}
+        </div>
+      )}
+      {children != null && <div className={temCabecalho ? corpo : ''}>{children}</div>}
+    </Tag>
+  )
+}
+
+// Rótulo de um grupo de campos dentro da seção.
+export function Rotulo({ children, acao, className = '' }) {
+  return (
+    <div className={`mb-2 flex items-center justify-between gap-2 ${className}`}>
+      <span className="text-sm font-semibold text-ink">{children}</span>
+      {acao}
+    </div>
+  )
+}
+
+// Abas internas da página (controle segmentado).
+export function Abas({ itens, valor, onChange, rotulo }) {
+  return (
+    <div role="tablist" aria-label={rotulo} className="flex gap-1 overflow-x-auto rounded-xl bg-cream-200 p-1">
+      {itens.map((a) => {
+        const ativo = valor === a.id
+        return (
+          <button
+            key={a.id}
+            type="button"
+            role="tab"
+            aria-selected={ativo}
+            onClick={() => onChange(a.id)}
+            className={`flex min-h-10 flex-1 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${ativo ? 'bg-white text-navy shadow-[0_1px_3px_rgba(8,43,79,.14)]' : 'text-ink-soft hover:text-ink'}`}
+          >
+            {a.icone && <Icon name={a.icone} size={17} className="hidden sm:block" />}
+            {a.rotuloCurto ? (
+              <>
+                <span className="sm:hidden">{a.rotuloCurto}</span>
+                <span className="hidden sm:inline">{a.rotulo}</span>
+              </>
+            ) : <span>{a.rotulo}</span>}
+            {a.badge > 0 && <span className="num-tab rounded-full bg-navy/10 px-1.5 text-xs font-bold text-navy">{a.badge}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Cartão de escolha: uma opção entre várias. Selecionado = borda azul-marinho.
+export function Escolha({ ativo, onClick, icone, titulo, descricao, extra, disabled, className = '', iconeCor }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={ativo}
+      className={`flex min-w-0 items-center gap-3 rounded-xl border p-3 text-left disabled:cursor-not-allowed disabled:opacity-50 ${ativo ? 'border-navy bg-navy/[0.045] shadow-[inset_0_0_0_1px_var(--color-navy)]' : 'border-ink-soft/20 bg-white hover:border-ink-soft/45'} ${className}`}
+    >
+      {icone && (
+        <span
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${ativo ? 'bg-navy text-white' : 'bg-cream-200 text-ink-soft'}`}
+          style={!ativo && iconeCor ? { color: iconeCor } : undefined}
+        >
+          <Icon name={icone} size={19} />
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold leading-snug text-ink">{titulo}</span>
+        {descricao && <span className="mt-0.5 block text-xs leading-snug text-ink-soft">{descricao}</span>}
+      </span>
+      {extra != null && <span className="num-tab shrink-0 text-sm font-semibold text-ink-soft">{extra}</span>}
+      {ativo && <Icon name="CircleCheck" size={18} className="shrink-0 text-navy" />}
+    </button>
+  )
+}
+
+// Botões lado a lado para escolher um valor (tamanho, arrumação...).
+export function Segmentado({ opcoes, valor, onChange, disabled, className = '', rotulo }) {
+  return (
+    <div role="group" aria-label={rotulo} className={`flex flex-wrap gap-1.5 ${className}`}>
+      {opcoes.map(([id, texto, detalhe]) => {
+        const ativo = valor === id
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onChange(id)}
+            disabled={disabled}
+            aria-pressed={ativo}
+            className={`min-h-10 rounded-lg border px-3 py-1.5 text-sm font-semibold disabled:opacity-50 ${ativo ? 'border-navy bg-navy text-white' : 'border-ink-soft/20 bg-white text-ink hover:border-ink-soft/45'}`}
+          >
+            {texto}
+            {detalhe && <span className={`ml-1 font-normal ${ativo ? 'text-white/75' : 'text-ink-soft'}`}>{detalhe}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Indicador numérico (relatórios, painel, ESG).
+export function Indicador({ rotulo, valor, icone, cor = 'var(--color-navy)', detalhe }) {
+  return (
+    <div className="card-bengala min-w-0 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-ink-soft">{rotulo}</span>
+        {icone && <Icon name={icone} size={17} style={{ color: cor }} className="shrink-0" />}
+      </div>
+      <div className="num-tab display-bengala mt-1.5 truncate text-[26px] leading-tight text-navy md:text-[30px]">{valor}</div>
+      {detalhe && <div className="mt-0.5 text-xs text-ink-soft">{detalhe}</div>}
+    </div>
+  )
+}

@@ -8,13 +8,13 @@ import { InstallButton, OfflineBadge } from './Pwa'
 const SUBTITULOS = {
   dashboard: 'O que precisa de atenção hoje',
   produtos: 'Cadastro e gestão de estoque',
-  ofertas: 'Descontos e promoções',
-  precificacao: 'Regras de desconto automático por validade',
-  cartazes: 'Gerador de cartaz promocional',
-  jornal: 'Encarte e jornal de ofertas internas',
+  ofertas: 'Descontos e promoções ativas',
+  precificacao: 'Desconto automático conforme o vencimento',
+  cartazes: 'Cartazes e etiquetas de gôndola para imprimir',
+  jornal: 'Monte, publique e imprima o encarte em 4 passos',
   relatorios: 'Indicadores e perdas',
   esg: 'Impacto ambiental e desperdício evitado',
-  scanner: 'Consulta rápida por código de barras',
+  scanner: 'Confira a validade e mande para o jornal',
   usuarios: 'Equipe e permissões',
   config: 'Estabelecimento e automação',
 }

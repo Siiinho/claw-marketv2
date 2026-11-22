@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
-import { Icon, Botao, EmptyState } from './ui'
+import { Icon, Botao, EmptyState, Secao, Rotulo, Escolha, Segmentado } from './ui'
 import PaginaTemplate, { Escalado, FORMATOS, paginarTemplate } from './PaginaTemplate'
 import { FolhaCartazes, FOLHA_A4, TAMANHOS_CARTAZ, paginarCartazes } from './Cartaz'
 import { temaCampanhaById } from '../lib/temasCampanha'
+import { plural } from '../lib/utils'
 import SeletorTema from './SeletorTema'
 import { exportarPNG, exportarPDFPaginas, gerarPNG } from '../lib/exportar'
 
@@ -21,7 +22,7 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // `saidas` limita as opções: o Jornal mostra só as artes de rede social e a aba Cartazes,
 // só cartazes e etiquetas para imprimir.
-export default function CentralArtes({ itens, titulo, encarte, loja, temaId, setTemaId, layout, setLayout, fundo, toast, saidas: idsSaidas, saidaInicial, subtitulo, escalaLogo }) {
+export default function CentralArtes({ itens, titulo, encarte, loja, temaId, setTemaId, layout, setLayout, fundo, toast, saidas: idsSaidas, saidaInicial, subtitulo, escalaLogo, ajustes, onBipar }) {
   const opcoes = idsSaidas ? SAIDAS.filter((s) => idsSaidas.includes(s.id)) : SAIDAS
   const [saida, setSaida] = useState(saidaInicial || opcoes[0].id)
   const [tamanho, setTamanho] = useState('A5')
@@ -114,137 +115,122 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
   return (
     <div className="space-y-5">
       {/* 1. formato */}
-      <div className="card-bengala p-4">
-        <p className="mb-2 text-sm font-black uppercase tracking-wide text-ink">1. O que você quer gerar?</p>
-        {subtitulo && <p className="-mt-1 mb-2 text-xs text-ink-soft">{subtitulo}</p>}
-        <div className={`grid grid-cols-2 gap-2 ${opcoes.length > 3 ? 'sm:grid-cols-3 lg:grid-cols-6' : 'sm:grid-cols-4'}`}>
+      <Secao numero={1} titulo="O que você quer gerar?" descricao={subtitulo}>
+        <div className={`grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 ${opcoes.length > 3 ? 'lg:grid-cols-4' : ''}`}>
           {opcoes.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setSaida(s.id)}
-              disabled={!!ocupado}
-              aria-pressed={saida === s.id}
-              className={`flex flex-col items-start gap-1 rounded-xl border-2 p-3 text-left transition ${saida === s.id ? 'border-bengala bg-bengala/5' : 'border-ink-soft/15 bg-white hover:border-ink-soft/35'}`}
-            >
-              <Icon name={s.icone} size={22} className={saida === s.id ? 'text-bengala' : 'text-ink-soft'} />
-              <span className="text-sm font-black text-ink">{s.nome}</span>
-              <span className="text-xs leading-snug text-ink-soft">{s.sub}</span>
-            </button>
+            <Escolha key={s.id} ativo={saida === s.id} onClick={() => setSaida(s.id)} disabled={!!ocupado} icone={s.icone} titulo={s.nome} descricao={s.sub} />
           ))}
         </div>
 
         {saida === 'cartaz' && (
-          <div className="mt-4">
-            <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-soft">Tamanho do cartaz</p>
-            <div className="flex flex-wrap gap-2">
-              {['A4', 'A5', 'A6', 'A7'].map((id) => (
-                <button key={id} type="button" onClick={() => setTamanho(id)} disabled={!!ocupado} aria-pressed={tamanho === id}
-                  className={`rounded-lg border-2 px-4 py-2 text-sm font-black ${tamanho === id ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}>
-                  {id} <span className="font-medium opacity-80">· {TAMANHOS_CARTAZ[id].desc}</span>
-                </button>
-              ))}
-            </div>
+          <div className="mt-5">
+            <Rotulo>Tamanho do cartaz</Rotulo>
+            <Segmentado
+              rotulo="Tamanho do cartaz"
+              valor={tamanho}
+              onChange={setTamanho}
+              disabled={!!ocupado}
+              opcoes={['A4', 'A5', 'A6', 'A7'].map((id) => [id, id, `· ${TAMANHOS_CARTAZ[id].desc}`])}
+            />
           </div>
         )}
 
         {!impressao && (
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
-            <div>
-              <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-soft">Campanha</p>
+          <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="min-w-0">
+              <Rotulo>Campanha</Rotulo>
               <SeletorTema value={temaId} onChange={setTemaId} />
             </div>
             {saida !== 'post' && (
               <div>
-                <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-soft">Arrumação</p>
-                <div className="grid grid-cols-2 gap-1.5 md:grid-cols-1">
-                  {[['grade', 'Todos iguais'], ['destaque', '1 em destaque']].map(([id, l]) => (
-                    <button key={id} type="button" onClick={() => setLayout(id)} aria-pressed={layout === id}
-                      className={`rounded-lg border-2 px-3 py-2 text-xs font-black ${layout === id ? 'border-navy bg-navy text-white' : 'border-navy/20 bg-white text-navy'}`}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
+                <Rotulo>Arrumação</Rotulo>
+                <Segmentado rotulo="Arrumação" valor={layout} onChange={setLayout} className="md:flex-col" opcoes={[['grade', 'Todos iguais'], ['destaque', '1 em destaque']]} />
               </div>
             )}
           </div>
         )}
-      </div>
+
+        {ajustes && <div className="mt-5">{ajustes}</div>}
+      </Secao>
 
       {/* 2. produtos */}
-      <div className="card-bengala p-4">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-black uppercase tracking-wide text-ink">2. Quais ofertas entram? <span className="font-medium normal-case text-ink-soft">({selecionados.length} de {itens.length})</span></p>
-          <div className="flex gap-2 text-xs font-bold">
-            <button type="button" className="text-bengala" onClick={() => setExcluidos(new Set())}>Marcar todas</button>
-            <button type="button" className="text-ink-soft" onClick={() => setExcluidos(new Set(itens.map((p) => p.id)))}>Desmarcar</button>
+      <Secao
+        numero={2}
+        titulo="Quais ofertas entram?"
+        descricao={`${selecionados.length} de ${itens.length} marcadas`}
+        acao={itens.length > 0 && (
+          <div className="flex gap-1 text-sm font-semibold">
+            <button type="button" className="min-h-9 rounded-lg px-2 text-navy hover:bg-cream-200" onClick={() => setExcluidos(new Set())}>Marcar todas</button>
+            <button type="button" className="min-h-9 rounded-lg px-2 text-ink-soft hover:bg-cream-200" onClick={() => setExcluidos(new Set(itens.map((p) => p.id)))}>Desmarcar</button>
           </div>
-        </div>
+        )}
+      >
         {itens.length === 0 ? (
-          <EmptyState icon="ScanBarcode" titulo="Nenhuma oferta na lista" descricao="Bipe os produtos no topo da página. Eles aparecem aqui para virar arte." />
+          <EmptyState
+            icon="ScanBarcode"
+            titulo="Nenhuma oferta na lista"
+            descricao="Bipe os produtos. Eles aparecem aqui para virar arte."
+            acao={onBipar ? <Botao onClick={onBipar}><Icon name="ScanBarcode" size={17} /> Bipar produtos</Botao> : null}
+          />
         ) : (
-          <div className="flex max-h-44 flex-wrap gap-1.5 overflow-y-auto">
+          <div className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
             {itens.map((p) => {
               const ativo = !excluidos.has(p.id)
               return (
                 <button key={p.id} type="button" onClick={() => alternar(p.id)} disabled={!!ocupado} aria-pressed={ativo}
-                  className={`inline-flex max-w-full items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-xs font-bold ${ativo ? 'border-bengala bg-bengala text-white' : 'border-ink-soft/20 bg-white text-ink-soft line-through'}`}>
-                  <Icon name={ativo ? 'Check' : 'Plus'} size={13} />
+                  className={`inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full border px-3 text-sm font-semibold ${ativo ? 'border-navy/30 bg-navy/[0.07] text-navy' : 'border-ink-soft/20 bg-white text-ink-soft hover:border-ink-soft/45'}`}>
+                  <Icon name={ativo ? 'Check' : 'Plus'} size={14} strokeWidth={2.25} />
                   <span className="truncate">{p.nome}</span>
                 </button>
               )
             })}
           </div>
         )}
-      </div>
+      </Secao>
 
       {/* 3. prévia e download */}
-      <div className="card-bengala p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-black uppercase tracking-wide text-ink">
-            3. Baixe ou compartilhe <span className="font-medium normal-case text-ink-soft">({temConteudo ? paginas.length : 0} {paginas.length === 1 ? 'arte' : 'artes'})</span>
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {impressao ? (
-              <Botao onClick={baixarPDF} disabled={!temConteudo || !!ocupado}>
-                <Icon name={ocupado === 'pdf' ? 'Loader2' : 'Printer'} size={17} className={ocupado === 'pdf' ? 'animate-spin' : ''} /> Baixar PDF para imprimir
+      <Secao
+        numero={3}
+        titulo="Baixe ou compartilhe"
+        descricao={plural(temConteudo ? paginas.length : 0, impressao ? 'folha' : 'arte', impressao ? 'folhas' : 'artes')}
+        acao={impressao ? (
+          <Botao onClick={baixarPDF} disabled={!temConteudo || !!ocupado}>
+            <Icon name={ocupado === 'pdf' ? 'LoaderCircle' : 'Printer'} size={17} className={ocupado === 'pdf' ? 'animate-spin' : ''} /> Baixar PDF para imprimir
+          </Botao>
+        ) : (
+          <>
+            {podeCompartilhar && (
+              <Botao variante="contorno" onClick={() => compartilhar(paginas.map((_, i) => i))} disabled={!temConteudo || !!ocupado}>
+                <Icon name={ocupado === 'compartilhar' ? 'LoaderCircle' : 'Share2'} size={17} className={ocupado === 'compartilhar' ? 'animate-spin' : ''} /> Compartilhar todas
               </Botao>
-            ) : (
-              <>
-                {podeCompartilhar && (
-                  <Botao variante="contorno" onClick={() => compartilhar(paginas.map((_, i) => i))} disabled={!temConteudo || !!ocupado}>
-                    <Icon name={ocupado === 'compartilhar' ? 'Loader2' : 'Share2'} size={17} className={ocupado === 'compartilhar' ? 'animate-spin' : ''} /> Compartilhar todas
-                  </Botao>
-                )}
-                <Botao onClick={baixarTodas} disabled={!temConteudo || !!ocupado}>
-                  <Icon name={ocupado === 'todas' ? 'Loader2' : 'Download'} size={17} className={ocupado === 'todas' ? 'animate-spin' : ''} /> Baixar todas (PNG)
-                </Botao>
-              </>
             )}
-          </div>
-        </div>
-
+            <Botao onClick={baixarTodas} disabled={!temConteudo || !!ocupado}>
+              <Icon name={ocupado === 'todas' ? 'LoaderCircle' : 'Download'} size={17} className={ocupado === 'todas' ? 'animate-spin' : ''} /> Baixar todas
+            </Botao>
+          </>
+        )}
+      >
         {!temConteudo ? (
-          <p className="rounded-xl bg-cream-200 p-6 text-center text-sm font-medium text-ink-soft">Marque ao menos uma oferta para ver as artes.</p>
+          <p className="rounded-xl border border-dashed border-ink-soft/25 p-6 text-center text-sm text-ink-soft">Marque ao menos uma oferta para ver as artes.</p>
         ) : (
           <div className={`grid gap-5 ${colunasPrevia}`}>
             {paginas.map((pagina, i) => (
-              <div key={i} className="min-w-0 overflow-hidden rounded-xl border border-ink-soft/10 bg-cream-200/60 p-2">
+              <div key={i} className="min-w-0 overflow-hidden rounded-xl border border-ink-soft/10 bg-cream p-2">
                 <Escalado largura={dim.largura} altura={dim.altura}>{renderPagina(pagina, i, false)}</Escalado>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1">
-                  <span className="min-w-0 truncate text-xs font-bold text-ink-soft">
+                  <span className="min-w-0 truncate text-xs font-semibold text-ink-soft">
                     {saida === 'post' ? pagina[0]?.nome : `${impressao ? 'Folha' : 'Arte'} ${i + 1} de ${paginas.length}`}
                   </span>
                   <div className="flex gap-1.5">
                     {podeCompartilhar && !impressao && (
                       <button type="button" onClick={() => compartilhar([i])} disabled={!!ocupado} aria-label="Compartilhar esta arte"
-                        className="rounded-lg border border-ink-soft/20 bg-white p-2 text-ink disabled:opacity-50">
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-ink-soft/25 bg-white text-ink hover:bg-cream-200 disabled:opacity-50">
                         <Icon name="Share2" size={16} />
                       </button>
                     )}
                     <button type="button" onClick={() => baixar(i)} disabled={!!ocupado}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-navy px-3 py-2 text-xs font-black text-white disabled:opacity-50">
-                      <Icon name={ocupado === `png-${i}` ? 'Loader2' : 'Download'} size={15} className={ocupado === `png-${i}` ? 'animate-spin' : ''} /> PNG
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-navy px-3 text-xs font-semibold text-white hover:bg-navy-light disabled:opacity-50">
+                      <Icon name={ocupado === `png-${i}` ? 'LoaderCircle' : 'Download'} size={15} className={ocupado === `png-${i}` ? 'animate-spin' : ''} /> PNG
                     </button>
                   </div>
                 </div>
@@ -257,7 +243,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
             ? 'O PDF sai em folha A4 com linhas pontilhadas para recortar. A validade dos produtos não aparece, só o período da campanha.'
             : `As artes saem no tamanho certo (${dim.largura} × ${dim.altura} px). No celular, use Compartilhar para mandar direto no WhatsApp ou Instagram.`}
         </p>
-      </div>
+      </Secao>
 
       {/* cópias em tamanho real, fora da tela, usadas para gerar os arquivos */}
       {temConteudo && (
