@@ -54,7 +54,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
   const paginas = useMemo(
     () => (ehCartaz ? paginar(selecionados, imp) : impressao ? paginarCartazes(selecionados, tamanhoAtual) : paginarTemplate(selecionados, layout, saida)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ehCartaz, imp, impressao, tamanhoAtual, layout, saida, selecionados.map((p) => `${p.id}:${p.nome}:${p.marca}:${p.gramagem}:${p.chamada}:${p.modeloCartaz}:${p.precoNormal}:${p.precoJornal}:${p.seloOferta}:${p.estiloPreco}:${p.unidade}:${p.imagem?.length || 0}`).join('|')],
+    [ehCartaz, imp, impressao, tamanhoAtual, layout, saida, selecionados.map((p) => `${p.id}:${p.nome}:${p.marca}:${p.gramagem}:${p.chamada}:${p.modeloCartaz}:${p.precoNormal}:${p.precoJornal}:${p.seloOferta}:${p.estiloPreco}:${p.unidade}:${p.imagem?.length || 0}:${JSON.stringify(p.ajusteCartaz || '')}`).join('|')],
   )
   const temConteudo = selecionados.length > 0
   const podeCompartilhar = typeof navigator !== 'undefined' && typeof navigator.canShare === 'function'
@@ -282,7 +282,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
         )}
         <p className="mt-3 text-xs text-ink-soft">
           {impressao
-            ? `${ehCartaz && ctrlCartaz?.onAbrir ? 'Toque num cartaz para mudar o texto, o preço, o selo ou o modelo. ' : ''}O PDF sai em folha ${ehCartaz ? imp.folha.formato.toUpperCase() : 'A4'}${ehCartaz && imp.porFolha > 1 ? ' com linhas pontilhadas para recortar' : ''}. A validade dos produtos não aparece, só o período da campanha.`
+            ? `${ehCartaz && ctrlCartaz?.onAbrir ? 'Toque num cartaz para mudar o preço, o texto ou o tamanho de cada parte. ' : ''}O PDF sai em folha ${ehCartaz ? imp.folha.formato.toUpperCase() : 'A4'}${ehCartaz && imp.porFolha > 1 ? ' com linhas pontilhadas para recortar' : ''}. A validade dos produtos não aparece, só o período da campanha.`
             : `As artes saem no tamanho certo (${dim.largura} × ${dim.altura} px). No celular, use Compartilhar para mandar direto no WhatsApp ou Instagram.`}
         </p>
       </Secao>

@@ -1,6 +1,7 @@
 import { forwardRef, useMemo } from 'react'
 import { paraNumero } from '../../lib/utils'
 import { Cartaz } from '../Cartaz'
+import { CamadaCartaz } from './camadas'
 
 // Cartazes "estilo pincel": modelos que imitam os cartazes pintados à mão de supermercado.
 // Cada modelo é só um objeto em TEMPLATES_CARTAZ; o desenho (pinceladas, faixa, octógono,
@@ -125,6 +126,7 @@ export const templateCartaz = (id) => TEMPLATES_CARTAZ[id] || TEMPLATES_CARTAZ['
 // Todos os modelos da aba Cartazes: o Clássico (com selo e foto) e os de pincel.
 export const MODELO_CLASSICO = { id: 'classico', nome: 'Clássico', desc: 'Selo da oferta e foto do produto' }
 export const MODELOS_CARTAZ = [MODELO_CLASSICO, ...Object.values(TEMPLATES_CARTAZ)]
+export { CAMADAS_CARTAZ, ajusteCartazDe } from './camadas'
 export const ehClassico = (id) => !id || id === 'classico'
 
 // Desenha o cartaz no modelo pedido (Clássico ou pincel).
@@ -512,11 +514,11 @@ export function CartazPincel({ produto, template = 'mega-oferta', w, h, encarte,
     corpo = (
       <>
         <div style={{ position: 'absolute', left: 0, top: topo, width: esq, height: alt, display: 'flex', flexDirection: 'column' }}>
-          {!faixa && <Cabecalho t={t} chamada={chamada} w={esq} h={alt * fracCab} semente={semente} />}
-          <NomeProduto t={t} produto={produto} w={esq} h={alt * (1 - fracCab)} />
+          {!faixa && <CamadaCartaz nome="topo" produto={produto} w={w} h={h}><Cabecalho t={t} chamada={chamada} w={esq} h={alt * fracCab} semente={semente} /></CamadaCartaz>}
+          <CamadaCartaz nome="nome" produto={produto} w={w} h={h}><NomeProduto t={t} produto={produto} w={esq} h={alt * (1 - fracCab)} /></CamadaCartaz>
         </div>
         <div style={{ position: 'absolute', left: esq, top: topo, width: dir, height: alt }}>
-          <Preco t={t} produto={produto} w={dir} h={alt} semente={semente} />
+          <CamadaCartaz nome="preco" produto={produto} w={w} h={h}><Preco t={t} produto={produto} w={dir} h={alt} semente={semente} /></CamadaCartaz>
         </div>
       </>
     )
@@ -525,9 +527,9 @@ export function CartazPincel({ produto, template = 'mega-oferta', w, h, encarte,
     const hNome = ch * pNome
     corpo = (
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {faixa ? <div style={{ height: hTopo }} /> : <Cabecalho t={t} chamada={chamada} w={cw} h={hTopo} semente={semente} />}
-        <NomeProduto t={t} produto={produto} w={cw} h={hNome} />
-        <Preco t={t} produto={produto} w={cw} h={ch - hTopo - hNome - hRodape} semente={semente} />
+        {faixa ? <div style={{ height: hTopo }} /> : <CamadaCartaz nome="topo" produto={produto} w={w} h={h}><Cabecalho t={t} chamada={chamada} w={cw} h={hTopo} semente={semente} /></CamadaCartaz>}
+        <CamadaCartaz nome="nome" produto={produto} w={w} h={h}><NomeProduto t={t} produto={produto} w={cw} h={hNome} /></CamadaCartaz>
+        <CamadaCartaz nome="preco" produto={produto} w={w} h={h}><Preco t={t} produto={produto} w={cw} h={ch - hTopo - hNome - hRodape} semente={semente} /></CamadaCartaz>
       </div>
     )
   }
@@ -535,9 +537,9 @@ export function CartazPincel({ produto, template = 'mega-oferta', w, h, encarte,
     <div style={{ position: 'relative', width: w, height: h, overflow: 'hidden', background: t.moldura || t.papel }}>
       <div style={{ position: 'absolute', inset: moldura, background: t.papel, overflow: 'hidden' }}>
         {faixa && (
-          <div style={{ position: 'absolute', left: 0, top: 0 }}>
+          <CamadaCartaz nome="topo" produto={produto} w={w} h={h} style={{ position: 'absolute', left: 0, top: 0 }}>
             <Cabecalho t={t} chamada={chamada} w={iw} h={deitado ? ih * 0.2 : pad + ch * pTopo - pad * 0.2} semente={semente} />
-          </div>
+          </CamadaCartaz>
         )}
         <div style={{ position: 'absolute', left: pad, top: pad, width: cw, height: ch }}>
           {corpo}
