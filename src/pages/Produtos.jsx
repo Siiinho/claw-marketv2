@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { useStore, podeEditar } from '../store/StoreContext'
-import { Icon, StatusBadge, ProdutoThumb, EmptyState, Botao, Modal, Campo, inputCls, Pill, Abas, Segmentado, Escolha } from '../components/ui'
+import { Icon, StatusBadge, ProdutoThumb, EmptyState, Botao, Modal, Campo, inputCls, Pill, Abas, Segmentado, Acao } from '../components/ui'
 import {
   SETORES, setorById, statusValidade, formatBRL, formatData, formatDataCurta, arquivoParaDataURL, dataISOmaisDias, noMercadoEncarte,
-  diasParaVencer, plural, loteResolvido, precisaDecisao, dataCadastro, todasBaixas,
+  diasParaVencer, plural, loteResolvido, precisaDecisao, dataCadastro, todasBaixas, regraDaMarca,
 } from '../lib/utils'
 import {
   buscarImagemProduto,
@@ -13,6 +13,7 @@ import {
   urlBuscaGoogleImagens,
 } from '../lib/produtoApi'
 import { importarPlanilha } from '../lib/importarCatalogo'
+import ModalBaixa from '../components/ModalBaixa'
 
 const vazio = {
   nome: '', marca: '', gramagem: '', setor: 'mercearia', estoque: 0, validade: '',
@@ -20,27 +21,6 @@ const vazio = {
 }
 
 const RECENTE_DIAS = 7
-
-// Botão de ação de uma linha de produto: sempre com ícone e o nome da ação.
-const TONS_ACAO = {
-  neutro: () => 'border-ink-soft/25 bg-white text-ink hover:border-navy/45 hover:text-navy',
-  jornal: (a) => (a ? 'border-navy bg-navy text-white hover:bg-navy-light' : 'border-navy/35 bg-white text-navy hover:bg-navy/[0.06]'),
-  estrela: (a) => (a ? 'border-bengala bg-bengala text-white hover:bg-bengala-dark' : 'border-bengala/35 bg-white text-bengala hover:bg-bengala/[0.06]'),
-  troca: () => 'border-info/40 bg-white text-[#1f5c99] hover:bg-info/[0.07]',
-  perda: () => 'border-critical/40 bg-white text-[#a61f1f] hover:bg-critical/[0.07]',
-}
-function Acao({ icone, children, tom = 'neutro', ativo = false, iconeFill, className = '', ...props }) {
-  return (
-    <button
-      type="button"
-      className={`inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[13px] font-bold transition-colors duration-150 ${TONS_ACAO[tom](ativo)} ${className}`}
-      {...props}
-    >
-      <Icon name={icone} size={16} strokeWidth={2.1} {...(iconeFill ? { fill: iconeFill } : {})} className="shrink-0" />
-      {children}
-    </button>
-  )
-}
 
 const TONS_AVISO = {
   vencido: { borda: 'border-[#7a241b]/25', fundo: 'bg-[#f3dcd8]/70', cor: '#7a241b' },
@@ -97,7 +77,7 @@ function quando(iso) {
 }
 
 export default function Produtos() {
-  const { produtos, usuario, lojas, lojaAtiva, config, salvarProduto, excluirProduto, darBaixaProduto, desfazerBaixa, toggleFila, toast } = useStore()
+  const { produtos, usuario, lojas, lojaAtiva, config, salvarProduto, excluirProduto, desfazerBaixa, toggleFila, toast } = useStore()
   const lojaNome = (id) => lojas.find((l) => l.id === id)?.nome || '—'
   const { busca } = useOutletContext()
   const editavel = podeEditar(usuario.papel)
@@ -105,7 +85,7 @@ export default function Produtos() {
   const [fSetor, setFSetor] = useState('')
   const [aba, setAba] = useState('todos')
   const [diasJanela, setDiasJanela] = useState(() => Number(config?.diasAlerta) || 7)
-  const [baixa, setBaixa] = useState(null) // { produto, tipo: 'troca' | 'perda', quantidade, motivo }
+  const [baixa, setBaixa] = useState(null) // { produto, tipo: 'troca' | 'perda' }
   const [form, setForm] = useState(null)
   const [excluindo, setExcluindo] = useState(null)
   const [buscandoCatalogo, setBuscandoCatalogo] = useState(false)
@@ -305,16 +285,7 @@ export default function Produtos() {
     setExcluindo(null)
   }
 
-  const abrirBaixa = (p, tipo) => setBaixa({ produto: p, tipo, quantidade: Math.max(1, Number(p.estoque) || 1), motivo: '' })
-  const confirmarBaixa = () => {
-    const qtd = Math.round(Number(baixa.quantidade) || 0)
-    if (qtd < 1) return toast('Informe quantas unidades saem.', 'erro')
-    darBaixaProduto(baixa.produto.id, { tipo: baixa.tipo, quantidade: qtd, motivo: baixa.motivo })
-    toast(baixa.tipo === 'troca'
-      ? `Troca registrada: ${plural(qtd, 'unidade', 'unidades')} de ${baixa.produto.nome}.`
-      : `Perda registrada: ${plural(qtd, 'unidade', 'unidades')} de ${baixa.produto.nome}. Já conta nos relatórios.`)
-    setBaixa(null)
-  }
+  const abrirBaixa = (p, tipo) => setBaixa({ produto: p, tipo })
   const desfazer = (x) => {
     desfazerBaixa(x.produtoId, x.id)
     toast(`Desfeito: ${plural(Number(x.quantidade) || 0, 'unidade voltou', 'unidades voltaram')} ao estoque de ${x.produto.nome}.`, 'info')
@@ -355,12 +326,15 @@ export default function Produtos() {
   const AcoesProduto = ({ p }) => {
     const vencido = precisaDecisao(p)
     const estrela = noMercadoEncarte(p)
+    const sugestao = regraDaMarca(config, p.marca)
     return (
       <>
         {vencido ? (
           <>
-            <Acao tom="troca" icone="Repeat" onClick={() => abrirBaixa(p, 'troca')} aria-label={`Trocar ${p.nome} no fornecedor`}>Trocar no fornecedor</Acao>
-            <Acao tom="perda" icone="PackageX" onClick={() => abrirBaixa(p, 'perda')} aria-label={`Descartar ${p.nome} como perda`}>Descartar</Acao>
+            {[
+              <Acao key="troca" tom="troca" ativo={sugestao === 'troca'} icone="Repeat" onClick={() => abrirBaixa(p, 'troca')} aria-label={`Trocar ${p.nome} no fornecedor`} title={sugestao === 'troca' ? 'Sugerido: a marca aceita troca' : undefined}>Trocar no fornecedor</Acao>,
+              <Acao key="perda" tom="perda" ativo={sugestao === 'perda'} icone="PackageX" onClick={() => abrirBaixa(p, 'perda')} aria-label={`Descartar ${p.nome} como perda`} title={sugestao === 'perda' ? 'Sugerido: a marca não aceita troca' : undefined}>Descartar</Acao>,
+            ][sugestao === 'perda' ? 'reverse' : 'slice']()}
           </>
         ) : (
           <>
@@ -724,76 +698,7 @@ export default function Produtos() {
         </p>
       </Modal>
 
-      {/* modal troca ou perda */}
-      <Modal
-        open={!!baixa}
-        onClose={() => setBaixa(null)}
-        titulo={baixa?.tipo === 'troca' ? 'Trocar no fornecedor' : 'Descartar como perda'}
-        footer={baixa && (
-          <>
-            <Botao variante="contorno" onClick={() => setBaixa(null)}>Cancelar</Botao>
-            <Botao variante={baixa.tipo === 'perda' ? 'perigo' : 'escuro'} onClick={confirmarBaixa}>
-              <Icon name={baixa.tipo === 'perda' ? 'PackageX' : 'Repeat'} size={16} />
-              {baixa.tipo === 'perda' ? 'Registrar perda' : 'Registrar troca'}
-            </Botao>
-          </>
-        )}
-      >
-        {baixa && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <ProdutoThumb produto={baixa.produto} size={52} />
-              <div className="min-w-0">
-                <div className="font-semibold text-ink">{baixa.produto.nome}</div>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <StatusBadge validade={baixa.produto.validade} />
-                  <span className="num-tab text-xs text-ink-soft">estoque {baixa.produto.estoque ?? 0} un · {formatBRL(baixa.produto.precoNormal)} cada</span>
-                </div>
-              </div>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Escolha
-                ativo={baixa.tipo === 'troca'}
-                onClick={() => setBaixa({ ...baixa, tipo: 'troca' })}
-                icone="Repeat"
-                iconeCor="var(--color-info)"
-                titulo="Troca com fornecedor"
-                descricao="Ele recolhe ou troca. Não conta como perda."
-              />
-              <Escolha
-                ativo={baixa.tipo === 'perda'}
-                onClick={() => setBaixa({ ...baixa, tipo: 'perda' })}
-                icone="PackageX"
-                iconeCor="var(--color-critical)"
-                titulo="Perda (descarte)"
-                descricao="Vai para o lixo e entra nos relatórios de perda."
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Campo label="Quantas unidades saem" obrigatorio>
-                <input type="number" min="1" inputMode="numeric" className={inputCls} value={baixa.quantidade} onChange={(e) => setBaixa({ ...baixa, quantidade: e.target.value })} />
-              </Campo>
-              <div className="flex flex-col justify-end pb-1">
-                <span className="text-sm text-ink-soft">{baixa.tipo === 'perda' ? 'Valor perdido' : 'Valor devolvido'}</span>
-                <span className={`num-tab text-lg font-bold ${baixa.tipo === 'perda' ? 'text-critical' : 'text-[#1f5c99]'}`}>
-                  {formatBRL((Math.round(Number(baixa.quantidade) || 0)) * (Number(baixa.produto.precoNormal) || 0))}
-                </span>
-              </div>
-            </div>
-            <Campo label="Observação">
-              <input
-                className={inputCls}
-                value={baixa.motivo}
-                onChange={(e) => setBaixa({ ...baixa, motivo: e.target.value })}
-                placeholder={baixa.tipo === 'troca' ? 'Ex.: fornecedor e número da troca' : 'Ex.: embalagem estufada'}
-              />
-            </Campo>
-            {Number(baixa.quantidade) >= (Number(baixa.produto.estoque) || 0) && (
-              <p className="text-sm text-ink-soft">O estoque deste lote zera e o produto sai da lista de vencidos e da fila do jornal.</p>
-            )}
-          </div>
-        )}
-      </Modal>
+      <ModalBaixa pedido={baixa} onClose={() => setBaixa(null)} />
 
       {/* modal importar planilha (Cartaz Fácil / ERP) */}
       <Modal

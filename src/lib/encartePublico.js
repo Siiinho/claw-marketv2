@@ -195,17 +195,25 @@ export function lerEncartePublicado() {
 }
 
 // Lê do servidor; se ele não responder (ou ainda não tiver nada), usa a cópia deste aparelho.
+// Uma cópia sem ofertas (ou uma leitura que falhou) nunca ganha de outra cópia que tem ofertas:
+// o site do cliente não pode ficar vazio por causa de uma fonte só.
+const temOfertas = (e) => Array.isArray(e?.itens) && e.itens.length > 0
 export async function carregarEncartePublicado() {
+  let reserva = null
   if (nuvemAtiva()) {
     const daNuvem = await lerEncarteNuvem()
-    if (daNuvem) return daNuvem
+    if (temOfertas(daNuvem)) return daNuvem
+    reserva = daNuvem || reserva
   }
   const doSite = await lerDoSite()
-  if (doSite) return doSite
+  if (temOfertas(doSite)) return doSite
+  reserva = reserva || doSite || null
   const encarte = lerEncartePublicado()
-  if (!encarte) return null
-  const itens = await restaurarImagensSalvas(encarte.itens || [])
-  return { ...encarte, itens }
+  if (temOfertas(encarte)) {
+    const itens = await restaurarImagensSalvas(encarte.itens || [])
+    return { ...encarte, itens }
+  }
+  return reserva || encarte || null
 }
 
 // Chama `aoMudar(versao?)` sempre que uma nova versão for publicada. Devolve a função de cancelar.

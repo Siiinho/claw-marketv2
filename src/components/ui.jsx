@@ -374,3 +374,24 @@ export function Indicador({ rotulo, valor, icone, cor = 'var(--color-navy)', det
     </div>
   )
 }
+
+// Botão de ação de uma linha de produto: sempre com ícone e o nome da ação.
+const TONS_ACAO = {
+  neutro: () => 'border-ink-soft/25 bg-white text-ink hover:border-navy/45 hover:text-navy',
+  jornal: (a) => (a ? 'border-navy bg-navy text-white hover:bg-navy-light' : 'border-navy/35 bg-white text-navy hover:bg-navy/[0.06]'),
+  estrela: (a) => (a ? 'border-bengala bg-bengala text-white hover:bg-bengala-dark' : 'border-bengala/35 bg-white text-bengala hover:bg-bengala/[0.06]'),
+  troca: (a) => (a ? 'border-[#1f5c99] bg-[#1f5c99] text-white hover:bg-[#184a7c]' : 'border-info/40 bg-white text-[#1f5c99] hover:bg-info/[0.07]'),
+  perda: (a) => (a ? 'border-[#a61f1f] bg-[#a61f1f] text-white hover:bg-[#8a1919]' : 'border-critical/40 bg-white text-[#a61f1f] hover:bg-critical/[0.07]'),
+}
+export function Acao({ icone, children, tom = 'neutro', ativo = false, iconeFill, className = '', ...props }) {
+  return (
+    <button
+      type="button"
+      className={`inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[13px] font-bold transition-colors duration-150 ${TONS_ACAO[tom](ativo)} ${className}`}
+      {...props}
+    >
+      <Icon name={icone} size={16} strokeWidth={2.1} {...(iconeFill ? { fill: iconeFill } : {})} className="shrink-0" />
+      {children}
+    </button>
+  )
+}

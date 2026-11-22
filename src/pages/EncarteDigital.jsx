@@ -500,6 +500,8 @@ export default function EncarteDigital() {
       const novo = await carregarEncartePublicado()
       if (!ativo) return
       setCarregando(false)
+      // Leitura vazia ou com erro depois de já mostrar ofertas: mantém o que está na tela.
+      if (versaoAtual !== null && !(novo?.itens?.length)) return
       if (novo?.versao === versaoAtual) return
       if (versaoAtual !== null) {
         setAcabouDeAtualizar(true)

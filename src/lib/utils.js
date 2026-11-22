@@ -211,3 +211,13 @@ export const todasBaixas = (produtos = []) =>
     .sort((a, b) => String(b.em).localeCompare(String(a.em)))
 export const valorPerdasRegistradas = (produtos = []) =>
   produtos.reduce((s, p) => s + (p.baixas || []).filter((b) => b.tipo === 'perda').reduce((a, b) => a + (Number(b.valor) || 0), 0), 0)
+
+// ---- marcas que aceitam troca ou que são sempre perda (cadastro em Relatórios) ----
+// config.marcasTroca = { [chave]: { nome, regra: 'troca' | 'perda' } }
+export const chaveMarca = (marca) => String(marca || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, ' ')
+export const regraDaMarca = (config, marca) => (config?.marcasTroca || {})[chaveMarca(marca)]?.regra || null
+// Produto vencido ou perto de vencer que ainda precisa de troca ou perda.
+export const precisaTrocaOuPerda = (p, dias = 7) => {
+  const d = diasParaVencer(p?.validade)
+  return d != null && d <= dias && !loteResolvido(p)
+}
