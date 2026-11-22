@@ -12,6 +12,7 @@ import {
 import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
 import SeletorTema from '../components/SeletorTema'
 import SeloArte from '../components/SeloArte'
+import PrecoArte, { ESTILOS_PRECO, estiloPrecoById } from '../components/PrecoArte'
 import EditorCelula from '../components/EditorCelula'
 import { Escalado } from '../components/PaginaTemplate'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina, itensDaPagina, ehFormatoJornal } from '../components/JornalMercado'
@@ -89,7 +90,10 @@ export default function Jornal() {
   const [ajusteEditando, setAjusteEditando] = useState(null)
   // Ajuste predefinido (foto, preço, nome e etiqueta): vale para todo produto que não tem ajuste próprio.
   const ajustePadrao = config.ajustePadraoArte || null
-  const comAjustePadrao = (p) => (p.ajusteArte || !ajustePadrao ? p : { ...p, ajusteArte: ajustePadrao })
+  // Estilo do preço predefinido: vale para todo produto que não escolheu o seu.
+  const estiloPrecoPadrao = config.estiloPrecoPadrao || null
+  const comEstiloPadrao = (p) => (p.estiloPreco || !estiloPrecoPadrao ? p : { ...p, estiloPreco: estiloPrecoPadrao })
+  const comAjustePadrao = (p) => comEstiloPadrao(p.ajusteArte || !ajustePadrao ? p : { ...p, ajusteArte: ajustePadrao })
   const [usarComoPadrao, setUsarComoPadrao] = useState(false)
   const abrirProdutoDaPrevia = (produto) => {
     const atual = fila.find((f) => f.id === produto.id) || produto
@@ -346,6 +350,22 @@ export default function Jornal() {
     toast(selo?.nenhum ? `${produto.nome}: sem selo.` : `${produto.nome}: selo "${selo?.texto}".`)
   }
 
+  // Estilo do preço no jornal todo: o predefinido vale para todos e os estilos próprios saem.
+  const estiloPrecoNoJornalTodo = (estiloPreco) => {
+    store.salvarConfig({ estiloPrecoPadrao: estiloPreco })
+    fila.filter((p) => p.estiloPreco).forEach((p) => salvarProduto({ id: p.id, estiloPreco: null }))
+  }
+  const trocarEstiloPreco = (produto, estiloPreco, noJornalTodo) => {
+    if (noJornalTodo) estiloPrecoNoJornalTodo(estiloPreco)
+    else salvarProduto({ id: produto.id, estiloPreco })
+    toast(noJornalTodo ? `Preço "${estiloPrecoById(estiloPreco).nome}" no jornal todo.` : `${produto.nome}: preço "${estiloPrecoById(estiloPreco).nome}".`)
+  }
+  const alternarEstiloNoJornalTodo = (produto, estilo, ligar) => {
+    if (ligar) estiloPrecoNoJornalTodo(estilo)
+    else salvarProduto({ id: produto.id, estiloPreco: estilo })
+    toast(ligar ? `Preço "${estiloPrecoById(estilo).nome}" no jornal todo.` : `O estilo do preço agora vale só para ${produto.nome}.`)
+  }
+
   const publicarDigital = async () => {
     if (!ativos.length) return toast('Adicione ao menos um produto ao jornal.', 'erro')
     const todos = ordenarParaJornal(ativos)
@@ -361,10 +381,12 @@ export default function Jornal() {
       fundos: Object.fromEntries([temaDigital, ...setoresDoJornal.map(temaDoSetor)]
         .map((id) => [id, lerFundoTemplate(id)]).filter(([, fundo]) => fundo)),
       escalaLogo,
+      mostrarGeral: config.siteMostrarGeral !== false,
+      mostrarMercado: config.siteMostrarMercado !== false,
       layout: layoutDigital,
       fundo: lerFundoTemplate(temaDigital),
       loja: lojaAtual,
-      itens: todos,
+      itens: todos.map(comEstiloPadrao),
     }
     const publicado = publicarEncarte(dados)
     setPublicadoEm(publicado.publicadoEm)
@@ -528,6 +550,11 @@ export default function Jornal() {
                     })}
                   </div>
                   <p className="mt-3 text-xs text-ink-soft">No site do cliente, o Geral, o Mercado Encarte e cada setor com produto viram abas, cada uma com o seu template.</p>
+                  <Rotulo className="mt-5">Aparece no site do cliente?</Rotulo>
+                  <div className="grid gap-1.5">
+                    <ChaveSite ligado={config.siteMostrarGeral !== false} titulo="Jornal geral" onChange={(v) => { store.salvarConfig({ siteMostrarGeral: v }); toast(v ? 'O Geral volta a aparecer no site depois de publicar.' : 'O Geral sai do site depois de publicar.', 'info') }} />
+                    <ChaveSite ligado={config.siteMostrarMercado !== false} titulo="Mercado Encarte" onChange={(v) => { store.salvarConfig({ siteMostrarMercado: v }); toast(v ? 'O Mercado Encarte volta a aparecer no site depois de publicar.' : 'O Mercado Encarte sai do site depois de publicar.', 'info') }} />
+                  </div>
                   {navegacao}
                 </Secao>
               )}
@@ -696,7 +723,7 @@ export default function Jornal() {
                     <Botao onClick={publicarDigital} disabled={publicando} className="min-h-12 w-full text-base">
                       <Icon name={publicando ? 'LoaderCircle' : 'Send'} size={18} className={publicando ? 'animate-spin' : ''} /> {publicando ? 'Publicando…' : 'Publicar no site do cliente'}
                     </Botao>
-                    <p className="text-center text-xs text-ink-soft">Publica todos de uma vez: o Geral, o Mercado Encarte e cada setor.</p>
+                    <p className="text-center text-xs text-ink-soft">Publica todos de uma vez: {[config.siteMostrarGeral !== false && 'o Geral', config.siteMostrarMercado !== false && 'o Mercado Encarte', 'cada setor'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' e $1')}.</p>
                     <div className="mt-1 grid grid-cols-2 gap-2">
                       <Botao variante="contorno" onClick={exportar} disabled={exportando || !itensJornal.length}>
                         <Icon name={exportando ? 'LoaderCircle' : 'Printer'} size={16} className={exportando ? 'animate-spin' : ''} /> {exportando ? 'Preparando…' : <><span className="sm:hidden">Imprimir</span><span className="hidden sm:inline">Imprimir ou PDF</span></>}
@@ -881,7 +908,7 @@ export default function Jornal() {
             <div>
               <p className="mb-2 text-sm font-semibold text-ink">Ajustar na arte</p>
               <EditorCelula
-                produto={{ ...(fila.find((f) => f.id === seloEditando.id) || seloEditando), precoJornal: Number(String(precoEditando.promo).replace(',', '.')) || Number(String(precoEditando.normal).replace(',', '.')) || precoJornal(seloEditando) }}
+                produto={{ ...comEstiloPadrao(fila.find((f) => f.id === seloEditando.id) || seloEditando), precoJornal: Number(String(precoEditando.promo).replace(',', '.')) || Number(String(precoEditando.normal).replace(',', '.')) || precoJornal(seloEditando) }}
                 tema={temaArte}
                 ajuste={ajusteEditando}
                 onChange={setAjusteEditando}
@@ -920,6 +947,33 @@ export default function Jornal() {
                       Fora
                     </button>
                   </div>
+                </div>
+              )
+            })()}
+            {(() => {
+              const atual = fila.find((f) => f.id === seloEditando.id) || seloEditando
+              const estilo = atual.estiloPreco || estiloPrecoPadrao || 'oval'
+              const noJornalTodo = !atual.estiloPreco && Boolean(estiloPrecoPadrao)
+              return (
+                <div>
+                  <p className="mb-2 text-sm font-semibold text-ink">Estilo do preço</p>
+                  <p className="mb-2 text-xs text-ink-soft">Aparece em todos os layouts do jornal, no Mercado Encarte e nas artes. Muda na hora.</p>
+                  <SeletorEstiloPreco value={estilo} tema={temaArte} onChange={(id) => trocarEstiloPreco(atual, id, noJornalTodo)} />
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={noJornalTodo}
+                    onClick={() => alternarEstiloNoJornalTodo(atual, estilo, !noJornalTodo)}
+                    className="mt-3 flex w-full items-center gap-3 rounded-xl border border-ink-soft/20 bg-white px-3 py-2.5 text-left hover:border-ink-soft/45"
+                  >
+                    <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-150 motion-reduce:transition-none ${noJornalTodo ? 'bg-success' : 'bg-ink-soft/30'}`}>
+                      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-150 motion-reduce:transition-none ${noJornalTodo ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-ink">Usar no jornal todo</span>
+                      <span className="block text-xs text-ink-soft">{noJornalTodo ? 'Ligado: todos os produtos do jornal usam este estilo de preço.' : 'Desligado: o estilo vale só para este produto.'}</span>
+                    </span>
+                  </button>
                 </div>
               )
             })()}
@@ -993,6 +1047,38 @@ function SeletorSelo({ value, onChange }) {
         <button key={s.id} type="button" onClick={() => onChange(s.id)} aria-pressed={atual === s.id} title={s.texto}
           className={`flex h-16 items-center justify-center rounded-lg border bg-white ${atual === s.id ? 'border-navy shadow-[inset_0_0_0_1px_var(--color-navy)]' : 'border-ink-soft/20 hover:border-ink-soft/45'}`}>
           {s.nenhum ? <span className="text-sm font-semibold text-ink-soft">Sem selo</span> : <SeloArte selo={s} largura={104} girar={-4} />}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Liga e desliga uma aba do site do cliente (vale na próxima publicação).
+function ChaveSite({ ligado, titulo, onChange }) {
+  return (
+    <button type="button" role="switch" aria-checked={ligado} onClick={() => onChange(!ligado)}
+      className="flex w-full items-center gap-3 rounded-xl border border-ink-soft/20 bg-white px-3 py-2.5 text-left hover:border-ink-soft/45">
+      <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-150 motion-reduce:transition-none ${ligado ? 'bg-success' : 'bg-ink-soft/30'}`}>
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-150 motion-reduce:transition-none ${ligado ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-ink">{titulo}</span>
+        <span className="block text-xs text-ink-soft">{ligado ? 'Ligado: aparece como aba no site.' : 'Desligado: não aparece no site.'}</span>
+      </span>
+    </button>
+  )
+}
+
+function SeletorEstiloPreco({ value, tema, onChange }) {
+  return (
+    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+      {ESTILOS_PRECO.map((e) => (
+        <button key={e.id} type="button" onClick={() => onChange(e.id)} aria-pressed={value === e.id}
+          className={`flex h-24 flex-col items-center justify-center gap-1.5 rounded-lg border bg-white px-1 ${value === e.id ? 'border-navy shadow-[inset_0_0_0_1px_var(--color-navy)]' : 'border-ink-soft/20 hover:border-ink-soft/45'}`}>
+          <span className="flex h-12 items-center justify-center" aria-hidden="true">
+            <PrecoArte valor={9.99} unidade="UNI" tema={tema} estilo={e.id} k={0.4} />
+          </span>
+          <span className="text-xs font-semibold text-ink">{e.nome}</span>
         </button>
       ))}
     </div>

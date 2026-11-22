@@ -8,6 +8,7 @@ import SeloArte from '../components/SeloArte'
 import { SimboloClawMarket } from '../components/MarcaClawMarket'
 import { Escalado } from '../components/PaginaTemplate'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina, ehFormatoJornal, alturaUsada } from '../components/JornalMercado'
+import PrecoArte from '../components/PrecoArte'
 import { LOJAS } from '../data/seed'
 
 // Encarte digital público: a página que a tag NFC abre.
@@ -53,7 +54,11 @@ function FotoProduto({ produto, className = '' }) {
   )
 }
 
-function SeloPreco({ valor, tema, grande = false }) {
+function SeloPreco({ valor, tema, grande = false, estilo }) {
+  // Mesmo estilo de preço escolhido no jornal (só o número, faixa…); sem escolha, o balão.
+  if (estilo && estilo !== 'oval') {
+    return <span className="inline-block"><PrecoArte valor={valor} tema={tema} estilo={estilo} k={grande ? 0.7 : 0.44} semUnidade /></span>
+  }
   return (
     <span
       className={`inline-flex items-center justify-center rounded-[50%] ${grande ? 'px-7 py-3' : 'px-4 py-1.5'}`}
@@ -94,7 +99,7 @@ function CartaoProduto({ produto, onAbrir, tema, indice = 0, compras }) {
           <div className="mt-auto flex items-end justify-between gap-2 pt-3">
             <div className="min-w-0">
               {temDe && <div className="text-xs font-semibold text-ink-soft">De <span className="line-through">{formatBRL(produto.precoNormal)}</span></div>}
-              <span className="cm-preco-lista"><SeloPreco valor={produto.precoJornal} tema={tema} /></span>
+              <span className="cm-preco-lista"><SeloPreco valor={produto.precoJornal} tema={tema} estilo={produto.estiloPreco} /></span>
             </div>
             {compras && <BotaoLista produto={produto} compras={compras} />}
           </div>
@@ -521,7 +526,10 @@ export default function EncarteDigital() {
   const temaDoSetor = (id) => temaCampanhaById(encarte?.temasSetor?.[id] || temasDoSetor(id)[0]?.id || encarte?.tema)
   // Mercado Encarte: só as ofertas marcadas para hoje (somem sozinhas no dia seguinte).
   const hoje = dataISOmaisDias(0)
-  const ofertasDoDia = useMemo(() => itens.filter((p) => noMercadoEncarte(p, hoje)), [itens, hoje])
+  // A loja pode esconder o Geral e o Mercado Encarte do site (chaves no passo 1 do Jornal).
+  const geralNoSite = encarte?.mostrarGeral !== false
+  const mercadoNoSite = encarte?.mostrarMercado !== false
+  const ofertasDoDia = useMemo(() => (mercadoNoSite ? itens.filter((p) => noMercadoEncarte(p, hoje)) : []), [itens, hoje, mercadoNoSite])
   const ehMercado = setorFiltro === MERCADO_ENCARTE.id
   useEffect(() => { if (ehMercado && encarte && !ofertasDoDia.length) setSetorFiltro('todos') }, [ehMercado, encarte, ofertasDoDia.length])
   const tema = setorFiltro !== 'todos' && setorFiltro !== 'compras' ? temaDoSetor(setorFiltro) : temaGeral
@@ -579,10 +587,15 @@ export default function EncarteDigital() {
   })
   const abas = [
     ...(ofertasDoDia.length ? [{ id: MERCADO_ENCARTE.id, nome: 'Ofertas de hoje', cor: MERCADO_ENCARTE.cor, n: ofertasDoDia.length }] : []),
-    { id: 'todos', nome: 'Todas', cor: '#082b4f', n: itens.length },
+    ...(geralNoSite ? [{ id: 'todos', nome: 'Todas', cor: '#082b4f', n: itens.length }] : []),
     ...setoresPresentes.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor, n: itens.filter((p) => p.setor === s.id).length })),
   ]
   const abaAtual = abas.find((a) => a.id === setorFiltro)
+  // Aba escondida pela loja (ou que sumiu): abre a primeira que existe.
+  useEffect(() => {
+    if (!encarte || setorFiltro === 'compras' || !abas.length || abas.some((a) => a.id === setorFiltro)) return
+    setSetorFiltro(abas[0].id)
+  }, [encarte, setorFiltro, abas])
   const periodo = encarte?.periodoDe ? `${formatDataCurta(encarte.periodoDe)} a ${formatDataCurta(encarte.periodoAte)}` : ''
   const arteTitulo = caminhoArte(temaGeral, 'titulo')
   const whats = soDigitos(loja?.whatsapp)

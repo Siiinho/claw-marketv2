@@ -3,6 +3,7 @@ import { SETORES, setorById, formatData } from '../lib/utils'
 import { caminhoArte } from '../lib/temasCampanha'
 import PaginaTemplate, { unidadeDe, paginarTemplate, fonteQueCabe, contornoTexto, FaixaValidade, LogoEncarte, RodapeOficial, ajusteDe, LARGURA, ALTURA } from './PaginaTemplate'
 import SeloArte from './SeloArte'
+import PrecoArte from './PrecoArte'
 
 // Formato "Jornal do mercado", como o jornal impresso do Bengala: página A4 em pé, topo com a
 // campanha, blocos "Ofertas válidas somente <dia>" com uma grade cheia de produtos e rodapé com
@@ -111,10 +112,17 @@ function Celula({ produto, tema, onAbrir, indice }) {
           </div>
         )
       })()}
-      <div className="cm-preco absolute flex items-end leading-none" style={{ right: 2, bottom: 4, padding: '4px 8px 3px', borderRadius: 8, background: tema.precoCor, border: `3px solid ${tema.precoFundo}`, transform: 'rotate(-3deg)', boxShadow: `3px 3px 0 ${tema.precoSombra}`, '--cm-i': indice }}>
-        <PrecoVarejo valor={produto.precoJornal} cor={tema.precoFundo} style={{ fontSize: 34, fontFamily: 'var(--font-encarte)', fontVariantNumeric: 'normal' }} />
-        <span style={{ marginLeft: 3, marginBottom: 3, fontSize: 12, fontWeight: 900, color: tema.precoFundo, fontFamily: 'var(--font-encarte)' }}>{unidadeDe(produto)}</span>
-      </div>
+      {produto.estiloPreco ? (
+        // Estilo escolhido no produto (só o número, faixa…), no tamanho da célula do jornal.
+        <div className="cm-preco absolute" style={{ right: 4, bottom: 6, '--cm-i': indice }}>
+          <PrecoArte valor={produto.precoJornal} unidade={unidadeDe(produto)} tema={tema} estilo={produto.estiloPreco} k={0.56} />
+        </div>
+      ) : (
+        <div className="cm-preco absolute flex items-end leading-none" style={{ right: 2, bottom: 4, padding: '4px 8px 3px', borderRadius: 8, background: tema.precoCor, border: `3px solid ${tema.precoFundo}`, transform: 'rotate(-3deg)', boxShadow: `3px 3px 0 ${tema.precoSombra}`, '--cm-i': indice }}>
+          <PrecoVarejo valor={produto.precoJornal} cor={tema.precoFundo} style={{ fontSize: 34, fontFamily: 'var(--font-encarte)', fontVariantNumeric: 'normal' }} />
+          <span style={{ marginLeft: 3, marginBottom: 3, fontSize: 12, fontWeight: 900, color: tema.precoFundo, fontFamily: 'var(--font-encarte)' }}>{unidadeDe(produto)}</span>
+        </div>
+      )}
     </button>
   )
 }

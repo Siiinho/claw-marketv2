@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Icon, PrecoVarejo } from './ui'
+import { Icon } from './ui'
 import { formatBRL, formatData, setorById } from '../lib/utils'
 import { caminhoArte } from '../lib/temasCampanha'
 import SeloArte from './SeloArte'
+import PrecoArte from './PrecoArte'
 import logoTransparente from '../assets/logo-bengala-transparente.png'
 
 // Logo do mercado direto sobre a arte do tema, sem caixa branca (arquivo PNG transparente).
@@ -103,22 +104,10 @@ export function unidadeDe(produto) {
 const temDesconto = (p) => Number(p.precoNormal) > Number(p.precoJornal) + 0.009
 
 function SeloPrecoOval({ produto, tema, k, indice = 0 }) {
-  const w = 186 * k
-  const h = 92 * k
-  // Sombra desenhada como elemento próprio: o box-shadow sai errado na exportação em PNG.
+  // Estilo do preço escolhido no produto (balão, só o número, faixa…); sem escolha, o balão.
   return (
-    <div className="cm-preco absolute" style={{ right: 8 * k + 5 * k, bottom: 8 * k + 7 * k, width: w, height: h, transform: 'rotate(-4deg)', '--cm-i': indice }}>
-      <div className="absolute" style={{ left: 5 * k, top: 7 * k, width: w, height: h, borderRadius: '50%', background: tema.precoSombra }} />
-      <div
-        className="absolute inset-0 flex items-center justify-center overflow-hidden"
-        style={{ borderRadius: '50%', background: tema.precoFundo, border: `${4 * k}px solid ${tema.precoSombra}` }}
-      >
-        <span aria-hidden="true" className="cm-brilho absolute inset-y-0 left-0" style={{ width: '30%', background: 'linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent)' }} />
-        <div className="flex items-end leading-none">
-          <PrecoVarejo valor={produto.precoJornal} style={{ fontSize: 60 * k, fontFamily: 'var(--font-encarte)', letterSpacing: '-0.01em', fontVariantNumeric: 'normal' }} cor={tema.precoCor} />
-          <span className="ml-1" style={{ marginBottom: 6 * k, fontSize: 18 * k, fontWeight: 900, fontFamily: 'var(--font-encarte)', color: tema.precoCor }}>{unidadeDe(produto)}</span>
-        </div>
-      </div>
+    <div className="cm-preco absolute" style={{ right: 8 * k + 5 * k, bottom: 8 * k + 7 * k, '--cm-i': indice }}>
+      <PrecoArte valor={produto.precoJornal} unidade={unidadeDe(produto)} tema={tema} estilo={produto.estiloPreco || 'oval'} k={k} />
     </div>
   )
 }

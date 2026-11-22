@@ -38,7 +38,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
   const paginas = useMemo(
     () => (impressao ? paginarCartazes(selecionados, tamanhoAtual) : paginarTemplate(selecionados, layout, saida)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [impressao, tamanhoAtual, layout, saida, selecionados.map((p) => `${p.id}:${p.precoJornal}:${p.seloOferta}:${p.unidade}:${p.imagem?.length || 0}`).join('|')],
+    [impressao, tamanhoAtual, layout, saida, selecionados.map((p) => `${p.id}:${p.precoJornal}:${p.seloOferta}:${p.estiloPreco}:${p.unidade}:${p.imagem?.length || 0}`).join('|')],
   )
   const temConteudo = selecionados.length > 0
   const podeCompartilhar = typeof navigator !== 'undefined' && typeof navigator.canShare === 'function'
