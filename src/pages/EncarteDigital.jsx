@@ -124,9 +124,10 @@ function BotaoLista({ produto, compras, grande = false }) {
         type="button"
         onClick={(e) => { e.stopPropagation(); compras.alternar(produto) }}
         aria-pressed={na}
+        aria-label={na ? `Adicionado: ${produto.nome}. Toque para remover` : `Adicionar ${produto.nome}`}
         className={`${base} w-full rounded-xl px-3 py-3.5 text-base ${na ? 'bg-[#128c4a] text-white' : 'bg-navy text-white hover:bg-navy-light'}`}
       >
-        <Icon name={na ? 'ListChecks' : 'ListPlus'} size={20} /> {na ? 'Está na sua lista' : 'Pôr na lista de compras'}
+        <Icon name={na ? 'CircleCheck' : 'ShoppingCart'} size={20} strokeWidth={2.25} /> {na ? 'Adicionado' : 'Adicionar'}
       </button>
     )
   }
@@ -135,7 +136,7 @@ function BotaoLista({ produto, compras, grande = false }) {
       type="button"
       onClick={(e) => { e.stopPropagation(); compras.alternar(produto) }}
       aria-pressed={na}
-      aria-label={na ? `Tirar ${produto.nome} da lista` : `Pôr ${produto.nome} na lista`}
+      aria-label={na ? `Remover ${produto.nome}` : `Adicionar ${produto.nome}`}
       className={`${base} h-10 w-10 rounded-full border-2 ${na ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-navy/25 bg-white text-navy hover:border-navy'}`}
     >
       <Icon name={na ? 'Check' : 'Plus'} size={20} strokeWidth={2.4} />
