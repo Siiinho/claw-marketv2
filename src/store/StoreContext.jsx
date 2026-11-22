@@ -7,7 +7,7 @@ import {
   CONFIG_SEED,
   JORNAL_OFICIAL_SEED,
 } from '../data/seed'
-import { uid, statusValidade } from '../lib/utils'
+import { uid, statusValidade, paraNumero } from '../lib/utils'
 import { restaurarImagensSalvas } from '../lib/produtoApi'
 import {
   nuvemAtiva, sessaoNuvem, entrarNuvem, criarContaNuvem, sairNuvem, trocarSenhaNuvem,
@@ -512,7 +512,11 @@ export function StoreProvider({ children }) {
 
   // ===== produtos =====
   const salvarProduto = useCallback(
-    (prod) => {
+    (entrada) => {
+      // Preço e estoque sempre como número: texto ("5,99") derrubava a tela do Jornal.
+      const prod = { ...entrada }
+      for (const campo of ['precoNormal', 'precoPromo']) if (campo in prod) prod[campo] = paraNumero(prod[campo])
+      if ('estoque' in prod && prod.estoque !== null) prod.estoque = paraNumero(prod.estoque) ?? 0
       setProdutos((list) => {
         if (prod.id && list.some((p) => p.id === prod.id)) {
           // Setor trocado à mão (lápis ou edição): a correção automática de setores não mexe mais nele.

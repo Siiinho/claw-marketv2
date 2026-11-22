@@ -7,7 +7,7 @@ import ScannerJornal from '../components/ScannerJornal'
 import CentralArtes from '../components/CentralArtes'
 import {
   SETORES, setorById, formatBRL, MERCADO_ENCARTE, noMercadoEncarte,
-  percentDesc, dataISOmaisDias, SELOS_OFERTA, plural, formatDataCurta,
+  percentDesc, dataISOmaisDias, SELOS_OFERTA, plural, formatDataCurta, paraNumero,
 } from '../lib/utils'
 import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
 import SeletorTema from '../components/SeletorTema'
@@ -186,7 +186,8 @@ export default function Jornal() {
   // ---- preço para o jornal ----
   const precoJornal = (p) => {
     // O preço da oferta digitado no produto (ex.: pela prévia) vale mais que a oferta automática.
-    if (p.precoPromo) return p.precoPromo
+    const promo = paraNumero(p.precoPromo)
+    if (promo) return promo
     const o = ofertaDoProduto(p.id)
     if (o) return p.precoNormal * (1 - o.desconto / 100)
     if (p.origemFila === 'vencimento') return p.precoNormal * (1 - (config.descontoPadrao || 30) / 100)
