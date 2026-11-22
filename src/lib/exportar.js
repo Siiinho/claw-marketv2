@@ -69,6 +69,8 @@ async function captura(el, { escala } = {}) {
 
   // A segunda tentativa, mais leve, permite exportar também em coletores e
   // celulares com pouca memória sem reduzir a qualidade nos aparelhos comuns.
+  // As fontes dos cartazes precisam estar carregadas, senão o arquivo sai com a fonte reserva.
+  try { await document.fonts?.ready } catch { /* sem suporte: segue */ }
   for (const scale of escalas.length ? escalas : [1]) {
     try {
       return await html2canvas(el, {
@@ -185,7 +187,12 @@ export async function exportarPDF(el, nome = 'jornal') {
   }
 }
 
-export async function exportarPDFPaginas(elementos, nome = 'jornal') {
+// Folhas em mm (A3 para cartazes grandes; o resto em A4).
+const PAPEL_MM = { a4: [210, 297], a3: [297, 420] }
+
+export async function exportarPDFPaginas(elementos, nome = 'jornal', { formato = 'a4' } = {}) {
+  const papel = PAPEL_MM[formato] ? formato : 'a4'
+  const [curto, longo] = PAPEL_MM[papel]
   const paginas = elementos.filter(Boolean)
   if (!paginas.length) throw new Error('Nenhuma página pronta para exportar.')
 
@@ -196,8 +203,8 @@ export async function exportarPDFPaginas(elementos, nome = 'jornal') {
       const larguraCanvas = canvas.width
       const alturaCanvas = canvas.height
       const orientacao = larguraCanvas > alturaCanvas ? 'l' : 'p'
-      const larguraA4 = orientacao === 'l' ? 297 : 210
-      const alturaA4 = orientacao === 'l' ? 210 : 297
+      const larguraA4 = orientacao === 'l' ? longo : curto
+      const alturaA4 = orientacao === 'l' ? curto : longo
       // PNG evita os artefatos e o texto borrado introduzidos pela compressão
       // JPEG. A captura em alta resolução permanece nítida na impressão A4.
       const blobPagina = await canvasParaBlob(canvas, 'image/png')
@@ -208,8 +215,8 @@ export async function exportarPDFPaginas(elementos, nome = 'jornal') {
       const x = (larguraA4 - largura) / 2
       const y = (alturaA4 - altura) / 2
 
-      if (!pdf) pdf = new jsPDF({ orientation: orientacao, unit: 'mm', format: 'a4', compress: true })
-      else pdf.addPage('a4', orientacao)
+      if (!pdf) pdf = new jsPDF({ orientation: orientacao, unit: 'mm', format: papel, compress: true })
+      else pdf.addPage(papel, orientacao)
       pdf.addImage(bytesPagina, 'PNG', x, y, largura, altura, undefined, 'SLOW')
     } finally {
       // Libera os pixels mesmo quando uma página falha no meio da exportação.

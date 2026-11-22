@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { Icon, Botao, EmptyState, Secao, Rotulo, Escolha, Segmentado } from './ui'
 import PaginaTemplate, { Escalado, FORMATOS, paginarTemplate } from './PaginaTemplate'
-import { FolhaCartazes, FOLHA_A4, TAMANHOS_CARTAZ, paginarCartazes } from './Cartaz'
+import { FolhaCartazes, FOLHA_A4, paginarCartazes } from './Cartaz'
+import { FolhaCartazesPincel, CartazModelo, MODELOS_CARTAZ, ORIENTACOES, imposicao, paginar } from './cartazes/cartazPincel'
 import { temaCampanhaById } from '../lib/temasCampanha'
 import { plural } from '../lib/utils'
 import SeletorTema from './SeletorTema'
@@ -13,16 +14,22 @@ import { exportarPNG, exportarPDFPaginas, gerarPNG } from '../lib/exportar'
 
 const SAIDAS = [
   ...Object.values(FORMATOS).map((f) => ({ id: f.id, nome: f.nome, sub: `${f.proporcao} · ${f.uso}`, icone: f.icone })),
-  { id: 'cartaz', nome: 'Cartaz', sub: 'A4, A5, A6 ou A7 para imprimir', icone: 'FileText' },
+  { id: 'cartaz', nome: 'Cartaz', sub: 'A3 a A7, 7 modelos para imprimir', icone: 'FileText' },
   { id: 'etiqueta', nome: 'Etiquetas', sub: 'Preço de gôndola, 24 por folha', icone: 'Tags' },
 ]
+
+const TAMANHOS = ['A3', 'A4', 'A5', 'A6', 'A7']
+// Produto de exemplo para as miniaturas dos modelos quando a lista está vazia.
+const EXEMPLO = { id: 'exemplo', nome: 'Arroz tipo 1', marca: 'Camil', gramagem: '5 kg', unidade: 'UN', precoNormal: 27.9, precoJornal: 22.99 }
 
 const slug = (t) => String(t || 'arte').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'arte'
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // `saidas` limita as opções: o Jornal mostra só as artes de rede social e a aba Cartazes,
 // só cartazes e etiquetas para imprimir.
-export default function CentralArtes({ itens, titulo, encarte, loja, temaId, setTemaId, layout, setLayout, fundo, toast, saidas: idsSaidas, saidaInicial, subtitulo, escalaLogo, ajustes, onBipar }) {
+// `cartaz` (opcional) controla o modelo e a orientação dos cartazes e abre a edição:
+// { modelo, onModelo, orientacao, onOrientacao, onAbrir }.
+export default function CentralArtes({ itens, titulo, encarte, loja, temaId, setTemaId, layout, setLayout, fundo, toast, saidas: idsSaidas, saidaInicial, subtitulo, escalaLogo, ajustes, onBipar, cartaz: ctrlCartaz }) {
   const opcoes = idsSaidas ? SAIDAS.filter((s) => idsSaidas.includes(s.id)) : SAIDAS
   const [saida, setSaida] = useState(saidaInicial || opcoes[0].id)
   const [tamanho, setTamanho] = useState('A5')
@@ -31,21 +38,30 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
   const refs = useRef([])
   const tema = temaCampanhaById(temaId)
 
+  const [orientacaoLocal, setOrientacaoLocal] = useState('retrato')
+  const [modeloLocal, setModeloLocal] = useState('classico')
+  const modelo = ctrlCartaz?.modelo || modeloLocal
+  const orientacao = ctrlCartaz?.orientacao || orientacaoLocal
+  const trocarModelo = ctrlCartaz?.onModelo || setModeloLocal
+  const trocarOrientacao = ctrlCartaz?.onOrientacao || setOrientacaoLocal
+
   const impressao = saida === 'cartaz' || saida === 'etiqueta'
+  const ehCartaz = saida === 'cartaz'
   const tamanhoAtual = saida === 'etiqueta' ? 'etiqueta' : tamanho
-  const dim = impressao ? FOLHA_A4 : FORMATOS[saida]
+  const imp = useMemo(() => imposicao(tamanho, orientacao), [tamanho, orientacao])
+  const dim = ehCartaz ? imp.folha : impressao ? FOLHA_A4 : FORMATOS[saida]
   const selecionados = itens.filter((p) => !excluidos.has(p.id))
   const paginas = useMemo(
-    () => (impressao ? paginarCartazes(selecionados, tamanhoAtual) : paginarTemplate(selecionados, layout, saida)),
+    () => (ehCartaz ? paginar(selecionados, imp) : impressao ? paginarCartazes(selecionados, tamanhoAtual) : paginarTemplate(selecionados, layout, saida)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [impressao, tamanhoAtual, layout, saida, selecionados.map((p) => `${p.id}:${p.precoJornal}:${p.seloOferta}:${p.estiloPreco}:${p.unidade}:${p.imagem?.length || 0}`).join('|')],
+    [ehCartaz, imp, impressao, tamanhoAtual, layout, saida, selecionados.map((p) => `${p.id}:${p.nome}:${p.marca}:${p.gramagem}:${p.chamada}:${p.modeloCartaz}:${p.precoNormal}:${p.precoJornal}:${p.seloOferta}:${p.estiloPreco}:${p.unidade}:${p.imagem?.length || 0}`).join('|')],
   )
   const temConteudo = selecionados.length > 0
   const podeCompartilhar = typeof navigator !== 'undefined' && typeof navigator.canShare === 'function'
 
   const nomeArquivo = (i) => {
     if (saida === 'post') return `oferta-${slug(paginas[i]?.[0]?.nome)}`
-    const base = `${slug(titulo)}-${impressao ? (saida === 'etiqueta' ? 'etiquetas' : `cartaz-${tamanho.toLowerCase()}`) : saida}`
+    const base = `${slug(titulo)}-${impressao ? (saida === 'etiqueta' ? 'etiquetas' : `cartaz-${tamanho.toLowerCase()}${orientacao === 'paisagem' ? '-deitado' : ''}`) : saida}`
     return paginas.length > 1 ? `${base}-${i + 1}` : base
   }
   // Redes sociais: tamanho exato do formato. Impressão: alta resolução.
@@ -91,7 +107,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
   })
 
   const baixarPDF = () => executar('pdf', async () => {
-    const r = await exportarPDFPaginas(refs.current.slice(0, paginas.length), impressao ? nomeArquivo(0).replace(/-\d+$/, '') : `${slug(titulo)}-${saida}`)
+    const r = await exportarPDFPaginas(refs.current.slice(0, paginas.length), impressao ? nomeArquivo(0).replace(/-\d+$/, '') : `${slug(titulo)}-${saida}`, { formato: ehCartaz ? imp.folha.formato : 'a4' })
     setTimeout(() => URL.revokeObjectURL(r.url), 60000)
   })
 
@@ -102,7 +118,10 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
     return n
   })
 
-  const renderPagina = (pagina, i, comRef) => (impressao ? (
+  const renderPagina = (pagina, i, comRef) => (ehCartaz ? (
+    <FolhaCartazesPincel ref={comRef ? (el) => { refs.current[i] = el } : undefined} itens={pagina} tamanho={tamanho} orientacao={orientacao} template={modelo} encarte={encarte} loja={loja}
+      onAbrir={!comRef && ctrlCartaz?.onAbrir && !ocupado ? ctrlCartaz.onAbrir : undefined} />
+  ) : impressao ? (
     <FolhaCartazes ref={comRef ? (el) => { refs.current[i] = el } : undefined} itens={pagina} tamanho={tamanhoAtual} encarte={encarte} />
   ) : (
     <div ref={comRef ? (el) => { refs.current[i] = el } : undefined} style={{ width: dim.largura, height: dim.altura }}>
@@ -122,16 +141,39 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
           ))}
         </div>
 
-        {saida === 'cartaz' && (
-          <div className="mt-5">
-            <Rotulo>Tamanho do cartaz</Rotulo>
-            <Segmentado
-              rotulo="Tamanho do cartaz"
-              valor={tamanho}
-              onChange={setTamanho}
-              disabled={!!ocupado}
-              opcoes={['A4', 'A5', 'A6', 'A7'].map((id) => [id, id, `· ${TAMANHOS_CARTAZ[id].desc}`])}
-            />
+        {ehCartaz && (
+          <div className="mt-5 space-y-5">
+            <div>
+              <Rotulo>Modelo do cartaz</Rotulo>
+              <div role="group" aria-label="Modelo do cartaz" className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                {MODELOS_CARTAZ.map((m) => {
+                  const ativo = modelo === m.id
+                  return (
+                    <button key={m.id} type="button" onClick={() => trocarModelo(m.id)} disabled={!!ocupado} aria-pressed={ativo} title={m.desc}
+                      className={`min-w-0 rounded-xl border p-1.5 text-left disabled:opacity-50 ${ativo ? 'border-navy bg-navy/[0.045] shadow-[inset_0_0_0_1px_var(--color-navy)]' : 'border-ink-soft/20 bg-white hover:border-ink-soft/45'}`}>
+                      <span className="block overflow-hidden rounded-md border border-ink-soft/10">
+                        <Escalado largura={397} altura={562}>
+                          <CartazModelo produto={{ ...(selecionados[0] || EXEMPLO), modeloCartaz: undefined }} modelo={m.id} w={397} h={562} encarte={encarte} loja={loja} />
+                        </Escalado>
+                      </span>
+                      <span className="mt-1.5 block truncate px-0.5 text-xs font-semibold text-ink">{m.nome}</span>
+                      <span className="block truncate px-0.5 text-[11px] text-ink-soft">{m.desc}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-4">
+              <div>
+                <Rotulo>Tamanho do cartaz</Rotulo>
+                <Segmentado rotulo="Tamanho do cartaz" valor={tamanho} onChange={setTamanho} disabled={!!ocupado}
+                  opcoes={TAMANHOS.map((id) => [id, id, `· ${imposicao(id, orientacao).desc}`])} />
+              </div>
+              <div>
+                <Rotulo>Posição</Rotulo>
+                <Segmentado rotulo="Posição do cartaz" valor={orientacao} onChange={trocarOrientacao} disabled={!!ocupado} opcoes={ORIENTACOES} />
+              </div>
+            </div>
           </div>
         )}
 
@@ -240,7 +282,7 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
         )}
         <p className="mt-3 text-xs text-ink-soft">
           {impressao
-            ? 'O PDF sai em folha A4 com linhas pontilhadas para recortar. A validade dos produtos não aparece, só o período da campanha.'
+            ? `${ehCartaz && ctrlCartaz?.onAbrir ? 'Toque num cartaz para mudar o texto, o preço, o selo ou o modelo. ' : ''}O PDF sai em folha ${ehCartaz ? imp.folha.formato.toUpperCase() : 'A4'}${ehCartaz && imp.porFolha > 1 ? ' com linhas pontilhadas para recortar' : ''}. A validade dos produtos não aparece, só o período da campanha.`
             : `As artes saem no tamanho certo (${dim.largura} × ${dim.altura} px). No celular, use Compartilhar para mandar direto no WhatsApp ou Instagram.`}
         </p>
       </Secao>
