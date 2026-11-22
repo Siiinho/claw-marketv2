@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { CelulaProduto, AJUSTE_PADRAO, ajusteDe } from './PaginaTemplate'
 import { Icon } from './ui'
 
-// Editor de um produto na arte, como no Canva: toque no nome, na foto ou no preço,
+// Editor de um produto na arte, como no Canva: toque no nome, na foto, no preço ou na etiqueta de oferta,
 // arraste para mudar de lugar e puxe as setas dos cantos para aumentar ou diminuir.
 // O ajuste vale para o encarte, as artes (Feed, Stories, TV) e o site do cliente.
 const W = 360
@@ -11,6 +11,7 @@ const CAMADAS = [
   ['foto', 'Foto', 'Image'],
   ['preco', 'Preço', 'BadgeDollarSign'],
   ['nome', 'Nome', 'Type'],
+  ['selo', 'Etiqueta', 'Tag'],
 ]
 const limitar = (v, min, max) => Math.min(max, Math.max(min, v))
 
@@ -81,7 +82,7 @@ export default function EditorCelula({ produto, tema, ajuste, onChange }) {
   const caixa = caixas[selecionada]
   const seta = (pos, rotacao) => (
     <span
-      key={pos}
+      key={`${pos.left}-${pos.top}`}
       onPointerDown={(e) => iniciar(e, selecionada, 'tamanho')}
       className="absolute flex h-7 w-7 touch-none items-center justify-center rounded-full border-2 border-white bg-bengala text-white shadow"
       style={{ ...pos, cursor: rotacao % 180 === 0 ? 'nwse-resize' : 'nesw-resize', transform: 'translate(-50%, -50%)' }}

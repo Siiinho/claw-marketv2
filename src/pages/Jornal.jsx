@@ -17,7 +17,7 @@ import { Escalado } from '../components/PaginaTemplate'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina, itensDaPagina, ehFormatoJornal } from '../components/JornalMercado'
 import { temaCampanhaById, temasDoSetor, caminhoArte } from '../lib/temasCampanha'
 import { abrirJanelaPrevisualizacao, previsualizarImpressaoPaginas } from '../lib/exportar'
-import { imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
+import { imagemProdutoPrecisaTratamento, fotoRuimParaJornal, prepararProdutoParaJornal } from '../lib/produtoApi'
 
 function imagemCompativelComPDF(src) {
   if (!src || typeof src !== 'string') return false
@@ -87,10 +87,15 @@ export default function Jornal() {
   // Preço editado no mesmo painel do selo (toque no produto da prévia).
   const [precoEditando, setPrecoEditando] = useState({ normal: '', promo: '' })
   const [ajusteEditando, setAjusteEditando] = useState(null)
+  // Ajuste predefinido (foto, preço, nome e etiqueta): vale para todo produto que não tem ajuste próprio.
+  const ajustePadrao = config.ajustePadraoArte || null
+  const comAjustePadrao = (p) => (p.ajusteArte || !ajustePadrao ? p : { ...p, ajusteArte: ajustePadrao })
+  const [usarComoPadrao, setUsarComoPadrao] = useState(false)
   const abrirProdutoDaPrevia = (produto) => {
     const atual = fila.find((f) => f.id === produto.id) || produto
     setPrecoEditando({ normal: atual.precoNormal ?? '', promo: atual.precoPromo ?? '' })
-    setAjusteEditando(atual.ajusteArte || null)
+    setAjusteEditando(atual.ajusteArte || ajustePadrao)
+    setUsarComoPadrao(!atual.ajusteArte && Boolean(ajustePadrao))
     setSeloEditando(atual)
   }
   // Período da campanha: definido pelo operador, nunca calculado pela validade dos produtos.
@@ -144,7 +149,7 @@ export default function Jornal() {
   useEffect(() => {
     let ativo = true
     const chaveFoto = (p) => `${p.id}|${String(p.imagem || '').slice(-64)}|${p.imagemFonteUrl || ''}`
-    const pendentes = fila.filter((p) => imagemProdutoPrecisaTratamento(p) && !fotosTentadas.current.has(chaveFoto(p)))
+    const pendentes = fila.filter((p) => (imagemProdutoPrecisaTratamento(p) || fotoRuimParaJornal(p)) && !fotosTentadas.current.has(chaveFoto(p)))
     if (!pendentes.length) return () => { ativo = false }
     ;(async () => {
       for (const produto of pendentes) {
@@ -201,7 +206,7 @@ export default function Jornal() {
     ...vencimento,
     ...[...regulares].sort((a, b) => ordemSetor(a) - ordemSetor(b)),
   ]
-  const itensArte = itensJornal.map((p) => ({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
+  const itensArte = itensJornal.map((p) => comAjustePadrao({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
   // O Mercado Encarte sai sempre no formato jornal da semana (um bloco por dia).
   const layoutAtual = ehMercado ? 'jornal' : layoutDigital
   const paginasJornal = paginarEncarte(itensArte, layoutAtual)
@@ -250,7 +255,7 @@ export default function Jornal() {
   const ordenarParaJornal = (lista) => [
     ...lista.filter((p) => p.origemFila === 'vencimento'),
     ...lista.filter((p) => p.origemFila !== 'vencimento').sort((a, b) => ordemSetor(a) - ordemSetor(b)),
-  ].map((p) => ({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
+  ].map((p) => comAjustePadrao({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
   const bandas = []
   const validadeDe = periodoDe
   const validadeAte = periodoAte && periodoAte >= periodoDe ? periodoAte : periodoDe
@@ -325,7 +330,13 @@ export default function Jornal() {
     const promo = String(precoEditando.promo).trim() ? Number(String(precoEditando.promo).replace(',', '.')) : null
     if (!(normal > 0)) return toast('Informe o preço normal.', 'erro')
     if (promo !== null && !(promo > 0 && promo < normal)) return toast('O preço da oferta precisa ser menor que o normal.', 'erro')
-    salvarProduto({ id: seloEditando.id, precoNormal: normal, precoPromo: promo, ajusteArte: ajusteEditando })
+    if (usarComoPadrao) {
+      // Vira o ajuste de todos os produtos sem ajuste próprio; este produto passa a seguir o padrão.
+      store.salvarConfig({ ajustePadraoArte: ajusteEditando })
+      salvarProduto({ id: seloEditando.id, precoNormal: normal, precoPromo: promo, ajusteArte: null })
+    } else {
+      salvarProduto({ id: seloEditando.id, precoNormal: normal, precoPromo: promo, ajusteArte: ajusteEditando })
+    }
     toast(`${seloEditando.nome}: ${promo ? `de ${formatBRL(normal)} por ${formatBRL(promo)}` : formatBRL(normal)}.`)
     setSeloEditando(null)
   }
@@ -875,6 +886,21 @@ export default function Jornal() {
                 ajuste={ajusteEditando}
                 onChange={setAjusteEditando}
               />
+              <button
+                type="button"
+                role="switch"
+                aria-checked={usarComoPadrao}
+                onClick={() => setUsarComoPadrao((v) => !v)}
+                className="mt-3 flex w-full items-center gap-3 rounded-xl border border-ink-soft/20 bg-white px-3 py-2.5 text-left hover:border-ink-soft/45"
+              >
+                <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-150 motion-reduce:transition-none ${usarComoPadrao ? 'bg-success' : 'bg-ink-soft/30'}`}>
+                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-150 motion-reduce:transition-none ${usarComoPadrao ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-ink">Usar como predefinido</span>
+                  <span className="block text-xs text-ink-soft">{usarComoPadrao ? 'Ligado: este ajuste vale para todos os produtos sem ajuste próprio.' : 'Desligado: o ajuste vale só para este produto.'}</span>
+                </span>
+              </button>
             </div>
             {(() => {
               const atual = fila.find((f) => f.id === seloEditando.id) || seloEditando

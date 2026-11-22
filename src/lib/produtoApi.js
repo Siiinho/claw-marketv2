@@ -3,7 +3,7 @@
 // Simula o efeito de "puxar do PDV": digita/escaneia o código e o produto vem preenchido.
 import imagensAprovadas from '../data/imagensProdutosAprovadas.json'
 
-import { buscarNaEanImages } from './eanImages'
+import { buscarNaEanImages, eanImagesConfigurada, eanComercial, eanImagesJaTentado, marcarEanImagesTentado } from './eanImages'
 
 const CATALOGOS_PUBLICOS = [
   { id: 'open-food-facts', dominio: 'world.openfoodfacts.org', nome: 'Open Food Facts' },
@@ -775,9 +775,58 @@ export function imagemProdutoPrecisaTratamento(produto) {
   return produto.imagemTratamento !== TRATAMENTO_PACKSHOT
 }
 
+// Foto ruim para o jornal: sem foto, baixa resolução, ilustrativa ou achada pelo nome (não pelo
+// código exato). Fotos escolhidas à mão, da pasta do mercado, aprovadas ou da EAN Images ficam.
+export function fotoRuimParaJornal(produto) {
+  if (!produto) return false
+  if (produto.imagemManual || produto.imagemTratamento === TRATAMENTO_MANUAL) return false
+  if (produto.imagemOrigem === 'catalogo' || produto.origem === 'eanimages') return false
+  const chave = String(produto.codigoBarras || produto.id || '').replace(/\s/g, '')
+  if (imagensAprovadas[chave]) return false
+  if (!produto.imagem) return true
+  if (produto.imagemAltaResolucao === false || produto.imagemIlustrativa === true) return true
+  return !['codigo-exato', 'confirmado-manualmente'].includes(produto.correspondencia || 'codigo-exato')
+}
+
+// Troca a foto ruim pela da EAN Images (código exato, fundo branco). Se a EAN Images não tiver,
+// a foto atual continua e o código só é consultado de novo depois de 7 dias.
+async function trocarFotoRuimPelaEanImages(chave, produto) {
+  if (!fotoRuimParaJornal(produto) || !eanComercial(chave) || eanImagesJaTentado(chave)) return null
+  if (!(await eanImagesConfigurada())) return null
+  marcarEanImagesTentado(chave)
+  const ean = await buscarNaEanImages(chave)
+  if (!(ean?.encontrado && ean.imagem)) return null
+  const imagem = await imagemParaDataURL(ean.imagem, { fundoBranco: true })
+  if (!String(imagem).startsWith('data:')) return null
+  const registro = {
+    codigoBarras: chave,
+    imagem,
+    marca: produto.marca || '',
+    setor: produto.setor || '',
+    origem: 'eanimages',
+    origemNome: 'EAN Images',
+    imagemOriginal: `eanimages:${chave}`,
+    imagemFonteUrl: null,
+    imagemPaginaUrl: null,
+    imagemLargura: null,
+    imagemAltura: null,
+    imagemAprovada: true,
+    correspondencia: 'codigo-exato',
+    imagemAltaResolucao: true,
+    imagemIlustrativa: false,
+    tratamento: TRATAMENTO_PACKSHOT,
+    salvoEm: new Date().toISOString(),
+    verificadoEm: new Date().toISOString(),
+  }
+  await gravarImagemSalva(registro)
+  return { ...produto, ...respostaImagemSalva(registro) }
+}
+
 export async function prepararProdutoParaJornal(produto) {
   const chave = String(produto.codigoBarras || produto.id || '').replace(/\s/g, '')
   if (!chave) return produto
+  const daEan = await trocarFotoRuimPelaEanImages(chave, produto)
+  if (daEan) return daEan
   if (!imagemProdutoPrecisaTratamento(produto)) return produto
 
   const local = imagemLocalPorCodigo(chave)

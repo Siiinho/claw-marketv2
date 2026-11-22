@@ -13,7 +13,7 @@ export function LogoEncarte({ h = 110, escala = 1 }) {
 
 // Ajuste de cada produto na arte (feito no editor, como no Canva): posição em fração da
 // célula e escala, para o nome, a foto e o preço. Sem ajuste, tudo fica no lugar padrão.
-export const AJUSTE_PADRAO = { nome: { x: 0, y: 0, s: 1 }, foto: { x: 0, y: 0, s: 1 }, preco: { x: 0, y: 0, s: 1 } }
+export const AJUSTE_PADRAO = { nome: { x: 0, y: 0, s: 1 }, foto: { x: 0, y: 0, s: 1 }, preco: { x: 0, y: 0, s: 1 }, selo: { x: 0, y: 0, s: 1 } }
 export const ajusteDe = (produto, camada) => ({ ...AJUSTE_PADRAO[camada], ...(produto?.ajusteArte?.[camada] || {}) })
 
 function Camada({ nome, produto, estilo, origem, children }) {
@@ -164,7 +164,9 @@ export function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
         <div className="absolute inset-x-0 text-center font-black" style={{ top: 90 * k, fontSize: 70 * k, color: setor.cor }}>•</div>
       )}
       </Camada>
-      <SeloArte produto={produto} largura={118 * k} className="cm-selo absolute" style={{ position: 'absolute', left: 2 * k, top: topoFoto - 4 * k, '--cm-i': indice }} />
+      <Camada nome="selo" produto={produto} estilo={estilo} origem={`${61 * k}px ${topoFoto + 16 * k}px`}>
+        <SeloArte produto={produto} largura={118 * k} className="cm-selo absolute" style={{ position: 'absolute', left: 2 * k, top: topoFoto - 4 * k, '--cm-i': indice }} />
+      </Camada>
       {k >= 1.2 && temDesconto(produto) && (
         <span
           className="absolute rounded-md bg-white/90 uppercase leading-none text-[#222]"
