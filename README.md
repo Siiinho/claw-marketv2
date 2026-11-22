@@ -296,6 +296,13 @@ período da campanha.
 - `public/setores/*.webp`: ilustração 3D de cada setor (Fluent Emoji da Microsoft, licença
   MIT, texto em `public/setores/LICENSE-fluentui-emoji.txt`). Aparecem nas abas do site,
   nos títulos de cada setor, na lista de compras e no lugar da foto quando o produto não tem.
+- `public/abas/*.webp`: ícones 3D das abas do app e do site (também Fluent Emoji, MIT),
+  usados por `ImagemAba` em `src/components/ui.jsx`. O rótulo da aba vem sempre ao lado.
+- Fontes da interface (self-hosted em `src/assets/fonts`, licença OFL): Figtree para texto
+  e botões, Bricolage Grotesque para títulos (`.display-bengala`) e Archivo Narrow para
+  preços (`--font-preco`). O jornal A4 continua com a fonte própria (`--font-encarte`).
+  A escala de tipos e as cores com o contraste de cada uma estão no arquivo do Figma
+  "Fundação · fontes e cores".
 - Os selos (Oferta, Imperdível, Queima de estoque, Super oferta, Preço baixo, Leve mais,
   Só hoje, Exclusivo) são desenhados em `src/components/SeloArte.jsx` com a fonte livre
   Bangers (OFL, pacote `@fontsource/bangers`).

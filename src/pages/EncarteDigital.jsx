@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Icon, Logo, PrecoVarejo, ImagemSetor } from '../components/ui'
+import { Icon, Logo, PrecoVarejo, ImagemSetor, ImagemAba } from '../components/ui'
 import { SETORES, setorById, formatBRL, formatDataCurta, MERCADO_ENCARTE, noMercadoEncarte, dataISOmaisDias, plural } from '../lib/utils'
 import { carregarEncartePublicado, assinarEncarte, linkDoEncarte } from '../lib/encartePublico'
 import { temaCampanhaById, temasDoSetor, caminhoArte } from '../lib/temasCampanha'
@@ -142,7 +142,7 @@ function BotaoLista({ produto, compras, grande = false }) {
         onClick={(e) => { e.stopPropagation(); compras.alternar(produto) }}
         aria-pressed={na}
         aria-label={na ? `Adicionado: ${produto.nome}. Toque para remover` : `Adicionar ${produto.nome}`}
-        className={`${base} h-14 w-full rounded-2xl px-4 text-[17px] ${na ? 'bg-[#128c4a] text-white' : 'bg-navy text-white hover:bg-navy-light'}`}
+        className={`${base} h-14 w-full rounded-2xl px-4 text-[17px] ${na ? 'bg-[#0f7a40] text-white' : 'bg-navy text-white hover:bg-navy-light'}`}
       >
         <Icon name={na ? 'CircleCheck' : 'ShoppingCart'} size={20} strokeWidth={2.25} /> {na ? 'Adicionado' : 'Adicionar'}
       </button>
@@ -154,7 +154,7 @@ function BotaoLista({ produto, compras, grande = false }) {
       onClick={(e) => { e.stopPropagation(); compras.alternar(produto) }}
       aria-pressed={na}
       aria-label={na ? `Remover ${produto.nome}` : `Adicionar ${produto.nome}`}
-      className={`${base} h-10 w-10 rounded-full ${na ? 'bg-[#128c4a] text-white' : 'bg-cream text-navy hover:bg-cream-200'}`}
+      className={`${base} h-10 w-10 rounded-full ${na ? 'bg-[#0f7a40] text-white' : 'bg-cream text-navy hover:bg-cream-200'}`}
     >
       <Icon name={na ? 'Check' : 'Plus'} size={20} strokeWidth={2.4} />
     </button>
@@ -210,7 +210,7 @@ function ListaCompras({ compras, loja, encarte }) {
             {g.itens.map((i) => (
               <div key={i.id} className={`flex items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-black/[0.05] transition-opacity duration-200 ${i.pego ? 'opacity-60' : ''}`}>
                 <button type="button" onClick={() => compras.mudar(i.id, { pego: !i.pego })} aria-pressed={i.pego} aria-label={i.pego ? 'Desmarcar' : 'Marcar como pego'}
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-[1.5px] transition-colors duration-150 ${i.pego ? 'border-[#128c4a] bg-[#128c4a] text-white' : 'border-black/20 bg-white text-transparent'}`}>
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-[1.5px] transition-colors duration-150 ${i.pego ? 'border-[#0f7a40] bg-[#0f7a40] text-white' : 'border-black/20 bg-white text-transparent'}`}>
                   <Icon name="Check" size={20} />
                 </button>
                 {i.imagem ? <img src={i.imagem} alt="" className="h-12 w-12 shrink-0 object-contain" /> : null}
@@ -679,8 +679,9 @@ export default function EncarteDigital() {
                     type="button"
                     onClick={() => escolherVista(id)}
                     aria-pressed={vista === id}
-                    className={`h-9 rounded-full px-4 text-sm font-black transition-[transform,background-color] duration-150 ease-out active:scale-[0.96] ${vista === id ? 'bg-white text-navy shadow-sm ring-1 ring-black/[0.06]' : 'text-ink-soft hover:text-navy'}`}
+                    className={`flex h-9 items-center gap-1.5 rounded-full pl-2 pr-4 text-sm font-bold transition-[transform,background-color] duration-150 ease-out active:scale-[0.96] ${vista === id ? 'bg-white text-navy shadow-sm ring-1 ring-black/[0.06]' : 'text-ink-soft hover:text-navy'}`}
                   >
+                    <ImagemAba id={id} size={22} />
                     {rotulo}
                   </button>
                 ))}
@@ -690,10 +691,10 @@ export default function EncarteDigital() {
                 onClick={() => escolherVista('compras')}
                 aria-pressed={vista === 'compras'}
                 aria-label={compras.lista.length ? `Minha lista, ${plural(compras.lista.length, 'item', 'itens')}` : undefined}
-                className={`flex h-11 items-center gap-2 rounded-full px-4 text-sm font-black transition-transform duration-150 ease-out active:scale-[0.96] ${vista === 'compras' ? 'bg-[#128c4a] text-white' : 'bg-white text-[#128c4a] ring-1 ring-[#128c4a]/40'}`}
+                className={`flex h-11 items-center gap-2 rounded-full px-4 text-sm font-black transition-transform duration-150 ease-out active:scale-[0.96] ${vista === 'compras' ? 'bg-[#0f7a40] text-white' : 'bg-white text-[#0f7a40] ring-1 ring-[#0f7a40]/40'}`}
               >
-                <Icon name="ShoppingCart" size={18} /> Minha lista
-                {compras.lista.length > 0 && <span className={`num-tab min-w-[22px] rounded-full px-1.5 text-center text-xs leading-[22px] ${vista === 'compras' ? 'bg-white text-[#128c4a]' : 'bg-[#128c4a] text-white'}`}>{compras.lista.length}</span>}
+                <ImagemAba id="compras" size={22} /> Minha lista
+                {compras.lista.length > 0 && <span className={`num-tab min-w-[22px] rounded-full px-1.5 text-center text-xs leading-[22px] ${vista === 'compras' ? 'bg-white text-[#0f7a40]' : 'bg-[#0f7a40] text-white'}`}>{compras.lista.length}</span>}
               </button>
             </div>
           </div>
@@ -778,9 +779,9 @@ export default function EncarteDigital() {
       {itens.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-black/[0.08] bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           <div className="mx-auto grid max-w-md grid-cols-3" role="group" aria-label="Jeito de ver">
-            {[['encarte', 'Encarte', 'Newspaper'], ['lista', 'Produtos', 'LayoutGrid'], ['compras', 'Minha lista', 'ShoppingCart']].map(([id, rotulo, icone]) => {
+            {[['encarte', 'Encarte'], ['lista', 'Produtos'], ['compras', 'Minha lista']].map(([id, rotulo]) => {
               const ativa = vista === id
-              const cor = id === 'compras' ? '#128c4a' : '#082b4f'
+              const cor = id === 'compras' ? '#0f7a40' : '#082b4f'
               return (
                 <button
                   key={id}
@@ -788,13 +789,13 @@ export default function EncarteDigital() {
                   onClick={() => escolherVista(id)}
                   aria-pressed={ativa}
                   aria-label={id === 'compras' && compras.lista.length ? `Minha lista, ${plural(compras.lista.length, 'item', 'itens')}` : undefined}
-                  className="flex h-[4.5rem] flex-col items-center justify-center gap-1 text-[12px] font-extrabold transition-transform duration-150 ease-out active:scale-[0.96]"
+                  className="flex h-[4.5rem] flex-col items-center justify-center gap-1 text-[12px] font-bold transition-transform duration-150 ease-out active:scale-[0.96]"
                   style={{ color: ativa ? cor : '#3b4656' }}
                 >
-                  <span className="relative flex h-8 w-14 items-center justify-center rounded-full transition-colors duration-150" style={{ background: ativa ? `${cor}17` : 'transparent' }}>
-                    <Icon name={icone} size={22} strokeWidth={ativa ? 2.25 : 1.75} />
+                  <span className="relative flex h-9 w-14 items-center justify-center rounded-full transition-colors duration-150" style={{ background: ativa ? `${cor}17` : 'transparent' }}>
+                    <ImagemAba id={id} size={28} className={ativa ? '' : 'opacity-90'} />
                     {id === 'compras' && compras.lista.length > 0 && (
-                      <span className="num-tab absolute -right-0.5 -top-1 min-w-[20px] rounded-full bg-[#128c4a] px-1 text-center text-[11px] leading-[20px] text-white ring-2 ring-white">{compras.lista.length}</span>
+                      <span className="num-tab absolute -right-0.5 -top-1 min-w-[20px] rounded-full bg-[#0f7a40] px-1 text-center text-[11px] leading-[20px] text-white ring-2 ring-white">{compras.lista.length}</span>
                     )}
                   </span>
                   {rotulo}

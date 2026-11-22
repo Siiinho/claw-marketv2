@@ -71,6 +71,25 @@ export function ProdutoThumb({ produto, size = 44 }) {
   )
 }
 
+// ---- ícone 3D das abas (decorativo: o rótulo da aba vem sempre ao lado) ----
+const ICONE_ABA = { dashboard: 'inicio', compras: 'lista', encarte: 'jornal', lista: 'produtos' }
+export function ImagemAba({ id, size = 24, className = '', style }) {
+  const nome = ICONE_ABA[id] || id
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}abas/${nome}.webp`}
+      alt=""
+      aria-hidden="true"
+      width={size}
+      height={size}
+      decoding="async"
+      draggable={false}
+      className={`shrink-0 select-none object-contain ${className}`}
+      style={{ width: size, height: size, ...style }}
+    />
+  )
+}
+
 // ---- ilustração 3D do setor (decorativa: o nome do setor vem sempre ao lado) ----
 export function ImagemSetor({ id, size = 40, className = '', style }) {
   return (
