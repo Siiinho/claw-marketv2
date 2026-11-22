@@ -495,7 +495,7 @@ export default function Jornal() {
                     </span>
                     <span className="block w-full min-w-0">
                       <span className="block text-sm font-bold leading-tight">{p.titulo}</span>
-                      <span className={`block truncate text-xs ${atual ? 'text-white/75' : 'text-ink-soft'}`}>{p.resumo}</span>
+                      <span className={`block truncate text-xs ${atual ? 'text-white' : 'text-ink'}`}>{p.resumo}</span>
                     </span>
                   </button>
                 </li>

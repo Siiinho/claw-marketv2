@@ -342,6 +342,7 @@
   --text-sm: 0.9375rem;
   --text-sm--line-height: 1.4;
   font-family: var(--font-sans);
+  --color-ink-soft: #2a3546;
   font-weight: 500;
   color: var(--color-ink);
 }

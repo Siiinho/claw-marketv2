@@ -257,8 +257,8 @@ export function Secao({ numero, titulo, descricao, acao, children, className = '
               <span className="num-tab flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">{numero}</span>
             )}
             <div className="min-w-0">
-              {titulo && <h2 className="text-base font-bold leading-7 text-navy">{titulo}</h2>}
-              {descricao && <p className="text-sm text-ink-soft">{descricao}</p>}
+              {titulo && <h2 className="text-[17px] font-extrabold leading-7 text-navy">{titulo}</h2>}
+              {descricao && <p className="mt-0.5 text-[15px] font-medium leading-snug text-ink">{descricao}</p>}
             </div>
           </div>
           {acao && <div className="flex shrink-0 flex-wrap items-center gap-2">{acao}</div>}

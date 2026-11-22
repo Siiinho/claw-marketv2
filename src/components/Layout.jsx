@@ -215,13 +215,19 @@ export default function Layout() {
       <main className="flex-1 overflow-x-hidden overflow-y-auto pb-28 md:pb-10">
         <div className="mx-auto max-w-7xl px-4 pt-5 md:px-6 md:pt-7">
           {atual.key !== 'dashboard' && (
-            <div className="mb-5 hidden flex-wrap items-end justify-between gap-3 md:flex">
-              <div className="min-w-0">
-                <h1 className="display-bengala text-[30px] leading-none text-navy">{atual.label}</h1>
-                <p className="mt-1.5 text-sm text-ink-soft">{SUBTITULOS[atual.key]}</p>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              {/* o que fazer nesta aba: sempre visível e bem legível, também no celular */}
+              <div className="flex min-w-0 items-center gap-3 md:gap-4">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-navy/10 md:h-14 md:w-14">
+                  <ImagemAba id={atual.key} size={32} />
+                </span>
+                <div className="min-w-0">
+                  <h1 className="display-bengala hidden text-[30px] leading-none text-navy md:block">{atual.label}</h1>
+                  <p className="text-[16px] font-semibold leading-snug text-ink md:mt-1.5 md:text-[17px]">{SUBTITULOS[atual.key]}</p>
+                </div>
               </div>
               {atual.key === 'produtos' && (
-                <div className="relative">
+                <div className="relative hidden md:block">
                   <Icon name="Search" size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" />
                   <input
                     value={busca}
