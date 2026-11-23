@@ -115,3 +115,46 @@ export async function totalProdutosBengala() {
   const [catalogo, base] = await Promise.all([carregarCatalogo(), carregarBase()])
   return catalogo.size + base.mapa.size
 }
+
+// ---------- busca pelo nome ----------
+// Procura nos dois catálogos (mercadologia da loja + base de 28 mil) por todas as palavras
+// digitadas, sem ligar para acento nem maiúscula. "arroz tio 5" acha "ARROZ TIO JOÃO 5KG".
+export const normalizarBusca = (texto) => String(texto || '')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+let indicePromise
+async function carregarIndiceNomes() {
+  if (!indicePromise) {
+    indicePromise = Promise.all([carregarCatalogo(), carregarBase()]).then(([catalogo, base]) => {
+      const lista = []
+      const vistos = new Set()
+      for (const p of catalogo.values()) {
+        vistos.add(p.codigoBarras)
+        vistos.add(String(p.codigoBarras).replace(/^0+/, ''))
+        lista.push({ codigoBarras: p.codigoBarras, nome: p.nome, setor: p.setor, precoNormal: p.precoNormal ?? null, origem: 'loja', chave: normalizarBusca(p.nome) })
+      }
+      for (const linha of base.mapa.values()) {
+        const [ean, nome, setor] = linha
+        if (vistos.has(ean) || vistos.has(String(ean).replace(/^0+/, ''))) continue
+        lista.push({ codigoBarras: ean, nome, setor, precoNormal: null, origem: 'base', chave: normalizarBusca(nome) })
+      }
+      return lista
+    }).catch((erro) => { indicePromise = null; throw erro })
+  }
+  return indicePromise
+}
+
+// Devolve até `limite` produtos. Os da loja (com preço) vêm primeiro; depois, os que começam
+// com a primeira palavra digitada e os de nome mais curto (mais perto do que foi digitado).
+export async function buscarProdutosPorNome(termo, { limite = 12 } = {}) {
+  const palavras = normalizarBusca(termo).split(' ').filter(Boolean)
+  if (!palavras.length || palavras.join('').length < 2) return []
+  const indice = await carregarIndiceNomes()
+  const achados = []
+  for (const item of indice) {
+    if (palavras.every((p) => item.chave.includes(p))) achados.push(item)
+  }
+  const pontos = (item) => (item.origem === 'loja' ? 0 : 1000) + (item.chave.startsWith(palavras[0]) ? 0 : 500) + item.chave.length
+  return achados.sort((a, b) => pontos(a) - pontos(b)).slice(0, limite).map(({ chave: _, ...item }) => item)
+}

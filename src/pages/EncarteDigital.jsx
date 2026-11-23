@@ -449,7 +449,7 @@ function AbaSetor({ aba, ativa, onEscolher }) {
       type="button"
       onClick={onEscolher}
       aria-pressed={ativa}
-      aria-label={`${aba.nome}, ${plural(aba.n, 'oferta', 'ofertas')}`}
+      aria-label={aba.ajuste ? `${aba.nome}, ajustando ofertas` : `${aba.nome}, ${plural(aba.n, 'oferta', 'ofertas')}`}
       className="group flex w-[78px] shrink-0 flex-col items-center gap-1.5 rounded-2xl px-1 pb-1 pt-2 transition-transform duration-150 ease-out active:scale-[0.96]"
     >
       <span
@@ -459,12 +459,50 @@ function AbaSetor({ aba, ativa, onEscolher }) {
         <span className="transition-transform duration-200 ease-out [@media(hover:hover)]:group-hover:-translate-y-0.5">
           <ImagemSetor id={aba.id} size={38} />
         </span>
-        <span className={`num-tab absolute -right-2 -top-2 min-w-[22px] rounded-full px-1.5 text-center text-[11px] font-black leading-[22px] ring-2 ring-white ${ativa ? 'bg-navy text-white' : 'bg-white text-navy shadow-sm'}`}>
-          {aba.n}
-        </span>
+        {aba.ajuste ? (
+          <span className="absolute -right-2 -top-2 flex h-[22px] w-[22px] items-center justify-center rounded-full bg-[#b3261e] text-white ring-2 ring-white" aria-hidden="true">
+            <Icon name="Wrench" size={12} strokeWidth={2.5} />
+          </span>
+        ) : (
+          <span className={`num-tab absolute -right-2 -top-2 min-w-[22px] rounded-full px-1.5 text-center text-[11px] font-black leading-[22px] ring-2 ring-white ${ativa ? 'bg-navy text-white' : 'bg-white text-navy shadow-sm'}`}>
+            {aba.n}
+          </span>
+        )}
       </span>
       <span className={`line-clamp-2 text-center text-[12px] font-extrabold leading-tight ${ativa ? 'text-navy' : 'text-ink-soft'}`}>{aba.nome}</span>
     </button>
+  )
+}
+
+// Setor desligado pela loja para ajuste de preços: aviso no lugar dos produtos. A página
+// atualiza sozinha quando a loja religa o setor.
+function AjustandoOfertas({ setor, outras, onEscolher }) {
+  return (
+    <div className="mx-auto max-w-md rounded-3xl bg-white px-6 py-12 text-center ring-1 ring-black/[0.06]" role="status">
+      <span className="relative mx-auto flex h-24 w-24 items-center justify-center rounded-3xl" style={{ background: `${setor?.cor || '#082b4f'}1c` }}>
+        <ImagemSetor id={setor?.id || 'geral'} size={64} />
+        <span className="absolute -bottom-2 -right-2 flex h-10 w-10 items-center justify-center rounded-full bg-[#b3261e] text-white ring-4 ring-white">
+          <Icon name="Wrench" size={20} strokeWidth={2.25} className="motion-safe:animate-[cm-chave_1.6s_ease-in-out_infinite]" />
+        </span>
+      </span>
+      <p className="mt-6 text-2xl font-black text-navy">Ajustando ofertas</p>
+      <p className="mt-2 text-base leading-relaxed text-ink-soft">
+        {setor ? <>Estamos atualizando os preços de <strong className="text-navy">{setor.nome}</strong>.</> : 'Estamos atualizando os preços.'} Volte em instantes: esta página muda sozinha quando as ofertas voltarem.
+      </p>
+      {outras.length > 0 && (
+        <div className="mt-6">
+          <p className="text-sm font-bold text-ink">Enquanto isso, veja:</p>
+          <div className="mt-2 flex flex-wrap justify-center gap-2">
+            {outras.slice(0, 6).map((a) => (
+              <button key={a.id} type="button" onClick={() => onEscolher(a.id)}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-cream px-4 text-sm font-bold text-navy ring-1 ring-black/[0.06] transition-transform duration-150 ease-out active:scale-[0.96]">
+                <ImagemSetor id={a.id === 'todos' ? 'geral' : a.id} size={22} /> {a.nome}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -520,7 +558,11 @@ export default function EncarteDigital() {
     return () => { ativo = false; cancelar() }
   }, [])
 
-  const itens = encarte?.itens || []
+  // Setores que a loja desligou para ajuste: os produtos deles somem de todas as vistas e a aba
+  // do setor mostra "Ajustando ofertas" até a loja religar.
+  const todosItens = encarte?.itens || []
+  const pausados = useMemo(() => new Set(Array.isArray(encarte?.pausados) ? encarte.pausados : []), [encarte])
+  const itens = useMemo(() => (pausados.size ? todosItens.filter((p) => !pausados.has(p.setor)) : todosItens), [todosItens, pausados])
   const temaGeral = temaCampanhaById(encarte?.tema)
   // Cada setor tem o seu jornal, com o template escolhido para ele no Jornal.
   const temaDoSetor = (id) => temaCampanhaById(encarte?.temasSetor?.[id] || temasDoSetor(id)[0]?.id || encarte?.tema)
@@ -536,12 +578,13 @@ export default function EncarteDigital() {
   // Fundo enviado no Jornal vale só para o template dele.
   const fundoDoTema = encarte?.fundos?.[tema.id] || (tema.id === encarte?.tema ? encarte?.fundo || null : null)
   const setoresPresentes = useMemo(
-    () => SETORES.filter((s) => itens.some((p) => p.setor === s.id)),
-    [itens]
+    () => SETORES.filter((s) => todosItens.some((p) => p.setor === s.id)),
+    [todosItens]
   )
+  const setorEmAjuste = pausados.has(setorFiltro)
   const visiveis = ehMercado ? ofertasDoDia : setorFiltro === 'todos' || setorFiltro === 'compras' ? itens : itens.filter((p) => p.setor === setorFiltro)
   const grupos = setorFiltro === 'todos' || setorFiltro === 'compras'
-    ? setoresPresentes.map((s) => ({ setor: s, itens: itens.filter((p) => p.setor === s.id) }))
+    ? setoresPresentes.filter((s) => !pausados.has(s.id)).map((s) => ({ setor: s, itens: itens.filter((p) => p.setor === s.id) }))
     : [{ setor: ehMercado ? MERCADO_ENCARTE : setorById(setorFiltro), itens: visiveis }]
   // Mercado Encarte sempre no formato jornal da semana (um bloco por dia).
   const layout = ehMercado ? 'jornal' : encarte?.layout || 'grade'
@@ -588,7 +631,7 @@ export default function EncarteDigital() {
   const abas = [
     ...(ofertasDoDia.length ? [{ id: MERCADO_ENCARTE.id, nome: 'Ofertas de hoje', cor: MERCADO_ENCARTE.cor, n: ofertasDoDia.length }] : []),
     ...(geralNoSite ? [{ id: 'todos', nome: 'Todas', cor: '#082b4f', n: itens.length }] : []),
-    ...setoresPresentes.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor, n: itens.filter((p) => p.setor === s.id).length })),
+    ...setoresPresentes.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor, n: itens.filter((p) => p.setor === s.id).length, ajuste: pausados.has(s.id) })),
   ]
   const abaAtual = abas.find((a) => a.id === setorFiltro)
   // Aba escondida pela loja (ou que sumiu): abre a primeira que existe.
@@ -677,7 +720,7 @@ export default function EncarteDigital() {
         </div>
       </header>
 
-      {itens.length > 0 && (
+      {todosItens.length > 0 && (
         <nav ref={navRef} className="sticky top-0 z-20 border-b border-black/[0.06] bg-white/95 backdrop-blur" aria-label="Jornais do mercado">
           <div className="mx-auto flex max-w-6xl items-center gap-3 md:px-4">
             {/* Um jornal para cada setor, mais as ofertas de hoje e o jornal com tudo */}
@@ -727,6 +770,12 @@ export default function EncarteDigital() {
               </div>
             ))}
           </div>
+        ) : vista !== 'compras' && (setorEmAjuste || (!itens.length && todosItens.length > 0)) ? (
+          <AjustandoOfertas
+            setor={setorEmAjuste ? setorById(setorFiltro) : null}
+            outras={abas.filter((a) => !a.ajuste && a.id !== setorFiltro)}
+            onEscolher={(id) => mudar(() => setSetorFiltro(id))}
+          />
         ) : !itens.length ? (
           <div className="mx-auto max-w-md rounded-3xl bg-white px-6 py-14 text-center ring-1 ring-black/[0.06]">
             <ImagemSetor id="geral" size={88} className="mx-auto" />
@@ -791,7 +840,7 @@ export default function EncarteDigital() {
       </footer>
 
       {/* Celular: as três vistas ficam no alcance do polegar */}
-      {itens.length > 0 && (
+      {todosItens.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-black/[0.08] bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           <div className="mx-auto grid max-w-md grid-cols-3" role="group" aria-label="Jeito de ver">
             {[['encarte', 'Encarte'], ['lista', 'Produtos'], ['compras', 'Minha lista']].map(([id, rotulo]) => {
