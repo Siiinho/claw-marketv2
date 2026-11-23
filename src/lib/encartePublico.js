@@ -53,7 +53,9 @@ const soPublico = (item) => {
 
 // Template de cada setor, tamanho do logo e fundos por template também vão para o site:
 // sem isso cada aba de setor caía no template padrão.
-const extrasDoJornal = ({ temasSetor, escalaLogo, fundos, mostrarGeral, mostrarMercado }) => ({
+const extrasDoJornal = ({ temasSetor, escalaLogo, fundos, mostrarGeral, mostrarMercado, pausados }) => ({
+  // Setores desligados para ajuste: a aba fica no site com o aviso "Ajustando ofertas".
+  pausados: Array.isArray(pausados) ? [...new Set(pausados.filter(Boolean))] : [],
   // Abas do site que a loja pode esconder (sem valor = aparece).
   mostrarGeral: mostrarGeral !== false,
   mostrarMercado: mostrarMercado !== false,
@@ -291,4 +293,35 @@ export function prepararFundoTemplate(arquivo) {
     }
     leitor.readAsDataURL(arquivo)
   })
+}
+
+
+// Liga ou desliga um setor no site do cliente NA HORA, sem publicar o jornal de novo: pega o
+// encarte que já está no ar, troca só a lista de setores em ajuste e grava (nuvem, PC e aparelho).
+// Os celulares abertos recebem a mudança como uma versão nova.
+export async function atualizarPausadosNoSite(pausados) {
+  const lista = [...new Set((pausados || []).filter(Boolean))]
+  const atual = await carregarEncartePublicado()
+  if (!atual || !Array.isArray(atual.itens) || !atual.itens.length) return { semEncarte: true }
+  const { origem: _origem, ...base } = atual
+  const encarte = { ...base, pausados: lista, versao: Date.now() }
+  let gravou = false
+  if (nuvemAtiva()) {
+    try { await publicarEncarteNuvem(encarte); gravou = true } catch (_) { /* tenta o PC */ }
+  }
+  try {
+    const { versao: _v, publicadoEm: _p, ...corpo } = encarte
+    await enviarAoServidor(corpo)
+    gravou = true
+  } catch (_) { /* sem servidor do PC: tudo bem se a nuvem gravou */ }
+  try {
+    const local = lerEncartePublicado()
+    if (local) {
+      localStorage.setItem(CHAVE, JSON.stringify({ ...local, pausados: lista, versao: encarte.versao }))
+      gravou = true
+      try { const canal = new BroadcastChannel(CANAL); canal.postMessage(encarte.versao); canal.close() } catch (_) {}
+    }
+  } catch (_) { /* sem espaço */ }
+  if (!gravou) throw new Error('Não foi possível avisar o site agora. Confira a internet e tente de novo.')
+  return { versao: encarte.versao }
 }

@@ -689,6 +689,14 @@ export function StoreProvider({ children }) {
     registrarAcao('remover-fila', 'produto', id)
   }, [registrarAcao])
 
+  // Jornal novo: tira da fila os produtos indicados (ou a fila toda). Eles continuam cadastrados,
+  // com preço, setor e foto; só precisam ser bipados de novo para entrar no próximo jornal.
+  const limparFila = useCallback((ids) => {
+    const alvo = ids ? new Set(ids) : null
+    setProdutos((list) => list.map((p) => (p.naFila && (!alvo || alvo.has(p.id)) ? { ...p, naFila: false, origemFila: null, adicionadoFilaEm: null } : p)))
+    registrarAcao('limpar-fila', 'produto', null, alvo ? `${alvo.size} produtos` : 'fila toda')
+  }, [registrarAcao])
+
   // ===== ofertas =====
   const criarOferta = useCallback((produtoId, titulo, desconto, validade) => {
     setOfertas((list) => [
@@ -814,6 +822,7 @@ export function StoreProvider({ children }) {
     adicionarNaFila,
     salvarProdutoNaFila,
     removerDaFila,
+    limparFila,
     criarOferta,
     toggleOferta,
     excluirOferta,

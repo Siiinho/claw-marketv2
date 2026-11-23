@@ -9,7 +9,7 @@ import {
   SETORES, setorById, formatBRL, MERCADO_ENCARTE, noMercadoEncarte,
   percentDesc, dataISOmaisDias, SELOS_OFERTA, plural, formatDataCurta, paraNumero,
 } from '../lib/utils'
-import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
+import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, atualizarPausadosNoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
 import SeletorTema from '../components/SeletorTema'
 import SeloArte from '../components/SeloArte'
 import PrecoArte, { ESTILOS_PRECO, estiloPrecoById } from '../components/PrecoArte'
@@ -60,7 +60,7 @@ function salvarRascunho(dados) {
 export default function Jornal() {
   const navigate = useNavigate()
   const store = useStore()
-  const { fila, config, jornais, ofertaDoProduto, salvarProduto, salvarJornal, excluirJornal, removerDaFila, toast } = store
+  const { fila, config, jornais, ofertaDoProduto, salvarProduto, salvarJornal, excluirJornal, removerDaFila, limparFila, toast } = store
   const [aba, setAba] = useState('gerar')
   // Passo do gerador: 0 jornal, 1 produtos, 2 visual, 3 publicar. Fila vazia começa nos produtos.
   const [passo, setPasso] = useState(() => (fila.length ? 0 : 1))
@@ -78,6 +78,12 @@ export default function Jornal() {
   const [exportando, setExportando] = useState(false)
   const [pdfPronto, setPdfPronto] = useState(null)
   const [mostrarRevisao, setMostrarRevisao] = useState(false)
+  // Jornal novo: confirmação para esvaziar a fila (toda, ou só o setor aberto).
+  const [confirmarNovo, setConfirmarNovo] = useState(false)
+  // Setores desligados para ajuste: no site do cliente a aba mostra "Ajustando ofertas".
+  const pausados = Array.isArray(config.setoresPausados) ? config.setoresPausados : []
+  const [mudandoAjuste, setMudandoAjuste] = useState(null)
+  const [acabouDePublicar, setAcabouDePublicar] = useState(false)
   const pageRefs = useRef([])
   const historicoRefs = useRef([])
   const revisaoRef = useRef(null)
@@ -384,6 +390,7 @@ export default function Jornal() {
       escalaLogo,
       mostrarGeral: config.siteMostrarGeral !== false,
       mostrarMercado: config.siteMostrarMercado !== false,
+      pausados,
       layout: layoutDigital,
       fundo: lerFundoTemplate(temaDigital),
       loja: lojaAtual,
@@ -395,6 +402,7 @@ export default function Jornal() {
     try {
       const r = await enviarEncarteAoSite(dados)
       setSite((s) => ({ ...s, online: true, erro: null, publicadoEm: r.publicadoEm }))
+      setAcabouDePublicar(true)
       toast(`Publicado no site: ${r.itens} produtos. Quem estiver com o link aberto já vê a nova versão.`)
     } catch (erro) {
       setSite((s) => ({ ...s, online: erro.codigo !== 'offline', protegido: s.protegido || erro.codigo === 'senha', erro: erro.message }))
@@ -402,6 +410,38 @@ export default function Jornal() {
     } finally {
       setPublicando(false)
     }
+  }
+
+  // Desliga (ou religa) um setor no site na hora, sem publicar o jornal de novo.
+  const alternarAjuste = async (setorId, pausar) => {
+    const nome = setorById(setorId).nome
+    const novos = pausar ? [...new Set([...pausados, setorId])] : pausados.filter((id) => id !== setorId)
+    store.salvarConfig({ setoresPausados: novos })
+    setMudandoAjuste(setorId)
+    try {
+      const r = await atualizarPausadosNoSite(novos)
+      toast(r.semEncarte
+        ? `Guardado. ${nome} ${pausar ? 'entra em ajuste' : 'volta'} quando o jornal for publicado.`
+        : pausar ? `${nome} desligado: o site mostra "Ajustando ofertas" agora.` : `${nome} voltou ao site com as ofertas.`, pausar ? 'info' : 'sucesso')
+    } catch (erro) {
+      toast(`${erro.message} A chave vale na próxima publicação.`, 'erro')
+    } finally {
+      setMudandoAjuste(null)
+    }
+  }
+
+  // Produtos que saem da fila no "Começar jornal novo": no Geral, a fila toda; num setor, só os dele;
+  // no Mercado Encarte, só os com estrela.
+  const filaDoNovo = ehMercado ? fila.filter((p) => noMercadoEncarte(p)) : ehSetor ? fila.filter((p) => p.setor === jornalSel) : fila
+  const comecarJornalNovo = () => {
+    const n = filaDoNovo.length
+    limparFila(filaDoNovo.map((p) => p.id))
+    setExcluidos(new Set())
+    setPdfPronto(null)
+    setConfirmarNovo(false)
+    irPara(1)
+    toast(`Fila limpa: ${plural(n, 'produto saiu', 'produtos saíram')}. Bipe os produtos do jornal novo.`, 'sucesso')
+    setTimeout(() => document.querySelector('#scanner-jornal input')?.focus(), 80)
   }
 
   const salvar = () => {
@@ -545,12 +585,32 @@ export default function Jornal() {
                           className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-sm ${ativo ? 'border-navy bg-navy/[0.045] font-bold text-navy shadow-[inset_0_0_0_1px_var(--color-navy)]' : `border-ink-soft/20 bg-white font-semibold hover:border-ink-soft/45 ${n ? 'text-ink' : 'text-ink-soft'}`}`}>
                           <ImagemSetor id={s.id} size={24} />
                           <span className="min-w-0 flex-1 truncate">{s.nome}</span>
+                          {pausados.includes(s.id) && <Icon name="Wrench" size={14} className="shrink-0 text-critical" aria-label="Em ajuste no site" />}
                           <span className={`num-tab shrink-0 text-xs ${n ? 'font-bold text-ink' : 'text-ink-soft'}`}>{n}</span>
                         </button>
                       )
                     })}
                   </div>
                   <p className="mt-3 text-xs text-ink-soft">No site do cliente, o Geral, o Mercado Encarte e cada setor com produto viram abas, cada uma com o seu template.</p>
+                  {ehSetor && !ehMercado && (
+                    <>
+                      <Rotulo className="mt-5">Jornal de {nomeJornal} no site</Rotulo>
+                      <ChaveAjuste
+                        noAr={!pausados.includes(jornalSel)}
+                        nome={nomeJornal}
+                        ocupado={mudandoAjuste === jornalSel}
+                        onChange={(noAr) => alternarAjuste(jornalSel, !noAr)}
+                      />
+                    </>
+                  )}
+                  {pausados.length > 0 && !(ehSetor && !ehMercado && pausados.length === 1 && pausados[0] === jornalSel) && (
+                    <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-ink-soft">
+                      <Icon name="Wrench" size={13} className="text-critical" /> Em ajuste no site:
+                      {pausados.map((id) => (
+                        <button key={id} type="button" onClick={() => setJornalSel(id)} className="rounded-full bg-critical/10 px-2 py-0.5 font-semibold text-critical hover:bg-critical/15">{setorById(id).nome}</button>
+                      ))}
+                    </p>
+                  )}
                   <Rotulo className="mt-5">Aparece no site do cliente?</Rotulo>
                   <div className="grid gap-1.5">
                     <ChaveSite ligado={config.siteMostrarGeral !== false} titulo="Jornal geral" onChange={(v) => { store.salvarConfig({ siteMostrarGeral: v }); toast(v ? 'O Geral volta a aparecer no site depois de publicar.' : 'O Geral sai do site depois de publicar.', 'info') }} />
@@ -562,7 +622,17 @@ export default function Jornal() {
 
               {/* 2. produtos */}
               {passo === 1 && (
-                <Secao titulo={`Produtos do jornal ${nomeJornal}`} descricao="Bipe ou digite o código. O que o sistema já conhece entra direto na fila.">
+                <Secao titulo={`Produtos do jornal ${nomeJornal}`} descricao="Bipe, digite o código ou procure pelo nome. O que o sistema já conhece entra direto na fila.">
+                  {filaDoNovo.length > 0 && (
+                    <button type="button" onClick={() => setConfirmarNovo(true)}
+                      className="mb-3 flex w-full items-center gap-3 rounded-xl border border-dashed border-ink-soft/30 bg-white px-3 py-2.5 text-left hover:border-navy">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-navy/[0.07] text-navy"><Icon name="FilePlus2" size={19} /></span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold text-ink">Começar jornal novo</span>
+                        <span className="block text-xs text-ink-soft">Esvazia a fila {ehMercado ? 'das estrelas' : ehSetor ? `de ${nomeJornal}` : 'toda'} ({filaDoNovo.length}) para bipar só os produtos novos.</span>
+                      </span>
+                    </button>
+                  )}
                   <ScannerJornal embutido />
                   {filaDoPainel.length === 0 ? (
                     <p className="mt-4 rounded-xl border border-dashed border-ink-soft/25 px-4 py-3 text-sm text-ink-soft">{vazioDoPainel}</p>
@@ -736,6 +806,17 @@ export default function Jornal() {
                     </a>
                   </div>
 
+                  {acabouDePublicar && fila.length > 0 && (
+                    <div className="mt-3 flex items-start gap-2 rounded-xl border border-success/30 bg-success/5 p-3 text-sm">
+                      <Icon name="BadgeCheck" size={18} className="mt-0.5 shrink-0 text-success" />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-ink">Jornal no ar</div>
+                        <div className="mt-0.5 text-xs text-ink-soft">O site fica com este jornal até a próxima publicação. Para montar o próximo do zero, esvazie a fila.</div>
+                        <button type="button" onClick={() => setConfirmarNovo(true)} className="mt-1.5 text-xs font-semibold text-navy hover:underline">Começar jornal novo</button>
+                      </div>
+                    </div>
+                  )}
+
                   {pdfPronto && (
                     <div className="mt-3 flex items-start gap-2 rounded-xl border border-success/30 bg-success/5 p-3 text-sm">
                       <Icon name="BadgeCheck" size={18} className="mt-0.5 shrink-0 text-success" />
@@ -889,6 +970,28 @@ export default function Jornal() {
           ))}
         </div>
       ) : null}
+
+      <Modal
+        open={confirmarNovo}
+        onClose={() => setConfirmarNovo(false)}
+        titulo="Começar jornal novo?"
+        footer={<>
+          <Botao variante="contorno" onClick={() => setConfirmarNovo(false)}>Cancelar</Botao>
+          <Botao variante="escuro" onClick={comecarJornalNovo} disabled={!filaDoNovo.length}><Icon name="FilePlus2" size={16} /> Esvaziar e começar</Botao>
+        </>}
+      >
+        <div className="space-y-2 text-sm text-ink">
+          <p>
+            {ehMercado
+              ? `${plural(filaDoNovo.length, 'produto com estrela sai', 'produtos com estrela saem')} da fila.`
+              : ehSetor
+                ? `${plural(filaDoNovo.length, 'produto', 'produtos')} de ${nomeJornal} ${filaDoNovo.length === 1 ? 'sai' : 'saem'} da fila. Os outros setores continuam como estão.`
+                : `${plural(filaDoNovo.length, 'produto sai', 'produtos saem')} da fila. A fila fica vazia para você bipar o jornal novo.`}
+          </p>
+          <p className="text-ink-soft">Nada é apagado: preço, setor e foto continuam salvos. Bipe ou procure pelo nome para pôr de volta.</p>
+          <p className="text-ink-soft">O site do cliente continua com o jornal publicado até você publicar de novo.</p>
+        </div>
+      </Modal>
 
       <Modal
         open={Boolean(seloEditando)}
@@ -1066,6 +1169,26 @@ function ChaveSite({ ligado, titulo, onChange }) {
         <span className="block text-sm font-semibold text-ink">{titulo}</span>
         <span className="block text-xs text-ink-soft">{ligado ? 'Ligado: aparece como aba no site.' : 'Desligado: não aparece no site.'}</span>
       </span>
+    </button>
+  )
+}
+
+// Desliga o jornal de um setor no site para ajustar preços: a aba continua lá, com o aviso
+// "Ajustando ofertas" no lugar dos produtos. Muda na hora, sem publicar de novo.
+function ChaveAjuste({ noAr, nome, ocupado, onChange }) {
+  return (
+    <button type="button" role="switch" aria-checked={noAr} disabled={ocupado} onClick={() => onChange(!noAr)}
+      className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left disabled:opacity-60 ${noAr ? 'border-ink-soft/20 bg-white hover:border-ink-soft/45' : 'border-critical/40 bg-critical/5 hover:border-critical/60'}`}>
+      <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-150 motion-reduce:transition-none ${noAr ? 'bg-success' : 'bg-critical'}`}>
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-150 motion-reduce:transition-none ${noAr ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-ink">{noAr ? 'No ar' : 'Desligado para ajuste'}</span>
+        <span className="block text-xs text-ink-soft">{noAr
+          ? `Desligue para ajustar ${nome}: o site mostra "Ajustando ofertas" na hora.`
+          : `O cliente vê "Ajustando ofertas" em ${nome}. Ligue de novo quando terminar.`}</span>
+      </span>
+      {ocupado && <Icon name="LoaderCircle" size={16} className="shrink-0 animate-spin text-ink-soft" />}
     </button>
   )
 }
