@@ -11,7 +11,7 @@ import {
 } from '../lib/utils'
 import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, atualizarPausadosNoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
 import SeletorTema from '../components/SeletorTema'
-import SeloArte from '../components/SeloArte'
+import SeletorSelo, { BotaoAplicarTodos } from '../components/SeletorSelo'
 import PrecoArte, { ESTILOS_PRECO, estiloPrecoById } from '../components/PrecoArte'
 import EditorCelula from '../components/EditorCelula'
 import { Escalado } from '../components/PaginaTemplate'
@@ -355,6 +355,13 @@ export default function Jornal() {
     salvarProduto({ id: produto.id, seloOferta })
     const selo = SELOS_OFERTA.find((s) => s.id === seloOferta)
     toast(selo?.nenhum ? `${produto.nome}: sem selo.` : `${produto.nome}: selo "${selo?.texto}".`)
+  }
+  // Copia o selo para todos os produtos do jornal aberto.
+  const seloEmTodos = (seloOferta) => {
+    const id = seloOferta || 'oferta'
+    ativosDoModelo.filter((p) => (p.seloOferta || 'oferta') !== id).forEach((p) => salvarProduto({ id: p.id, seloOferta: id }))
+    const selo = SELOS_OFERTA.find((s) => s.id === id)
+    toast(selo?.nenhum ? `Todos os ${ativosDoModelo.length} produtos do jornal ficaram sem selo.` : `Selo "${selo?.texto}" em todos os ${ativosDoModelo.length} produtos do jornal.`)
   }
 
   // Estilo do preço no jornal todo: o predefinido vale para todos e os estilos próprios saem.
@@ -1083,11 +1090,18 @@ export default function Jornal() {
             })()}
             <div>
               <p className="mb-2 text-sm font-semibold text-ink">Selo</p>
-              <p className="mb-2 text-xs text-ink-soft">O selo aparece só neste produto no encarte, nas artes e nos cartazes. Muda na hora.</p>
+              <p className="mb-2 text-xs text-ink-soft">O selo aparece neste produto no encarte, nas artes e nos cartazes. Muda na hora.</p>
               <SeletorSelo
                 value={(fila.find((f) => f.id === seloEditando.id) || seloEditando).seloOferta}
                 onChange={(id) => trocarSelo(seloEditando, id)}
               />
+              <BotaoAplicarTodos
+                total={ativosDoModelo.length}
+                onClick={() => seloEmTodos((fila.find((f) => f.id === seloEditando.id) || seloEditando).seloOferta)}
+                descricao={`Os ${ativosDoModelo.length} produtos deste jornal passam a usar este selo. Depois dá para trocar um por um.`}
+              >
+                Aplicar este selo a todos
+              </BotaoAplicarTodos>
             </div>
           </div>
         )}
@@ -1140,20 +1154,6 @@ function SeletorSetor({ value, onChange }) {
     <select value={value || 'mercearia'} onChange={(e) => onChange(e.target.value)} className={inputCls}>
       {SETORES.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
     </select>
-  )
-}
-
-function SeletorSelo({ value, onChange }) {
-  const atual = value || 'oferta'
-  return (
-    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-      {SELOS_OFERTA.map((s) => (
-        <button key={s.id} type="button" onClick={() => onChange(s.id)} aria-pressed={atual === s.id} title={s.texto}
-          className={`flex h-16 items-center justify-center rounded-lg border bg-white ${atual === s.id ? 'border-navy shadow-[inset_0_0_0_1px_var(--color-navy)]' : 'border-ink-soft/20 hover:border-ink-soft/45'}`}>
-          {s.nenhum ? <span className="text-sm font-semibold text-ink-soft">Sem selo</span> : <SeloArte selo={s} largura={104} girar={-4} />}
-        </button>
-      ))}
-    </div>
   )
 }
 

@@ -3,6 +3,8 @@ import { Logo } from './ui'
 import { formatBRL, formatData, partesPreco, seloDoProduto } from '../lib/utils'
 import { unidadeDe } from './PaginaTemplate'
 import SeloArte from './SeloArte'
+import { CamadaCartaz } from './cartazes/camadas'
+import { SeloQrJornal } from './cartazes/QrJornal'
 
 // Cartazes de oferta para impressão: folha A4 com 1 cartaz A4, 2 A5, 4 A6 ou 8 A7,
 // e folha de etiquetas de gôndola (24 por A4). Fundo branco para gastar pouca tinta,
@@ -62,25 +64,38 @@ export function Cartaz({ produto, encarte, w, h }) {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-center" style={{ fontFamily: 'var(--font-sans)' }}>
       <div className="flex shrink-0 items-center justify-center" style={{ height: faixa, paddingTop: faixa * 0.06 }}>
-        {!selo.nenhum && <SeloArte selo={selo} largura={w * 0.76} altura={faixa * 0.92} girar={-3} />}
+        {!selo.nenhum && <CamadaCartaz nome="topo" produto={produto} w={w} h={h}><SeloArte selo={selo} largura={w * 0.76} altura={faixa * 0.92} girar={-3} /></CamadaCartaz>}
       </div>
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center" style={{ padding: `${h * 0.02}px ${w * 0.05}px` }}>
-        <div className="font-black uppercase leading-[1.02] text-[#111]" style={{ fontSize: fonteNome }}>{nome}</div>
-        {detalhe && <div className="font-bold uppercase text-[#555]" style={{ fontSize: Math.max(7, h * 0.032), marginTop: h * 0.008 }}>{detalhe}</div>}
-        {foto && (
-          <img src={foto} alt="" className="block object-contain" style={{ width: '86%', height: h * 0.27, marginTop: h * 0.012 }} />
-        )}
-        {desconto && (
-          <div className="font-black text-[#222]" style={{ fontSize: Math.max(7, h * 0.042), marginTop: h * 0.015 }}>
-            De <span style={{ textDecoration: 'line-through' }}>{formatBRL(produto.precoNormal)}</span> por
+        <CamadaCartaz nome="nome" produto={produto} w={w} h={h}>
+          <div>
+            <div className="font-black uppercase leading-[1.02] text-[#111]" style={{ fontSize: fonteNome }}>{nome}</div>
+            {detalhe && <div className="font-bold uppercase text-[#555]" style={{ fontSize: Math.max(7, h * 0.032), marginTop: h * 0.008 }}>{detalhe}</div>}
           </div>
+        </CamadaCartaz>
+        {foto && (
+          <CamadaCartaz nome="foto" produto={produto} w={w} h={h} style={{ width: '86%', marginTop: h * 0.012 }}>
+            <img src={foto} alt="" className="block object-contain" style={{ width: '100%', height: h * 0.27 }} />
+          </CamadaCartaz>
         )}
-        <div style={{ marginTop: h * 0.01 }}>
-          <PrecoCartaz valor={produto.precoJornal} unidade={unidadeDe(produto)} w={w} h={h * (desconto ? 0.3 : 0.34) * (foto ? 0.68 : 1)} />
-        </div>
+        <CamadaCartaz nome="preco" produto={produto} w={w} h={h}>
+          <div>
+            {desconto && (
+              <div className="font-black text-[#222]" style={{ fontSize: Math.max(7, h * 0.042), marginTop: h * 0.015 }}>
+                De <span style={{ textDecoration: 'line-through' }}>{formatBRL(produto.precoNormal)}</span> por
+              </div>
+            )}
+            <div style={{ marginTop: h * 0.01 }}>
+              <PrecoCartaz valor={produto.precoJornal} unidade={unidadeDe(produto)} w={w} h={h * (desconto ? 0.3 : 0.34) * (foto ? 0.68 : 1)} />
+            </div>
+          </div>
+        </CamadaCartaz>
       </div>
       <div className="flex shrink-0 items-center justify-between gap-2 border-t-2 border-[#111]" style={{ padding: `${h * 0.012}px ${w * 0.04}px`, minHeight: h * 0.07 }}>
-        <Logo h={Math.max(16, h * 0.065)} />
+        <div className="flex min-w-0 items-center" style={{ gap: w * 0.02 }}>
+          <Logo h={Math.max(20, Math.min(h * 0.085, w * 0.13))} />
+          <SeloQrJornal altura={Math.max(24, Math.min(h * 0.085, w * 0.13))} />
+        </div>
         {encarte?.periodoDe && (
           <div className="text-right font-bold uppercase leading-tight text-[#333]" style={{ fontSize: Math.max(6, h * 0.019) }}>
             Válido de {formatData(encarte.periodoDe)} a {formatData(encarte.periodoAte)}
