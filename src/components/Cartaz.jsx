@@ -4,6 +4,7 @@ import { formatBRL, formatData, partesPreco, seloDoProduto } from '../lib/utils'
 import { unidadeDe } from './PaginaTemplate'
 import SeloArte from './SeloArte'
 import { CamadaCartaz } from './cartazes/camadas'
+import { SeloQrJornal } from './cartazes/QrJornal'
 
 // Cartazes de oferta para impressão: folha A4 com 1 cartaz A4, 2 A5, 4 A6 ou 8 A7,
 // e folha de etiquetas de gôndola (24 por A4). Fundo branco para gastar pouca tinta,
@@ -91,7 +92,10 @@ export function Cartaz({ produto, encarte, w, h }) {
         </CamadaCartaz>
       </div>
       <div className="flex shrink-0 items-center justify-between gap-2 border-t-2 border-[#111]" style={{ padding: `${h * 0.012}px ${w * 0.04}px`, minHeight: h * 0.07 }}>
-        <Logo h={Math.max(16, h * 0.065)} />
+        <div className="flex min-w-0 items-center" style={{ gap: w * 0.02 }}>
+          <Logo h={Math.max(20, Math.min(h * 0.085, w * 0.13))} />
+          <SeloQrJornal altura={Math.max(24, Math.min(h * 0.085, w * 0.13))} />
+        </div>
         {encarte?.periodoDe && (
           <div className="text-right font-bold uppercase leading-tight text-[#333]" style={{ fontSize: Math.max(6, h * 0.019) }}>
             Válido de {formatData(encarte.periodoDe)} a {formatData(encarte.periodoAte)}

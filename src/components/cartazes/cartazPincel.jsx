@@ -2,6 +2,8 @@ import { forwardRef, useMemo } from 'react'
 import { paraNumero } from '../../lib/utils'
 import { Cartaz } from '../Cartaz'
 import { CamadaCartaz } from './camadas'
+import { SeloQrJornal } from './QrJornal'
+import { Logo } from '../ui'
 
 // Cartazes "estilo pincel": modelos que imitam os cartazes pintados à mão de supermercado.
 // Cada modelo é só um objeto em TEMPLATES_CARTAZ; o desenho (pinceladas, faixa, octógono,
@@ -463,14 +465,20 @@ function Preco({ t, produto, w, h, semente }) {
   )
 }
 
+// Rodapé: logo do mercado com o QR do jornal de ofertas ao lado, e o período da campanha.
 function Rodape({ loja, encarte, w, h }) {
-  const fs = Math.max(6, h * 0.42)
+  const fs = Math.max(6, h * 0.15)
   return (
-    <div style={{ width: w, height: h, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontFamily: 'Arial, sans-serif', fontWeight: 700, fontSize: fs, color: '#333', textTransform: 'uppercase', lineHeight: 1.1 }}>
-      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loja?.nome || ''}</span>
-      {encarte?.periodoDe && (
-        <span style={{ textAlign: 'right', fontSize: fs * 0.82 }}>Válido de {diaMes(encarte.periodoDe)} a {diaMes(encarte.periodoAte)} · ou enquanto durarem os estoques</span>
-      )}
+    <div style={{ width: w, height: h, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: h * 0.2, fontFamily: 'Arial, sans-serif', fontWeight: 700, color: '#333', textTransform: 'uppercase', lineHeight: 1.15 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: h * 0.18, minWidth: 0 }}>
+        <Logo h={h * 1.05} />
+        <SeloQrJornal altura={h} />
+      </div>
+      <div style={{ textAlign: 'right', fontSize: fs, maxWidth: w * 0.34 }}>
+        {loja?.nome && <div>{loja.nome}</div>}
+        {encarte?.periodoDe && <div>Válido de {diaMes(encarte.periodoDe)} a {diaMes(encarte.periodoAte)}</div>}
+        <div style={{ fontSize: fs * 0.85 }}>ou enquanto durarem os estoques</div>
+      </div>
     </div>
   )
 }
@@ -486,7 +494,8 @@ export function CartazPincel({ produto, template = 'mega-oferta', w, h, encarte,
   const ih = h - moldura * 2
   const cw = iw - pad * 2
   const ch = ih - pad * 2
-  const hRodape = Math.max(9, Math.min(w, h) * 0.032)
+  // rodapé com logo e QR do jornal de ofertas (o QR precisa de tamanho para a câmera ler)
+  const hRodape = Math.max(26, Math.min(w, h) * 0.105)
   const faixa = t.cabecalho === 'faixa'
   const deitado = w > h * 1.1
   const [pTopo, pNome] = t.proporcoes || [0.24, 0.25]
