@@ -1,6 +1,6 @@
 import { forwardRef } from 'react'
 import { Logo } from './ui'
-import { formatBRL, formatData, partesPreco, seloDoProduto } from '../lib/utils'
+import { formatBRL, formatData, partesPreco, seloDoCartaz } from '../lib/utils'
 import { unidadeDe } from './PaginaTemplate'
 import SeloArte from './SeloArte'
 import { CamadaCartaz } from './cartazes/camadas'
@@ -52,7 +52,7 @@ function PrecoCartaz({ valor, unidade, w, h }) {
 }
 
 export function Cartaz({ produto, encarte, w, h }) {
-  const selo = seloDoProduto(produto)
+  const selo = seloDoCartaz(produto)
   const nome = String(produto.nome || '').toUpperCase()
   const linhas = nome.length <= 14 ? 1 : nome.length <= 30 ? 2 : 3
   // Com foto, o nome e o preço encolhem um pouco para a foto caber no meio do cartaz.
@@ -108,7 +108,7 @@ export function Cartaz({ produto, encarte, w, h }) {
 }
 
 export function Etiqueta({ produto, w, h }) {
-  const selo = seloDoProduto(produto)
+  const selo = seloDoCartaz(produto)
   const { reais, centavos } = partesPreco(produto.precoJornal)
   const fontePreco = Math.min(h * 0.5, (w * 0.5) / ((reais.length + 1.2) * 0.6))
   return (

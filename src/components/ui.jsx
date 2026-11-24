@@ -28,12 +28,19 @@ export function PrecoVarejo({ valor, className = '', cor, style }) {
 }
 
 // ---- badge de status de validade ----
+// Etiqueta de validade em cor cheia: o alerta precisa saltar aos olhos.
+const CORES_VALIDADE = {
+  vencido: { background: '#7a1010', color: '#ffffff' },
+  critico: { background: '#d81e29', color: '#ffffff' },
+  atencao: { background: '#ffb020', color: '#3d2600' },
+  normal: { background: '#0f7a40', color: '#ffffff' },
+}
 export function StatusBadge({ validade, mostrarDias = true }) {
   const s = statusValidade(validade)
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
-      style={{ background: s.bg, color: s.cor }}
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold"
+      style={CORES_VALIDADE[s.id] || { background: s.bg, color: s.cor }}
     >
       <Lucide.Clock size={12} />
       {mostrarDias ? labelDias(s.dias) : s.label}
@@ -161,12 +168,12 @@ export function EmptyState({ icon = 'Inbox', titulo, descricao, acao }) {
 // ---- botão padrão ----
 export function Botao({ children, variante = 'primario', className = '', ...props }) {
   const base =
-    'inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50'
+    'inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50'
   const v = {
-    primario: 'bg-bengala text-cream hover:bg-bengala-dark',
+    primario: 'bg-bengala text-white shadow-[0_2px_0_rgba(0,0,0,.25)] hover:bg-bengala-dark',
     coral: 'bg-coral text-white hover:bg-coral-dark',
-    contorno: 'border border-ink-soft/25 bg-white text-ink hover:bg-cream-200',
-    escuro: 'bg-navy text-white hover:bg-navy-light',
+    contorno: 'border-2 border-navy/40 bg-white text-navy shadow-[0_2px_0_rgba(8,43,79,.15)] hover:border-navy hover:bg-cream',
+    escuro: 'bg-navy text-white shadow-[0_2px_0_rgba(0,0,0,.25)] hover:bg-navy-light',
     perigo: 'bg-critical text-white hover:brightness-90',
     fantasma: 'text-ink-soft hover:bg-cream-200',
   }[variante]
@@ -232,7 +239,7 @@ export function Toasts() {
 export function Campo({ label, children, obrigatorio }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-ink">
+      <span className="mb-1 block text-sm font-bold text-ink">
         {label} {obrigatorio && <span className="text-bengala">*</span>}
       </span>
       {children}
@@ -241,7 +248,7 @@ export function Campo({ label, children, obrigatorio }) {
 }
 
 export const inputCls =
-  'w-full rounded-lg border border-ink-soft/20 bg-white px-3 py-2 text-sm outline-none focus:border-bengala focus:ring-2 focus:ring-bengala/20'
+  'w-full rounded-lg border-2 border-ink-soft/40 bg-white px-3 py-2 text-sm font-medium text-ink outline-none focus:border-bengala focus:ring-2 focus:ring-bengala/20'
 
 // ===== Peças comuns de página: o mesmo desenho em todas as abas =====
 
@@ -257,8 +264,8 @@ export function Secao({ numero, titulo, descricao, acao, children, className = '
               <span className="num-tab flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">{numero}</span>
             )}
             <div className="min-w-0">
-              {titulo && <h2 className="text-[17px] font-extrabold leading-7 text-navy">{titulo}</h2>}
-              {descricao && <p className="mt-0.5 text-[15px] font-medium leading-snug text-ink">{descricao}</p>}
+              {titulo && <h2 className="text-[21px] font-extrabold leading-7 text-navy">{titulo}</h2>}
+              {descricao && <p className="mt-1 text-base font-medium leading-snug text-ink">{descricao}</p>}
             </div>
           </div>
           {acao && <div className="flex shrink-0 flex-wrap items-center gap-2">{acao}</div>}
@@ -273,7 +280,7 @@ export function Secao({ numero, titulo, descricao, acao, children, className = '
 export function Rotulo({ children, acao, className = '' }) {
   return (
     <div className={`mb-2 flex items-center justify-between gap-2 ${className}`}>
-      <span className="text-sm font-semibold text-ink">{children}</span>
+      <span className="text-base font-bold text-navy">{children}</span>
       {acao}
     </div>
   )
@@ -292,7 +299,7 @@ export function Abas({ itens, valor, onChange, rotulo, className = '' }) {
             role="tab"
             aria-selected={ativo}
             onClick={() => onChange(a.id)}
-            className={`flex min-h-10 flex-1 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${ativo ? 'bg-white text-navy shadow-[0_1px_3px_rgba(8,43,79,.14)]' : 'text-ink-soft hover:text-ink'}`}
+            className={`flex min-h-10 flex-1 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 text-sm font-bold ${ativo ? 'bg-navy text-white shadow-[0_2px_0_rgba(0,0,0,.2)]' : 'text-navy hover:bg-white'}`}
           >
             {a.icone && <Icon name={a.icone} size={17} className="hidden sm:block" />}
             {a.rotuloCurto ? (
@@ -301,7 +308,7 @@ export function Abas({ itens, valor, onChange, rotulo, className = '' }) {
                 <span className="hidden sm:inline">{a.rotulo}</span>
               </>
             ) : <span>{a.rotulo}</span>}
-            {a.badge > 0 && <span className="num-tab rounded-full bg-navy/10 px-1.5 text-xs font-bold text-navy">{a.badge}</span>}
+            {a.badge > 0 && <span className={`num-tab rounded-full px-2 text-xs font-bold ${ativo ? 'bg-offer text-navy' : 'bg-navy text-white'}`}>{a.badge}</span>}
           </button>
         )
       })}
@@ -317,22 +324,22 @@ export function Escolha({ ativo, onClick, icone, titulo, descricao, extra, disab
       onClick={onClick}
       disabled={disabled}
       aria-pressed={ativo}
-      className={`flex min-w-0 items-center gap-3 rounded-xl border p-3 text-left disabled:cursor-not-allowed disabled:opacity-50 ${ativo ? 'border-navy bg-navy/[0.045] shadow-[inset_0_0_0_1px_var(--color-navy)]' : 'border-ink-soft/20 bg-white hover:border-ink-soft/45'} ${className}`}
+      className={`flex min-w-0 items-center gap-3 rounded-xl border-2 p-3 text-left disabled:cursor-not-allowed disabled:opacity-50 ${ativo ? 'border-navy bg-navy/[0.045] shadow-[inset_0_0_0_1px_var(--color-navy)]' : 'border-navy/25 bg-white shadow-[0_2px_0_rgba(8,43,79,.12)] hover:border-navy'} ${className}`}
     >
       {icone && (
         <span
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${ativo ? 'bg-navy text-white' : 'bg-cream-200 text-ink-soft'}`}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${ativo ? 'bg-navy text-white' : 'bg-cream-200 text-navy'}`}
           style={!ativo && iconeCor ? { color: iconeCor } : undefined}
         >
           <Icon name={icone} size={19} />
         </span>
       )}
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-bold leading-snug text-ink">{titulo}</span>
-        {descricao && <span className="mt-0.5 block text-xs leading-snug text-ink-soft">{descricao}</span>}
+        <span className="block text-base font-bold leading-snug text-ink">{titulo}</span>
+        {descricao && <span className="mt-0.5 block text-sm leading-snug text-ink-soft">{descricao}</span>}
       </span>
       {extra != null && <span className="num-tab shrink-0 text-sm font-semibold text-ink-soft">{extra}</span>}
-      {ativo && <Icon name="CircleCheck" size={18} className="shrink-0 text-navy" />}
+      <Icon name={ativo ? 'CircleCheck' : 'ChevronRight'} size={20} className="shrink-0 text-navy" />
     </button>
   )
 }
@@ -350,7 +357,7 @@ export function Segmentado({ opcoes, valor, onChange, disabled, className = '', 
             onClick={() => onChange(id)}
             disabled={disabled}
             aria-pressed={ativo}
-            className={`min-h-10 rounded-lg border px-3 py-1.5 text-sm font-semibold disabled:opacity-50 ${ativo ? 'border-navy bg-navy text-white' : 'border-ink-soft/20 bg-white text-ink hover:border-ink-soft/45'}`}
+            className={`min-h-11 rounded-lg border-2 px-3 py-1.5 text-sm font-bold disabled:opacity-50 ${ativo ? 'border-navy bg-navy text-white' : 'border-navy/30 bg-white text-navy hover:border-navy'}`}
           >
             {texto}
             {detalhe && <span className={`ml-1 font-normal ${ativo ? 'text-white/75' : 'text-ink-soft'}`}>{detalhe}</span>}

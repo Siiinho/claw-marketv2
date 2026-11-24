@@ -16,6 +16,7 @@ import PrecoArte, { ESTILOS_PRECO, estiloPrecoById } from '../components/PrecoAr
 import EditorCelula from '../components/EditorCelula'
 import { Escalado } from '../components/PaginaTemplate'
 import FotoGoogle from '../components/FotoGoogle'
+import SugestaoPreco from '../components/SugestaoPreco'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina, itensDaPagina, ehFormatoJornal } from '../components/JornalMercado'
 import { temaCampanhaById, temasDoSetor, caminhoArte } from '../lib/temasCampanha'
 import { temaDoJornal, temasPropriosSalvos } from '../lib/temasJornal'
@@ -199,12 +200,11 @@ export default function Jornal() {
 
   // ---- preço para o jornal ----
   const precoJornal = (p) => {
-    // O preço da oferta digitado no produto (ex.: pela prévia) vale mais que a oferta automática.
+    // Vale o preço que a pessoa escreveu; depois, a oferta que ela criou. Nada muda sozinho pela validade.
     const promo = paraNumero(p.precoPromo)
     if (promo) return promo
     const o = ofertaDoProduto(p.id)
     if (o) return p.precoNormal * (1 - o.desconto / 100)
-    if (p.origemFila === 'vencimento') return p.precoNormal * (1 - (config.descontoPadrao || 30) / 100)
     return p.precoNormal
   }
   const descJornal = (p) => percentDesc(p.precoNormal, precoJornal(p))
@@ -265,7 +265,7 @@ export default function Jornal() {
           </span>
         </span>
         <BotaoEstrela ativo={estrelado} onClick={() => alternarMercado(p)} nome={p.nome} />
-        <button type="button" onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-cream-200 hover:text-navy"><Icon name="Pencil" size={16} /></button>
+        <button type="button" onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border-2 border-navy/35 bg-white px-2.5 text-sm font-bold text-navy hover:bg-cream"><Icon name="Pencil" size={15} /> Editar</button>
       </li>
     )
   }
@@ -364,8 +364,8 @@ export default function Jornal() {
   }
   // Copia o selo para todos os produtos do jornal aberto.
   const seloEmTodos = (seloOferta) => {
-    const id = seloOferta || 'oferta'
-    ativosDoModelo.filter((p) => (p.seloOferta || 'oferta') !== id).forEach((p) => salvarProduto({ id: p.id, seloOferta: id }))
+    const id = seloOferta || 'nenhum'
+    ativosDoModelo.filter((p) => (p.seloOferta || 'nenhum') !== id).forEach((p) => salvarProduto({ id: p.id, seloOferta: id }))
     const selo = SELOS_OFERTA.find((s) => s.id === id)
     toast(selo?.nenhum ? `Todos os ${ativosDoModelo.length} produtos do jornal ficaram sem selo.` : `Selo "${selo?.texto}" em todos os ${ativosDoModelo.length} produtos do jornal.`)
   }
@@ -501,10 +501,10 @@ export default function Jornal() {
 
   // ---- passo a passo do gerador ----
   const passos = [
-    { id: 'jornal', titulo: 'Jornal', resumo: nomeJornal },
-    { id: 'produtos', titulo: 'Produtos', resumo: plural(ativosDoModelo.length, 'produto', 'produtos') },
-    { id: 'visual', titulo: 'Visual', resumo: temaArte.nome },
-    { id: 'publicar', titulo: 'Publicar', resumo: `${formatDataCurta(validadeDe)} a ${formatDataCurta(validadeAte)}` },
+    { id: 'jornal', titulo: 'Escolher o jornal', resumo: nomeJornal, ajuda: 'Escolha se vai mexer no Jornal geral, no Mercado Encarte ou no jornal de um setor.' },
+    { id: 'produtos', titulo: 'Editar produtos e preços', ajuda: `Bipe para adicionar. Toque em Editar para mudar preço, nome, foto ou setor. Desmarque para tirar do jornal ${nomeJornal}.`, resumo: plural(ativosDoModelo.length, 'produto', 'produtos') },
+    { id: 'visual', titulo: 'Mudar o visual', resumo: temaArte.nome, ajuda: ehSetor ? `Troque o template, o layout e o logo do jornal ${nomeJornal}. Para mudar o de outro setor, volte em Escolher o jornal.` : 'O template daqui vale para todos os setores. Para mudar só um, escolha o setor no passo 1 e volte aqui.' },
+    { id: 'publicar', titulo: 'Publicar e imprimir', ajuda: 'Confira, publique no site do cliente e imprima o jornal.', resumo: `${formatDataCurta(validadeDe)} a ${formatDataCurta(validadeAte)}` },
   ]
   const irPara = (i) => {
     setPasso(i)
@@ -555,7 +555,7 @@ export default function Jornal() {
       {/* ============ MONTAR (passo a passo) ============ */}
       {aba === 'gerar' && (
         <div className="space-y-5">
-          <ol ref={passosRef} className="grid scroll-mt-4 grid-cols-4 gap-1.5 md:gap-2" aria-label="Passos para montar o jornal">
+          <ol ref={passosRef} className="grid scroll-mt-4 grid-cols-2 gap-2 md:grid-cols-4" aria-label="Passos para montar o jornal">
             {passos.map((p, i) => {
               const atual = passo === i
               const feito = i < passo
@@ -565,20 +565,21 @@ export default function Jornal() {
                     type="button"
                     onClick={() => irPara(i)}
                     aria-current={atual ? 'step' : undefined}
-                    className={`flex h-full w-full min-w-0 flex-col items-start gap-1.5 rounded-xl border px-2 py-2 text-left md:flex-row md:items-center md:gap-3 md:px-3 md:py-2.5 ${atual ? 'border-navy bg-navy text-white' : 'border-ink-soft/15 bg-white text-ink hover:border-ink-soft/40'}`}
+                    className={`flex h-full w-full min-w-0 flex-col items-start gap-1.5 rounded-xl border-2 px-3 py-3 text-left shadow-[0_2px_0_rgba(8,43,79,.18)] md:flex-row md:items-center md:gap-3 ${atual ? 'border-navy bg-navy text-white' : 'border-navy/30 bg-white text-ink hover:border-ink-soft/40'}`}
                   >
                     <span className={`num-tab flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${atual ? 'bg-offer text-navy' : feito ? 'bg-success text-white' : 'bg-cream-200 text-ink-soft'}`}>
                       {feito ? <Icon name="Check" size={15} strokeWidth={2.5} /> : i + 1}
                     </span>
                     <span className="block w-full min-w-0">
-                      <span className="block text-sm font-bold leading-tight">{p.titulo}</span>
-                      <span className={`block truncate text-xs ${atual ? 'text-white' : 'text-ink'}`}>{p.resumo}</span>
+                      <span className={`block text-base font-extrabold leading-tight ${atual ? 'text-white' : 'text-navy'}`}>{p.titulo}</span>
+                      <span className={`mt-0.5 block truncate text-sm font-semibold ${atual ? 'text-offer' : 'text-ink-soft'}`}>{p.resumo}</span>
                     </span>
                   </button>
                 </li>
               )
             })}
           </ol>
+          <p className="flex items-start gap-2 rounded-xl bg-offer px-4 py-3 text-base font-bold text-navy"><Icon name="Info" size={20} className="mt-0.5 shrink-0" /> {passos[passo].ajuda}</p>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start">
             <div className="min-w-0">
@@ -735,7 +736,7 @@ export default function Jornal() {
                       {[
                         ['grade', 'LayoutGrid', 'Grade 3 × 3', 'Até 9 produtos por página'],
                         ['destaque', 'LayoutPanelTop', '1 destaque + 7', 'O primeiro produto sai grande'],
-                        ['jornal', 'Newspaper', 'Jornal da semana', 'Folha A4 com muitos produtos, em blocos por dia ou setor'],
+                        ['jornal', 'Newspaper', 'Jornal da semana', 'Folha A4 com muitos produtos juntos, separados só quando a data muda'],
                       ].map(([id, icone, nome, desc]) => (
                         <Escolha key={id} ativo={layoutDigital === id} onClick={() => setLayoutDigital(id)} icone={icone} titulo={nome} descricao={desc} />
                       ))}
@@ -1037,6 +1038,7 @@ export default function Jornal() {
               <div className="grid grid-cols-2 gap-2">
                 <Campo label="Preço normal (de)"><input type="number" inputMode="decimal" min="0.01" step="0.01" className={inputCls} value={precoEditando.normal} onChange={(e) => setPrecoEditando((p) => ({ ...p, normal: e.target.value }))} /></Campo>
                 <Campo label="Preço da oferta (por)"><input type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="sem oferta" className={inputCls} value={precoEditando.promo} onChange={(e) => setPrecoEditando((p) => ({ ...p, promo: e.target.value }))} /></Campo>
+                <SugestaoPreco className="col-span-2" precoNormal={precoEditando.normal} validade={(fila.find((f) => f.id === seloEditando.id) || seloEditando).validade} precoAtual={precoEditando.promo} onUsar={(v) => setPrecoEditando((p) => ({ ...p, promo: v }))} />
               </div>
               <p className="mt-1 text-xs text-ink-soft">Deixe o preço da oferta vazio para mostrar só o preço normal.</p>
             </div>
@@ -1165,7 +1167,8 @@ export default function Jornal() {
             <Campo label="Vendido por"><SeletorUnidade value={produtoEditandoGerador.unidade} setor={produtoEditandoGerador.setor} onChange={(unidade) => setProdutoEditandoGerador((p) => ({ ...p, unidade }))} /></Campo>
             <Campo label="Quantidade"><input type="number" min="0" className={inputCls} value={produtoEditandoGerador.estoque ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, estoque: e.target.value }))} /></Campo>
             <Campo label="Preço normal"><input type="number" min="0.01" step="0.01" className={inputCls} value={produtoEditandoGerador.precoNormal ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, precoNormal: e.target.value }))} /></Campo>
-            <Campo label="Preço promocional"><input type="number" min="0.01" step="0.01" className={inputCls} value={produtoEditandoGerador.precoPromo ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, precoPromo: e.target.value }))} /></Campo>
+            <Campo label="Preço de oferta"><input type="number" min="0.01" step="0.01" className={inputCls} value={produtoEditandoGerador.precoPromo ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, precoPromo: e.target.value }))} /></Campo>
+            <SugestaoPreco className="col-span-2" precoNormal={produtoEditandoGerador.precoNormal} validade={produtoEditandoGerador.validade} precoAtual={produtoEditandoGerador.precoPromo} onUsar={(v) => setProdutoEditandoGerador((p) => ({ ...p, precoPromo: v }))} />
           </div>
         ) : null}
       </Modal>

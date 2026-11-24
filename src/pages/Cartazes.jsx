@@ -31,9 +31,11 @@ export default function Cartazes() {
   const ajustePadrao = config?.ajusteCartazPadrao || null
 
   const precoNovo = (p) => {
+    // Mesmo preço do jornal: o que a pessoa escreveu vale mais que a oferta da aba Ofertas.
+    const promo = paraNumero(p.precoPromo)
+    if (promo) return promo
     const o = ofertaDoProduto(p.id)
-    if (o) return p.precoNormal * (1 - o.desconto / 100)
-    return p.precoPromo ?? p.precoNormal
+    return o ? p.precoNormal * (1 - o.desconto / 100) : p.precoNormal
   }
 
   // O cartaz usa os textos próprios quando existem (p.cartaz) e o modelo escolhido para ele.
@@ -108,7 +110,7 @@ export default function Cartazes() {
     salvarProduto({
       id: original.id,
       precoNormal: normal,
-      ...(temOferta ? {} : { precoPromo: promo }),
+      precoPromo: promo,
       // A unidade só é gravada quando foi trocada (sem ela, o jornal usa a do setor).
       ...(rascunho.unidade !== (original.unidade || (original.setor === 'hortifruti' ? 'KG' : 'UN')) ? { unidade: rascunho.unidade } : {}),
       // Predefinido: o ajuste vale para todos os cartazes que não têm ajuste próprio.
@@ -137,7 +139,7 @@ export default function Cartazes() {
   const modeloEmTodos = (id) => {
     salvarConfig({ cartazModelo: id })
     originais.filter((p) => p.cartaz?.modelo).forEach((p) => salvarProduto({ id: p.id, cartaz: { ...p.cartaz, modelo: '' } }))
-    mudar('modelo', '')
+    if (rascunho) mudar('modelo', '')
     const m = MODELOS_CARTAZ.find((x) => x.id === id)
     toast(`Modelo "${m?.nome}" em todos os ${originais.length} cartazes.`)
   }
@@ -178,6 +180,8 @@ export default function Cartazes() {
           orientacao,
           onOrientacao: (id) => salvarConfig({ cartazOrientacao: id }),
           onAbrir: abrir,
+          comModeloProprio: originais.filter((p) => p.cartaz?.modelo && p.cartaz.modelo !== modeloPadrao).length,
+          onUsarEmTodos: () => modeloEmTodos(modeloPadrao),
         }}
         ajustes={(
           <>
@@ -217,10 +221,10 @@ export default function Cartazes() {
                     <input className={inputCls} inputMode="decimal" value={rascunho.precoNormal} onChange={(e) => mudar('precoNormal', e.target.value)} />
                   </Campo>
                   <Campo label="Preço da oferta (por)">
-                    <input className={inputCls} inputMode="decimal" value={rascunho.precoPromo} disabled={temOferta} placeholder={temOferta ? 'vem da oferta' : 'sem oferta'} onChange={(e) => mudar('precoPromo', e.target.value)} />
+                    <input className={inputCls} inputMode="decimal" value={rascunho.precoPromo} placeholder={temOferta ? 'usando a oferta da aba Ofertas' : 'sem oferta'} onChange={(e) => mudar('precoPromo', e.target.value)} />
                   </Campo>
                 </div>
-                <p className="mt-1.5 text-xs text-ink-soft">{temOferta ? 'Este produto está numa oferta da aba Ofertas: o preço de oferta sai do desconto dela.' : 'Deixe o preço da oferta vazio para mostrar só o preço normal.'}</p>
+                <p className="mt-1.5 text-xs text-ink-soft">{temOferta ? 'Este produto está numa oferta da aba Ofertas. O preço que você escrever aqui vale no lugar dela.' : 'Deixe o preço da oferta vazio para mostrar só o preço normal.'}</p>
                 <div className="mt-3">
                   <Segmentado rotulo="Vendido por" valor={rascunho.unidade} onChange={(v) => mudar('unidade', v)} opcoes={[['UN', 'Por unidade'], ['KG', 'Por quilo (KG)'], ...(original.unidade && !['UN', 'KG'].includes(original.unidade) ? [[original.unidade, `Por ${original.unidade}`]] : [])]} />
                 </div>

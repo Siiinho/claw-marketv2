@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { tratarFotoNoServidor } from '../lib/fotoProduto'
 import { urlBuscaGoogleImagens } from '../lib/produtoApi'
-import { Icon, inputCls } from './ui'
+import { Botao, Campo, Icon, Modal, inputCls } from './ui'
 
 const imagemDoTransfer = (dados) => {
   const item = [...(dados?.items || [])].find((i) => i.kind === 'file' && i.type.startsWith('image/'))
@@ -16,7 +17,9 @@ const linkDoTexto = (texto) => {
 // recebe a foto pelo botão Colar, por Ctrl+V ou arrastando. O servidor confere as regras, tira o
 // fundo e centraliza para o jornal (server/fotoProduto.js): aqui não há regra nenhuma.
 // `salvaNaHora`: o produto já existe, então quem usa grava a foto em onFoto, sem esperar o Salvar.
-export default function FotoGoogle({ produto, onFoto, toast, salvaNaHora = false, className = '' }) {
+export default function FotoGoogle({ produto, onFoto, toast, onNome, salvaNaHora = false, className = '' }) {
+  const [pedindoNome, setPedindoNome] = useState(false)
+  const [nomeDigitado, setNomeDigitado] = useState('')
   const [ocupado, setOcupado] = useState(false)
   const ocupadoRef = useRef(false)
   const [ultima, setUltima] = useState(null) // foto recém-colada: permite voltar o fundo
@@ -99,6 +102,14 @@ export default function FotoGoogle({ produto, onFoto, toast, salvaNaHora = false
     return toast?.('Nada copiado. No Google, segure (ou clique com o botão direito) na foto e copie o endereço da imagem.', 'erro')
   }
 
+  // Sem nome ainda: o que a pessoa escreve no pop-up vai para o cadastro e para a pesquisa.
+  const pesquisarDigitado = () => {
+    const nome = nomeDigitado.trim()
+    onNome?.(nome)
+    setPedindoNome(false)
+    window.open(urlBuscaGoogleImagens({ ...produto, nome }), '_blank', 'noopener')
+  }
+
   // Ctrl+V com uma imagem vale na tela toda enquanto o produto está aberto. Texto colado num
   // campo continua sendo só texto.
   const aoColar = useRef(null)
@@ -116,22 +127,25 @@ export default function FotoGoogle({ produto, onFoto, toast, salvaNaHora = false
 
   return (
     <div
-      className={`rounded-lg border border-dashed border-ink-soft/30 bg-white p-2.5 ${className}`}
+      className={`rounded-xl border-2 border-navy/25 bg-white p-3 ${className}`}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => { e.preventDefault(); if (pronto && !usarTransfer(e.dataTransfer)) toast?.('Arraste a foto do produto, não a página.', 'erro') }}
     >
       <div className="flex flex-wrap gap-2">
         {pronto ? (
           <a href={urlBuscaGoogleImagens(produto)} target="_blank" rel="noreferrer"
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-info/25 bg-info/5 px-3 text-sm font-bold text-info hover:bg-info/10">
-            <Icon name="Search" size={16} /> Buscar no Google
+            className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-navy px-4 text-base font-bold text-white shadow-[0_2px_0_rgba(0,0,0,.25)] hover:bg-navy-light">
+            <Icon name="Search" size={19} /> Buscar foto no Google
           </a>
         ) : (
-          <span className="inline-flex min-h-11 items-center gap-1.5 px-1 text-sm text-ink-soft"><Icon name="Search" size={16} /> Escreva o nome para buscar no Google</span>
+          <button type="button" onClick={() => { setNomeDigitado(''); setPedindoNome(true) }}
+            className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-navy px-4 text-base font-bold text-white shadow-[0_2px_0_rgba(0,0,0,.25)] hover:bg-navy-light">
+            <Icon name="Search" size={19} /> Buscar foto no Google
+          </button>
         )}
         {pronto && (
           <button type="button" onClick={colar} disabled={ocupado}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-bengala px-3 text-sm font-bold text-white disabled:opacity-50">
+            className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-bengala px-4 text-base font-bold text-white shadow-[0_2px_0_rgba(0,0,0,.25)] disabled:opacity-50">
             <Icon name={ocupado ? 'LoaderCircle' : 'ClipboardPaste'} size={16} className={ocupado ? 'animate-spin' : ''} /> Colar
           </button>
         )}
@@ -160,7 +174,28 @@ export default function FotoGoogle({ produto, onFoto, toast, salvaNaHora = false
           <ul className="list-disc pl-5">{recusa.map((m) => <li key={m}>{m}</li>)}</ul>
         </div>
       )}
-      {pronto && <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">No Google, abra a foto, copie o endereço da imagem (ou a própria imagem), volte e toque em Colar.</p>}
+      {pronto && <p className="mt-2 text-sm leading-snug text-ink">No Google, abra a foto, copie o endereço da imagem (ou a própria imagem), volte e toque em Colar.</p>}
+      {/* fora do formulário onde esta caixa está: os botões daqui não podem salvar o produto */}
+      {pedindoNome && createPortal(
+        <div className="app-ui">
+      <Modal
+        open
+        onClose={() => setPedindoNome(false)}
+        titulo="Buscar foto no Google"
+        footer={<>
+          <Botao type="button" variante="contorno" onClick={() => setPedindoNome(false)}>Cancelar</Botao>
+          <Botao type="button" disabled={!nomeDigitado.trim()} onClick={pesquisarDigitado}><Icon name="Search" size={17} /> Pesquisar</Botao>
+        </>}
+      >
+        <Campo label="Qual é o produto? Escreva nome, marca e tamanho">
+          <input autoFocus className={`${inputCls} min-h-12 text-base`} value={nomeDigitado} onChange={(e) => setNomeDigitado(e.target.value)} placeholder="Ex.: Suco Tang Laranja 18g"
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (nomeDigitado.trim()) pesquisarDigitado() } }} />
+        </Campo>
+        <p className="mt-2 text-sm text-ink">O nome também entra no cadastro. O Google abre em outra aba: copie a foto e volte aqui.</p>
+      </Modal>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

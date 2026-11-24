@@ -131,6 +131,17 @@ export function regraDoProduto(dias, regras = []) {
   return ordenadas.find((r) => dias <= r.diasMax) || null
 }
 
+// Preço de oferta SUGERIDO pela validade. Nunca é aplicado sozinho: quem decide é a pessoa.
+export function sugestaoDePreco(precoNormal, validade, config = {}) {
+  const normal = Number(precoNormal) || 0
+  const dias = diasParaVencer(validade)
+  if (!(normal > 0) || dias == null || dias < 0) return null
+  const regra = regraDoProduto(dias, config.regrasPreco || [])
+  if (!regra) return null
+  const valor = Math.round(precoComRegra(normal, regra) * 100) / 100
+  return valor > 0 && valor < normal ? { valor, desconto: regra.desconto, dias } : null
+}
+
 export const precoComRegra = (precoNormal, regra) =>
   regra ? precoNormal * (1 - regra.desconto / 100) : precoNormal
 
@@ -208,8 +219,11 @@ export const SELOS_OFERTA = [
 
 export const seloOfertaById = (id) => SELOS_OFERTA.find((s) => s.id === id) || null
 
-// Selo do produto: o escolhido pelo operador ou, sem escolha, "Oferta".
-export const seloDoProduto = (produto) => seloOfertaById(produto?.seloOferta) || SELOS_OFERTA[0]
+// Selo do produto: só o que o operador escolheu. Sem escolha, nenhum.
+export const SEM_SELO = SELOS_OFERTA.find((s) => s.nenhum)
+export const seloDoProduto = (produto) => seloOfertaById(produto?.seloOferta) || SEM_SELO
+// O cartaz Clássico é feito em volta do selo do topo: sem escolha ele usa "Oferta".
+export const seloDoCartaz = (produto) => seloOfertaById(produto?.seloOferta) || SELOS_OFERTA[0]
 
 // ---- baixas (troca com fornecedor ou perda) ----
 // Um vencido fica resolvido quando a baixa zerou o estoque daquela validade.
