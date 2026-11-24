@@ -5,7 +5,7 @@ import { useStore } from '../store/StoreContext'
 import { Icon, Botao } from '../components/ui'
 
 const DESTAQUES = [
-  { icone: 'TrendingDown', titulo: '38% menos perdas', desc: 'no primeiro mês de uso' },
+  { icone: 'TrendingDown', titulo: 'Venda antes de vencer', desc: 'a validade avisa e vira oferta' },
   { icone: 'MousePointerClick', titulo: '1 clique', desc: 'para gerar cartazes e jornal' },
   { icone: 'BellRing', titulo: 'Tempo real', desc: 'alertas de validade por setor' },
 ]
