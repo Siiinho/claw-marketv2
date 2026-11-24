@@ -1,4 +1,4 @@
-import { SimboloClawMarket } from './MarcaClawMarket'
+import { NomeClawMarket, SimboloClawMarket } from './MarcaClawMarket'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useStore, NAV, podeVer } from '../store/StoreContext'
@@ -114,9 +114,7 @@ export default function Layout() {
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-2 px-4 md:gap-4 md:px-6">
           <NavLink to="/" className="flex shrink-0 items-center gap-2.5 rounded-lg" aria-label="ClawMarket, início">
             <SimboloClawMarket tamanho={34} />
-            <span className="display-bengala hidden text-[21px] leading-none sm:inline">
-              Claw<span className="text-offer">Market</span>
-            </span>
+            <NomeClawMarket className="hidden text-[22px] leading-tight sm:inline" />
           </NavLink>
 
           {/* título da página no celular */}
