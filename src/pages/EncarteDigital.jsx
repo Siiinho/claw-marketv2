@@ -565,7 +565,7 @@ export default function EncarteDigital() {
   const itens = useMemo(() => (pausados.size ? todosItens.filter((p) => !pausados.has(p.setor)) : todosItens), [todosItens, pausados])
   const temaGeral = temaCampanhaById(encarte?.tema)
   // Cada setor tem o seu jornal, com o template escolhido para ele no Jornal.
-  const temaDoSetor = (id) => temaCampanhaById(encarte?.temasSetor?.[id] || temasDoSetor(id)[0]?.id || encarte?.tema)
+  const temaDoSetor = (id) => temaCampanhaById(encarte?.temasSetor?.[id] || (encarte?.temasV === 2 ? encarte?.tema : temasDoSetor(id)[0]?.id) || encarte?.tema)
   // Mercado Encarte: só as ofertas marcadas para hoje (somem sozinhas no dia seguinte).
   const hoje = dataISOmaisDias(0)
   // A loja pode esconder o Geral e o Mercado Encarte do site (chaves no passo 1 do Jornal).

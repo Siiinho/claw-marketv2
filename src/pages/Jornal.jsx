@@ -15,9 +15,11 @@ import SeletorSelo, { BotaoAplicarTodos } from '../components/SeletorSelo'
 import PrecoArte, { ESTILOS_PRECO, estiloPrecoById } from '../components/PrecoArte'
 import EditorCelula from '../components/EditorCelula'
 import { Escalado } from '../components/PaginaTemplate'
+import FotoGoogle from '../components/FotoGoogle'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina, itensDaPagina, ehFormatoJornal } from '../components/JornalMercado'
 import { temaCampanhaById, temasDoSetor, caminhoArte } from '../lib/temasCampanha'
-import { abrirJanelaPrevisualizacao, previsualizarImpressaoPaginas } from '../lib/exportar'
+import { temaDoJornal, temasPropriosSalvos } from '../lib/temasJornal'
+import { imprimirPaginas } from '../lib/exportar'
 import { imagemProdutoPrecisaTratamento, fotoRuimParaJornal, prepararProdutoParaJornal } from '../lib/produtoApi'
 
 function imagemCompativelComPDF(src) {
@@ -116,15 +118,21 @@ export default function Jornal() {
   const [layoutDigital, setLayoutDigital] = useState(() => lerEncartePublicado()?.layout || 'grade')
   // Tamanho do logo no jornal (0,4 a 1,3) e o template de cada setor (jornal de cada setor).
   const [escalaLogo, setEscalaLogo] = useState(() => Number(lerEncartePublicado()?.escalaLogo) || 1)
-  const [temasSetor, setTemasSetor] = useState(() => ({ ...(lerEncartePublicado()?.temasSetor || {}), ...(lerRascunho().temasSetor || {}) }))
-  const temaDoSetor = (id) => temasSetor[id] || temasDoSetor(id)[0]?.id || 'mercado'
-  // Template do jornal aberto. Trocar aqui muda só este jornal; os outros continuam como estão.
+  const [temasSetor, setTemasSetor] = useState(() => temasPropriosSalvos({
+    rascunho: lerRascunho(), publicado: lerEncartePublicado() || {}, padraoDoSetor: (id) => temasDoSetor(id)[0]?.id, mercadoId: MERCADO_ENCARTE.id,
+  }))
+  const temaDoSetor = (id) => temaDoJornal(id, { geral: temaDigital, proprios: temasSetor, mercadoId: MERCADO_ENCARTE.id, padraoMercado: temasDoSetor(MERCADO_ENCARTE.id)[0]?.id || 'mercado' })
+  // Setor com template próprio deixa de seguir o Geral; "seguir o Geral" apaga só a escolha dele.
+  const temaProprio = ehSetor && !ehMercado && Boolean(temasSetor[jornalSel])
+  const seguirGeral = (id) => setTemasSetor((atual) => { const n = { ...atual }; delete n[id]; return n })
+  const setoresComTemaProprio = SETORES.filter((s) => temasSetor[s.id])
+  // Template do jornal aberto: no Geral vale para todos que não têm o seu; num setor, só para ele.
   const temaAtualId = ehSetor ? temaDoSetor(jornalSel) : temaDigital
   const escolherTema = (id) => {
     if (ehSetor) setTemasSetor((atual) => ({ ...atual, [jornalSel]: id }))
     else setTemaDigital(id)
   }
-  useEffect(() => { salvarRascunho({ jornal: jornalSel, tema: temaDigital, temasSetor }) }, [jornalSel, temaDigital, temasSetor])
+  useEffect(() => { salvarRascunho({ jornal: jornalSel, tema: temaDigital, temasSetor, temasV: 2 }) }, [jornalSel, temaDigital, temasSetor])
   const [publicando, setPublicando] = useState(false)
   const [site, setSite] = useState({ online: null, protegido: false, erro: null })
   const [senhaPublicacao, setSenhaPublicacao] = useState(lerSenhaPublicacao)
@@ -179,7 +187,7 @@ export default function Jornal() {
     const timer = requestAnimationFrame(async () => {
       try {
         const paginas = historicoRefs.current.slice(0, paginasDoHistorico(historicoParaAbrir.jornal).length)
-        await previsualizarImpressaoPaginas(paginas, historicoParaAbrir.jornal.titulo, historicoParaAbrir.janela)
+        await imprimirPaginas(paginas, historicoParaAbrir.jornal.titulo)
       } catch (erro) {
         if (ativo) toast(erro?.message || 'Não foi possível abrir o jornal salvo.', 'erro')
       } finally {
@@ -311,21 +319,19 @@ export default function Jornal() {
     if (bloqueiosPDF.length) {
       requestAnimationFrame(() => revisaoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
       const primeiraPendencia = bloqueiosPDF[0].texto
-      toast(`PDF não gerado: ${primeiraPendencia} Corrija ou retire o produto da fila.`, 'erro')
+      toast(`Impressão não aberta: ${primeiraPendencia} Corrija ou retire o produto da fila.`, 'erro')
       return
     }
     setExportando(true)
     setPdfPronto(null)
-    let janela
     try {
-      janela = abrirJanelaPrevisualizacao(titulo)
       salvarJornal(criarSnapshot())
-      await previsualizarImpressaoPaginas(pageRefs.current.slice(0, paginasJornal.length), titulo, janela)
+      await imprimirPaginas(pageRefs.current.slice(0, paginasJornal.length), titulo)
       setPdfPronto({ titulo, paginas: paginasJornal.length })
-      toast('Pré-visualização aberta. Use Imprimir ou Salvar como PDF.')
+      toast('Jornal enviado para a impressão.', 'info')
     } catch (e) {
       console.error('Erro ao exportar o jornal:', e)
-      toast(e?.message || 'Não foi possível exportar o PDF. Recarregue a página e tente novamente.', 'erro')
+      toast(e?.message || 'Não foi possível imprimir. Recarregue a página e tente novamente.', 'erro')
     } finally {
       setExportando(false)
     }
@@ -390,7 +396,9 @@ export default function Jornal() {
       periodoDe: validadeDe,
       periodoAte: validadeAte,
       tema: temaDigital,
-      temasSetor: Object.fromEntries(setoresDoJornal.map((id) => [id, temaDoSetor(id)])),
+      // só os setores deste jornal, já resolvidos, mais as escolhas próprias dos outros
+      temasSetor: { ...temasSetor, ...Object.fromEntries(setoresDoJornal.map((id) => [id, temaDoSetor(id)])) },
+      temasV: 2,
       // Fundo enviado só vale para o template dele (antes o fundo do Geral ia para todas as abas).
       fundos: Object.fromEntries([temaDigital, ...setoresDoJornal.map(temaDoSetor)]
         .map((id) => [id, lerFundoTemplate(id)]).filter(([, fundo]) => fundo)),
@@ -458,8 +466,7 @@ export default function Jornal() {
   }
 
   const abrirJornalSalvo = (jornal) => {
-    const janela = abrirJanelaPrevisualizacao(jornal.titulo)
-    setHistoricoParaAbrir({ jornal, janela })
+    setHistoricoParaAbrir({ jornal })
   }
 
   const salvarProdutoGerador = () => {
@@ -577,7 +584,7 @@ export default function Jornal() {
             <div className="min-w-0">
               {/* 1. qual jornal */}
               {passo === 0 && (
-                <Secao titulo="Qual jornal você vai montar?" descricao="O Geral junta todos os produtos. Cada setor também tem o seu jornal.">
+                <Secao titulo="Qual jornal você vai montar?" descricao="Comece pelo Geral: o visual dele vale para todos os setores. Abra um setor só se quiser um visual diferente nele.">
                   <div className="grid gap-2">
                     <Escolha ativo={jornalSel === 'geral'} onClick={() => setJornalSel('geral')} icone="Store" titulo="Jornal geral" descricao="Todos os produtos da fila" extra={ativos.length} />
                     <Escolha ativo={ehMercado} onClick={() => setJornalSel(MERCADO_ENCARTE.id)} icone="Star" iconeCor="var(--color-bengala)" titulo="Mercado Encarte" descricao="Só os produtos com estrela, dia a dia" extra={totalMercado} />
@@ -670,7 +677,24 @@ export default function Jornal() {
 
               {/* 3. visual */}
               {passo === 2 && (
-                <Secao titulo={`Visual do jornal ${nomeJornal}`} descricao="O template muda só este jornal. Layout e logo valem para todos.">
+                <Secao titulo={`Visual do jornal ${nomeJornal}`} descricao={ehMercado ? 'O Mercado Encarte é exclusivo: o template dele não muda os outros.' : ehSetor ? 'Trocar aqui muda só este setor. Layout e logo valem para todos.' : 'O template do Geral vale para todos os setores que não têm o seu. Layout e logo também valem para todos.'}>
+                  {ehSetor && !ehMercado && (
+                    <div className="mb-3 flex items-center gap-2 rounded-xl bg-cream-200 px-3 py-2 text-sm text-ink">
+                      <Icon name={temaProprio ? 'Palette' : 'Link'} size={16} className="shrink-0 text-navy" />
+                      <span className="min-w-0 flex-1">{temaProprio ? `${nomeJornal} tem template próprio.` : `Seguindo o template do Geral (${temaCampanhaById(temaDigital).nome}).`}</span>
+                      {temaProprio && <button type="button" onClick={() => seguirGeral(jornalSel)} className="min-h-9 shrink-0 font-semibold text-navy underline underline-offset-2">Voltar ao do Geral</button>}
+                    </div>
+                  )}
+                  {!ehSetor && setoresComTemaProprio.length > 0 && (
+                    <div className="mb-3 rounded-xl bg-cream-200 px-3 py-2 text-sm text-ink">
+                      <p>Com template próprio (não mudam junto):</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {setoresComTemaProprio.map((s) => (
+                          <button key={s.id} type="button" onClick={() => seguirGeral(s.id)} aria-label={`${s.nome}: voltar ao template do Geral`} title="Voltar ao template do Geral" className="inline-flex min-h-9 items-center gap-1 rounded-full border border-ink-soft/25 bg-white px-3 text-xs font-semibold">{s.nome} <Icon name="X" size={13} /></button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <Rotulo>Template</Rotulo>
                   {ehSetor ? (
                     <>
@@ -804,7 +828,7 @@ export default function Jornal() {
                     <p className="text-center text-xs text-ink-soft">Publica todos de uma vez: {[config.siteMostrarGeral !== false && 'o Geral', config.siteMostrarMercado !== false && 'o Mercado Encarte', 'cada setor'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' e $1')}.</p>
                     <div className="mt-1 grid grid-cols-2 gap-2">
                       <Botao variante="contorno" onClick={exportar} disabled={exportando || !itensJornal.length}>
-                        <Icon name={exportando ? 'LoaderCircle' : 'Printer'} size={16} className={exportando ? 'animate-spin' : ''} /> {exportando ? 'Preparando…' : <><span className="sm:hidden">Imprimir</span><span className="hidden sm:inline">Imprimir ou PDF</span></>}
+                        <Icon name={exportando ? 'LoaderCircle' : 'Printer'} size={16} className={exportando ? 'animate-spin' : ''} /> {exportando ? 'Preparando…' : 'Imprimir jornal'}
                       </Botao>
                       <Botao variante="contorno" onClick={salvar}><Icon name="Save" size={16} /> Salvar cópia</Botao>
                     </div>
@@ -828,9 +852,9 @@ export default function Jornal() {
                     <div className="mt-3 flex items-start gap-2 rounded-xl border border-success/30 bg-success/5 p-3 text-sm">
                       <Icon name="BadgeCheck" size={18} className="mt-0.5 shrink-0 text-success" />
                       <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-ink">Pré-visualização aberta</div>
-                        <div className="mt-0.5 text-xs text-ink-soft">Na janela que abriu, escolha a impressora ou Salvar como PDF.</div>
-                        <button type="button" onClick={exportar} className="mt-1.5 text-xs font-semibold text-navy hover:underline">Abrir de novo</button>
+                        <div className="font-semibold text-ink">Impressão aberta</div>
+                        <div className="mt-0.5 text-xs text-ink-soft">Escolha a impressora na caixa do navegador. Nada é baixado.</div>
+                        <button type="button" onClick={exportar} className="mt-1.5 text-xs font-semibold text-navy hover:underline">Imprimir de novo</button>
                       </div>
                     </div>
                   )}
@@ -948,7 +972,7 @@ export default function Jornal() {
                     <span className="block truncate text-sm font-semibold text-ink">{jornal.titulo}</span>
                     <span className="block text-xs text-ink-soft">{plural(jornal.totalItens, 'produto', 'produtos')} · {plural(jornal.totalPaginas || 1, 'página', 'páginas')} · {new Date(jornal.criadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
                   </span>
-                  <Botao variante="contorno" className="shrink-0 px-3" onClick={() => abrirJornalSalvo(jornal)}><Icon name="Eye" size={15} /> <span className="hidden sm:inline">Abrir</span></Botao>
+                  <Botao variante="contorno" className="shrink-0 px-3" onClick={() => abrirJornalSalvo(jornal)}><Icon name="Printer" size={15} /> <span className="hidden sm:inline">Imprimir</span></Botao>
                   <button type="button" onClick={() => excluirJornal(jornal.id)} aria-label={`Excluir ${jornal.titulo}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-critical/10 hover:text-critical"><Icon name="Trash2" size={16} /></button>
                 </li>
               ))}
@@ -1131,6 +1155,7 @@ export default function Jornal() {
                 />
               </label>
             </div>
+            <FotoGoogle className="col-span-2" produto={produtoEditandoGerador} toast={toast} salvaNaHora onFoto={(foto) => { salvarProduto({ id: produtoEditandoGerador.id, ...foto }); setProdutoEditandoGerador((p) => (p ? { ...p, ...foto } : p)) }} />
             <div className="col-span-2"><Campo label="Nome"><input className={inputCls} value={produtoEditandoGerador.nome || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, nome: e.target.value }))} /></Campo></div>
             <Campo label="Marca"><input className={inputCls} value={produtoEditandoGerador.marca || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, marca: e.target.value }))} /></Campo>
             <Campo label="Gramagem"><input className={inputCls} value={produtoEditandoGerador.gramagem || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, gramagem: e.target.value }))} /></Campo>

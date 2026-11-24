@@ -92,6 +92,7 @@ async function limparEncarte(corpo) {
     layout: corpo?.layout === 'destaque' ? 'destaque' : 'grade',
     fundo: corpo?.fundo ? await guardarImagem(corpo.fundo) : null,
     temasSetor: Object.fromEntries(Object.entries(corpo?.temasSetor || {}).filter(([k, v]) => idValido(k) && idValido(v)).slice(0, 40)),
+    temasV: corpo?.temasV === 2 ? 2 : 1,
     escalaLogo: Math.min(1.3, Math.max(0.4, Number(corpo?.escalaLogo) || 1)),
     // Abas que a loja esconde e setores em ajuste ("Ajustando ofertas" no site).
     mostrarGeral: corpo?.mostrarGeral !== false,

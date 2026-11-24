@@ -636,9 +636,9 @@ export async function buscarProdutoAutomatizado(codigo, produtoBase = null) {
 }
 
 export function urlBuscaGoogleImagens(produto = {}) {
-  const consulta = [produto.nome, produto.marca, produto.gramagem]
-    .filter(Boolean)
-    .join(' ')
+  const nome = String(produto.nome || '').trim()
+  const jaTem = (t) => nome.toLowerCase().replace(/\s/g, '').includes(String(t).toLowerCase().replace(/\s/g, ''))
+  const consulta = [nome, ...[produto.marca, produto.gramagem].filter((t) => t && !jaTem(t))].join(' ')
   const url = new URL('https://www.google.com/search')
   url.searchParams.set('tbm', 'isch')
   url.searchParams.set('safe', 'active')

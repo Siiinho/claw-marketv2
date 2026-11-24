@@ -175,7 +175,11 @@ export function arquivoParaDataURL(file, max = 480) {
         const canvas = document.createElement('canvas')
         canvas.width = w
         canvas.height = h
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+        const ctx = canvas.getContext('2d')
+        // PNG sem fundo viraria preto no JPEG
+        ctx.fillStyle = '#fff'
+        ctx.fillRect(0, 0, w, h)
+        ctx.drawImage(img, 0, 0, w, h)
         resolve(canvas.toDataURL('image/jpeg', 0.82))
       }
       img.src = reader.result

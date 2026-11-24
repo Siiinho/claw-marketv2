@@ -9,11 +9,10 @@ import {
 import {
   buscarImagemProduto,
   buscarProdutoCatalogo,
-  prepararImagemGoogleConfirmada,
-  urlBuscaGoogleImagens,
 } from '../lib/produtoApi'
 import { importarPlanilha } from '../lib/importarCatalogo'
 import ModalBaixa from '../components/ModalBaixa'
+import FotoGoogle from '../components/FotoGoogle'
 
 const vazio = {
   nome: '', marca: '', gramagem: '', setor: 'mercearia', estoque: 0, validade: '',
@@ -177,38 +176,6 @@ export default function Produtos() {
       imagemSalvaEm: foto.imagemSalvaEm,
     }))
     toast('Nova embalagem conferida e gravada!')
-  }
-
-  const prepararUrlImagem = async () => {
-    if (!form.nome) return toast('Informe primeiro o nome do produto.', 'erro')
-    if (!/^https:\/\//i.test(String(form.imagem || ''))) return toast('Cole o endereço HTTPS da imagem escolhida.', 'erro')
-    setBuscandoCatalogo(true)
-    try {
-      const foto = await prepararImagemGoogleConfirmada(form, form.imagem)
-      setForm((f) => ({
-        ...f,
-        imagem: foto.imagem,
-        imagemOrigem: foto.origem,
-        imagemOrigemNome: foto.origemNome,
-        imagemOriginal: foto.imagemOriginal,
-        imagemFonteUrl: foto.imagemFonteUrl,
-        imagemPaginaUrl: foto.imagemPaginaUrl,
-        imagemAprovada: true,
-        imagemManual: true,
-        imagemCorrespondencia: foto.correspondencia,
-        imagemAltaResolucao: null,
-        imagemIlustrativa: false,
-        imagemCachePermanente: true,
-        imagemTratada: true,
-        imagemTratamento: foto.imagemTratamento,
-        imagemSalvaEm: foto.imagemSalvaEm,
-      }))
-      toast('Imagem manual adicionada ao produto!')
-    } catch (erro) {
-      toast(erro?.message || 'Não foi possível preparar essa imagem.', 'erro')
-    } finally {
-      setBuscandoCatalogo(false)
-    }
   }
 
   const RECENTE_MS = RECENTE_DIAS * 86400000
@@ -603,31 +570,7 @@ export default function Produtos() {
                   )}
                   {form.imagem && <button type="button" onClick={() => setForm({ ...form, imagem: null })} className="rounded-lg px-2 py-1.5 text-sm text-critical hover:bg-critical/10">Remover</button>}
                 </div>
-                <input className={inputCls} placeholder="cole aqui o endereço da imagem escolhida" value={form.imagem && !String(form.imagem).startsWith('data:') ? form.imagem : ''} onChange={(e) => setForm({ ...form, imagem: e.target.value || null })} />
-                <div className="flex flex-wrap gap-2">
-                  {form.codigoBarras && (
-                    <a
-                      href={urlBuscaGoogleImagens(form)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-info/25 bg-info/5 px-3 py-1.5 text-xs font-bold text-info hover:bg-info/10"
-                    >
-                      <Icon name="Search" size={13} /> Buscar pelo nome no Google Imagens
-                    </a>
-                  )}
-                  {/^https:\/\//i.test(String(form.imagem || '')) && (
-                    <button
-                      type="button"
-                      onClick={prepararUrlImagem}
-                      disabled={buscandoCatalogo}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-bengala px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
-                    >
-                      <Icon name={buscandoCatalogo ? 'LoaderCircle' : 'WandSparkles'} size={13} className={buscandoCatalogo ? 'animate-spin' : ''} />
-                      Preparar imagem para o jornal
-                    </button>
-                  )}
-                </div>
-                <p className="text-[11px] leading-relaxed text-ink-soft">A pesquisa usa somente nome, marca e gramagem. Confira visualmente a embalagem; imagens adicionadas manualmente são aceitas como estiverem.</p>
+                <FotoGoogle produto={form} toast={toast} salvaNaHora={Boolean(form.id)} onFoto={(foto) => { if (form.id) salvarProduto({ id: form.id, ...foto }); setForm((f) => (f ? { ...f, ...foto } : f)) }} />
                 {(form.imagemPaginaUrl || form.imagemFonteUrl) && (
                   <a
                     href={form.imagemPaginaUrl || form.imagemFonteUrl}
