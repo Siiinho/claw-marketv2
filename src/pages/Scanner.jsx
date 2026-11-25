@@ -1,19 +1,13 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
-import { Icon, StatusBadge, ProdutoThumb, Botao, PrecoVarejo, inputCls, Secao, Campo } from '../components/ui'
-import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, percentDesc, labelDias, dataISOmaisDias, plural } from '../lib/utils'
-import EstrelaMercado from '../components/EstrelaMercado'
+import { Icon, StatusBadge, ProdutoThumb, Botao, inputCls, Secao, Campo } from '../components/ui'
+import { setorById, formatBRL, diasParaVencer, regraDoProduto, percentDesc, labelDias, plural } from '../lib/utils'
 import CadastroProdutoNovo from '../components/CadastroProdutoNovo'
 import FotoGoogle from '../components/FotoGoogle'
 import SugestoesNome from '../components/SugestoesNome'
-import SugestaoPreco from '../components/SugestaoPreco'
 import { ehBuscaPorNome, useBuscaNome } from '../lib/useBuscaNome'
 
-const CHAVE_ESTRELA = 'clawmarket.scanner.estrela'
-function lerEstrela() {
-  try { return localStorage.getItem(CHAVE_ESTRELA) === '1' } catch { return false }
-}
 import { buscarProdutoBengala } from '../lib/catalogoBengala'
 import { useLeitorCamera } from '../lib/useLeitorCamera'
 import { buscarImagemProduto, buscarProdutoAutomatizado, imagemProdutoPrecisaTratamento, prepararProdutoParaJornal } from '../lib/produtoApi'
@@ -23,9 +17,7 @@ export default function Scanner() {
   const {
     produtos,
     salvarProduto,
-    salvarProdutoNaFila,
     registrarLote,
-    removerDaFila,
     ofertaDoProduto,
     config,
     toast,
@@ -38,14 +30,8 @@ export default function Scanner() {
   const [codigoLote, setCodigoLote] = useState('')
   const [quantidadeLote, setQuantidadeLote] = useState('1')
   const [novoEstoque, setNovoEstoque] = useState('')
-  const [veredito, setVeredito] = useState(null) // { tipo:'jornal'|'ok', desconto, precoNovo, dias }
+  const [veredito, setVeredito] = useState(null) // { tipo:'atencao'|'ok', desconto, precoNovo, dias }
   const [historico, setHistorico] = useState([]) // sessão de bipes
-  // Estrela do Mercado Encarte: fica ligada entre um bipe e outro.
-  const [estrela, setEstrelaEstado] = useState(lerEstrela)
-  const setEstrela = (valor) => {
-    setEstrelaEstado(valor)
-    try { localStorage.setItem(CHAVE_ESTRELA, valor ? '1' : '0') } catch { /* sem armazenamento */ }
-  }
   const [buscando, setBuscando] = useState(false)
   const inputRef = useRef(null)
   const buscaNome = useBuscaNome(codigo, produtos)
@@ -188,13 +174,6 @@ export default function Scanner() {
 
   // O preço do jornal é sempre o que a pessoa escreveu. A validade só sugere.
   const precoEscrito = (p) => Number(p.precoPromo) || (ofertaDoProduto(p.id) ? p.precoNormal * (1 - ofertaDoProduto(p.id).desconto / 100) : Number(p.precoNormal) || 0)
-  const usarSugestao = (valor) => {
-    salvarProduto({ id: resultado.id, precoPromo: valor })
-    setResultado((p) => ({ ...p, precoPromo: valor }))
-    setVeredito((v) => (v ? { ...v, precoNovo: valor, desconto: percentDesc(resultado.precoNormal, valor) } : v))
-    toast(`${resultado.nome}: preço de oferta ${formatBRL(valor)}.`)
-  }
-
   const verificar = () => {
     if (!resultado || !validadeLote) return toast('Informe a validade do lote.', 'erro')
     if (veredito) return
@@ -202,19 +181,14 @@ export default function Scanner() {
     const quantidade = Math.max(1, Number(quantidadeLote) || 1)
     const dias = diasParaVencer(validadeLote)
     const regra = regraDoProduto(dias, config?.regrasPreco || [])
-    const origemFila = regra ? 'vencimento' : 'scanner'
-    const jaEstavaNaFila = Boolean(resultado.naFila)
     const atualizado = {
       ...resultado,
       loja: 'loja3',
       validade: validadeLote,
       estoque: Math.max(Number(resultado.estoque) || 0, quantidade),
-      naFila: true,
-      origemFila,
-      ...(estrela ? { encarteMercadoDia: dataISOmaisDias(0) } : {}),
     }
 
-    salvarProdutoNaFila(atualizado, origemFila)
+    salvarProduto(atualizado)
     registrarLote({
       produtoId: resultado.id,
       loja: 'loja3',
@@ -224,19 +198,14 @@ export default function Scanner() {
     })
 
     const v = {
-      tipo: 'jornal',
+      tipo: regra ? 'atencao' : 'ok',
       desconto: percentDesc(resultado.precoNormal, precoEscrito(resultado)),
       precoNovo: precoEscrito(resultado),
       dias,
-      jaEstavaNaFila,
     }
 
     confirmarComFeedback()
-    toast(
-      jaEstavaNaFila
-        ? `${resultado.nome}: validade atualizada; o produto já estava na fila.`
-        : `${resultado.nome}: confirmado na fila do jornal.`
-    )
+    toast(`${resultado.nome}: validade guardada.`)
     setVeredito(v)
     setResultado(atualizado)
     setHistorico((h) => [
@@ -276,15 +245,6 @@ export default function Scanner() {
     inputRef.current?.focus()
   }
 
-  const desfazerUltimaConfirmacao = () => {
-    if (!resultado || !veredito) return
-    removerDaFila(resultado.id)
-    setResultado((p) => ({ ...p, naFila: false, origemFila: null }))
-    setHistorico((h) => h.filter((item) => item.produtoId !== resultado.id))
-    setVeredito(null)
-    toast('Confirmação desfeita. Confira os dados e confirme novamente.', 'info')
-  }
-
   const atualizarEstoque = () => {
     salvarProduto({ ...resultado, estoque: Number(novoEstoque) || 0 })
     toast('Estoque atualizado!')
@@ -299,7 +259,7 @@ export default function Scanner() {
   const escanearCamera = () => (camera.ativo ? camera.parar() : camera.abrir())
 
 
-  const naFilaSessao = historico.filter((h) => h.tipo === 'jornal').length
+  const vencendoSessao = historico.filter((h) => h.tipo === 'atencao').length
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
@@ -307,8 +267,8 @@ export default function Scanner() {
       {/* busca */}
       <Secao
         titulo="Bipe o produto"
-        descricao="Confira a validade na embalagem e confirme. Ele entra na fila do jornal."
-        acao={<Botao variante="contorno" className="px-3" onClick={() => navigate('/jornal')}><Icon name="Newspaper" size={16} /> Ver jornal</Botao>}
+        descricao="Confira a validade na embalagem e confirme. Os avisos de vencimento ficam em Produtos."
+        acao={<Botao variante="contorno" className="px-3" onClick={() => navigate('/produtos')}><Icon name="Package" size={16} /> Ver produtos</Botao>}
       >
         <div className="flex gap-2">
           <div className="relative min-w-0 flex-1">
@@ -372,12 +332,12 @@ export default function Scanner() {
       </Secao>
 
       {resultado === null && (
-        // Código que não existe em lugar nenhum: passo de cadastro e depois segue para validade e jornal.
+        // Código que não existe em lugar nenhum: passo de cadastro e depois segue para a validade.
         <CadastroProdutoNovo
           key={`${codigoNovo}|${nomeNovo}`}
           inicial={{ codigoBarras: codigoNovo.replace(/\D/g, ''), nome: nomeNovo }}
           toast={toast}
-          textoSalvar="Cadastrar e seguir para o jornal"
+          textoSalvar="Cadastrar e informar a validade"
           onCancelar={() => { setResultado(undefined); setCodigo(''); inputRef.current?.focus() }}
           onSalvar={(novo) => {
             const produto = { ...novo, validade: '', naFila: false, origemFila: null }
@@ -387,7 +347,7 @@ export default function Scanner() {
             setCodigoLote('')
             setQuantidadeLote('1')
             setNovoEstoque(String(produto.estoque))
-            toast(`${produto.nome} cadastrado. Agora informe a validade e confirme no jornal.`)
+            toast(`${produto.nome} cadastrado. Agora informe a validade.`)
           }}
         />
       )}
@@ -454,44 +414,24 @@ export default function Scanner() {
                 <input type="number" min="1" inputMode="numeric" value={quantidadeLote} onChange={(e) => setQuantidadeLote(e.target.value)} className={`${inputCls} py-2.5`} />
               </label>
             </div>
-            <EstrelaMercado ativo={estrela} onChange={setEstrela} className="mt-3 w-full" texto="Estrela: entra também no Mercado Encarte de hoje" />
-            <Botao onClick={verificar} disabled={Boolean(veredito)} className="mt-2 min-h-12 w-full justify-center px-5 py-3 text-base">
-              <Icon name="Newspaper" size={18} /> {veredito ? 'Produto confirmado na fila' : 'Confirmar e adicionar ao jornal'}
+            <Botao onClick={verificar} disabled={Boolean(veredito)} className="mt-3 min-h-12 w-full justify-center px-5 py-3 text-base">
+              <Icon name="CalendarCheck" size={18} /> {veredito ? 'Validade guardada' : 'Confirmar validade'}
             </Botao>
           </div>
 
-          {veredito && <SugestaoPreco className="mt-3 w-full" precoNormal={resultado.precoNormal} validade={resultado.validade} precoAtual={resultado.precoPromo} onUsar={usarSugestao} />}
-
           {/* veredito */}
-          {veredito?.tipo === 'jornal' && (
-            <div className="anim-in mt-3 overflow-hidden rounded-xl bg-bengala text-white">
-              <div className="flex items-center gap-3 p-4">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20">
-                  <Icon name="Newspaper" size={24} />
-                </span>
-                <div className="flex-1">
-                  <div className="text-base font-bold leading-tight">
-                    {veredito.jaEstavaNaFila ? 'Validade atualizada na fila' : 'Confirmado na fila do jornal'}
-                  </div>
-                  <div className="text-sm text-white/85">
-                    {labelDias(veredito.dias)}
-                    {veredito.desconto > 0 ? ` · ${veredito.desconto}% de desconto` : ' · preço que você cadastrou'}
-                  </div>
-                </div>
-                <div className="text-right">
-                  {veredito.desconto > 0 && <div className="text-xs text-white line-through">{formatBRL(resultado.precoNormal)}</div>}
-                  <div className="inline-block rotate-[-2deg] rounded-md bg-white px-2 py-0.5">
-                    <PrecoVarejo valor={veredito.precoNovo} className="text-2xl" cor="#c42b2b" />
-                  </div>
-                </div>
+          {veredito?.tipo === 'atencao' && (
+            <div className="anim-in mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-[#ffb020] p-4 text-[#3d2600]">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/60">
+                <Icon name="AlarmClock" size={24} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-base font-extrabold leading-tight">Vence logo: {labelDias(veredito.dias)}</div>
+                <div className="text-sm font-semibold">Para vender antes, ponha em oferta no Jornal ou peça troca em Produtos.</div>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 bg-black/20 px-4 py-2.5 text-xs">
-                <span>Já aparece no Jornal de Ofertas.</span>
-                <div className="flex gap-1.5">
-                  <button onClick={desfazerUltimaConfirmacao} className="min-h-9 rounded-lg bg-white/10 px-3 font-semibold hover:bg-white/20">Desfazer</button>
-                  <button onClick={() => navigate('/jornal')} className="min-h-9 rounded-lg bg-white/15 px-3 font-semibold hover:bg-white/25">Ver jornal</button>
-                  <button onClick={proximo} className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-white px-3 font-bold text-bengala hover:bg-cream">Bipar próximo <Icon name="ArrowRight" size={14} /></button>
-                </div>
+              <div className="flex gap-1.5">
+                <button onClick={() => navigate('/jornal')} className="min-h-10 rounded-lg bg-white/60 px-3 text-sm font-bold hover:bg-white">Ir para o Jornal</button>
+                <button onClick={proximo} className="inline-flex min-h-10 items-center gap-1 rounded-lg bg-[#3d2600] px-3 text-sm font-bold text-white">Bipar próximo <Icon name="ArrowRight" size={14} /></button>
               </div>
             </div>
           )}
@@ -502,7 +442,7 @@ export default function Scanner() {
               </span>
               <div className="flex-1">
                 <div className="text-base font-bold leading-tight">Validade boa, nada a fazer</div>
-                <div className="text-sm text-white/85">{labelDias(veredito.dias)} · fora das faixas de desconto</div>
+                <div className="text-sm text-white/85">{labelDias(veredito.dias)}</div>
               </div>
               <button onClick={proximo} className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-white px-3 text-xs font-bold text-[#1c6e48] hover:bg-cream">Bipar próximo <Icon name="ArrowRight" size={14} /></button>
             </div>
@@ -524,7 +464,7 @@ export default function Scanner() {
       {/* sessão de bipes */}
       <Secao
         titulo="Bipados agora"
-        descricao={historico.length ? `${plural(historico.length, 'conferido', 'conferidos')}, ${plural(naFilaSessao, 'foi para o jornal', 'foram para o jornal')}` : 'Os produtos que você conferir aparecem aqui.'}
+        descricao={historico.length ? `${plural(historico.length, 'conferido', 'conferidos')}${vencendoSessao ? `, ${plural(vencendoSessao, 'vence logo', 'vencem logo')}` : ''}` : 'Os produtos que você conferir aparecem aqui.'}
         corpo="mt-3"
       >
         {historico.length > 0 ? (
@@ -534,9 +474,9 @@ export default function Scanner() {
                 <li key={i} className="flex items-center gap-3 py-2">
                   <ProdutoThumb produto={h} size={32} />
                   <span className="min-w-0 flex-1 break-words text-sm leading-snug text-ink">{h.nome}</span>
-                  {h.tipo === 'jornal' ? (
-                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-bengala/10 px-2 py-0.5 text-xs font-semibold text-bengala">
-                      <Icon name="Newspaper" size={12} /> {h.desconto > 0 ? `−${h.desconto}% · ` : ''}{h.quantidade} un.
+                  {h.tipo === 'atencao' ? (
+                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#ffb020]/25 px-2 py-0.5 text-xs font-semibold text-[#6b4200]">
+                      <Icon name="AlarmClock" size={12} /> {labelDias(h.dias)}
                     </span>
                   ) : (
                     <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-[#1c6e48]">
@@ -546,11 +486,6 @@ export default function Scanner() {
                 </li>
               ))}
             </ul>
-            {naFilaSessao > 0 && (
-              <Botao variante="escuro" onClick={() => navigate('/jornal')} className="mt-3 w-full">
-                <Icon name="Newspaper" size={16} /> Montar jornal com {plural(naFilaSessao, 'produto', 'produtos')}
-              </Botao>
-            )}
           </>
         ) : null}
       </Secao>

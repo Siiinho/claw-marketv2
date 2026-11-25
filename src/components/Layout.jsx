@@ -7,14 +7,14 @@ import { InstallButton, OfflineBadge } from './Pwa'
 
 const SUBTITULOS = {
   dashboard: 'O que precisa de atenção hoje',
-  produtos: 'Cadastro e gestão de estoque',
+  produtos: 'Seus produtos e os que vão vencer',
   ofertas: 'Descontos e promoções ativas',
   precificacao: 'Desconto automático conforme o vencimento',
   cartazes: 'Cartazes e etiquetas de gôndola para imprimir',
-  jornal: 'Monte, publique e imprima o encarte em 4 passos',
+  jornal: 'Bipe, coloque o preço, escolha o template e publique',
   relatorios: 'Indicadores e perdas',
   esg: 'Impacto ambiental e desperdício evitado',
-  scanner: 'Confira a validade e mande para o jornal',
+  scanner: 'Confira a validade dos produtos da gôndola',
   usuarios: 'Equipe e permissões',
   config: 'Estabelecimento e automação',
 }
@@ -25,7 +25,7 @@ const MENU_PRINCIPAL = ['dashboard', 'produtos', 'ofertas', 'jornal']
 const MENU_MOBILE = [
   { key: 'dashboard', label: 'Início', path: '/', icone: 'Home', end: true },
   { key: 'produtos', label: 'Produtos', path: '/produtos', icone: 'Package' },
-  { key: 'scanner', label: 'Bipar', path: '/scanner', icone: 'ScanBarcode', central: true },
+  { key: 'scanner', label: 'Validade', path: '/scanner', icone: 'ScanBarcode', central: true },
   { key: 'jornal', label: 'Jornal', path: '/jornal', icone: 'Newspaper' },
 ]
 
@@ -173,8 +173,8 @@ export default function Layout() {
                 onClick={() => navigate('/scanner')}
                 className="hidden h-10 items-center gap-2 rounded-lg bg-bengala px-4 text-sm font-semibold text-white hover:bg-bengala-dark md:inline-flex"
               >
-                <Icon name="ScanBarcode" size={18} />
-                Bipar
+                <Icon name="CalendarSearch" size={18} />
+                Conferir validade
               </button>
             )}
             <div ref={refConta} className="relative hidden md:block">

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore, podeVer } from '../store/StoreContext'
 import { Icon, StatusBadge, ProdutoThumb } from '../components/ui'
 import { setorById, diasParaVencer, dataISOmaisDias, parseData, plural, labelDias } from '../lib/utils'
+import { remessaDe } from '../lib/remessa'
 
 const DIA_CURTO = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
 
@@ -14,7 +15,8 @@ function saudacao() {
 }
 
 export default function Dashboard() {
-  const { produtos, ofertas, fila, usuario, lojas, lojaAtiva } = useStore()
+  const { produtos, usuario, lojas, lojaAtiva } = useStore()
+  const remessa = remessaDe(produtos, usuario?.id)
   const navigate = useNavigate()
   const pode = (k) => podeVer(usuario.papel, k)
 
@@ -34,7 +36,6 @@ export default function Dashboard() {
   const vencendo = semana.flatMap((d) => d.itens.map((p) => ({ p, dias: d.i })))
   const criticos = vencendo.filter((x) => x.dias <= 2).length
   const maxDia = Math.max(1, ...semana.map((d) => d.itens.length))
-  const ofertasAtivas = ofertas.filter((o) => o.ativa).length
   const nomeLoja = lojaAtiva === 'todas' ? 'Todas as lojas' : lojas.find((l) => l.id === lojaAtiva)?.nome
   const hojeExtenso = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
   const primeiroNome = (usuario.nome || '').split(' ')[0]
@@ -61,24 +62,41 @@ export default function Dashboard() {
         </p>
       </header>
 
-      {/* ação principal do chão de loja */}
-      {pode('scanner') && (
-        <button
-          onClick={() => navigate('/scanner')}
-          className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-bengala p-5 text-left text-white shadow-[0_10px_24px_rgba(216,30,41,.25)] hover:bg-bengala-dark md:gap-6 md:p-7"
-        >
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white text-bengala md:h-16 md:w-16">
-            <Icon name="ScanBarcode" size={30} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="display-bengala block text-[28px] leading-none md:text-[34px]">Bipar produto</span>
-            <span className="mt-1.5 block text-sm text-white/85 md:text-base">Leia o código, confirme a validade e ele entra na fila do jornal.</span>
-          </span>
-          <Icon name="ArrowRight" size={24} className="hidden shrink-0 transition-transform duration-200 group-hover:translate-x-1 sm:block" />
-        </button>
-      )}
+      {/* as duas ferramentas, cada uma com a sua função */}
+      <div className="grid gap-3 md:grid-cols-2">
+        {pode('jornal') && (
+          <button
+            onClick={() => navigate('/jornal')}
+            className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-bengala p-5 text-left text-white shadow-[0_10px_24px_rgba(216,30,41,.25)] hover:bg-bengala-dark md:p-6"
+          >
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white text-bengala">
+              <Icon name="Newspaper" size={30} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="display-bengala block text-[28px] leading-none md:text-[32px]">{remessa.length ? 'Continuar o jornal' : 'Montar jornal'}</span>
+              <span className="mt-1.5 block text-sm text-white/90 md:text-base">{remessa.length ? `${plural(remessa.length, 'produto bipado', 'produtos bipados')}. Falta publicar.` : 'Bipe os produtos, ponha o preço e publique.'}</span>
+            </span>
+            <Icon name="ArrowRight" size={24} className="hidden shrink-0 transition-transform duration-200 group-hover:translate-x-1 sm:block" />
+          </button>
+        )}
+        {pode('scanner') && (
+          <button
+            onClick={() => navigate('/scanner')}
+            className="group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl border-2 border-navy/30 bg-white p-5 text-left text-navy shadow-[0_2px_0_rgba(8,43,79,.15)] hover:border-navy md:p-6"
+          >
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-navy text-white">
+              <Icon name="CalendarSearch" size={28} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="display-bengala block text-[28px] leading-none md:text-[32px]">Conferir validade</span>
+              <span className="mt-1.5 block text-sm text-ink md:text-base">Bipe da gôndola. O sistema avisa o que vai vencer.</span>
+            </span>
+            <Icon name="ArrowRight" size={24} className="hidden shrink-0 transition-transform duration-200 group-hover:translate-x-1 sm:block" />
+          </button>
+        )}
+      </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-5">
         {/* semana de vencimentos */}
         <section className="card-bengala min-w-0 p-4 md:p-6">
           <div className="flex items-baseline justify-between gap-3">
@@ -137,48 +155,6 @@ export default function Dashboard() {
               )}
             </ul>
           )}
-        </section>
-
-        {/* fila do jornal */}
-        <section className="card-bengala flex min-w-0 flex-col self-start p-4 md:p-6">
-          <h2 className="text-lg font-bold text-navy">Fila do jornal</h2>
-          <p className="mt-0.5 text-sm text-ink-soft">
-            {fila.length === 0 ? 'Nenhum produto ainda.' : `${plural(fila.length, 'produto pronto', 'produtos prontos')} para o encarte.`}
-          </p>
-
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            {fila.length === 0
-              ? [0, 1, 2].map((i) => (
-                <div key={i} className="flex aspect-square items-center justify-center rounded-xl border-2 border-dashed border-ink-soft/20 text-ink-soft/40">
-                  <Icon name="Tag" size={22} />
-                </div>
-              ))
-              : fila.slice(0, 6).map((p) => (
-                <div key={p.id} className="flex aspect-square items-center justify-center rounded-xl bg-cream p-1.5" title={p.nome}>
-                  <ProdutoThumb produto={p} size={72} />
-                </div>
-              ))}
-          </div>
-          {fila.length > 6 && <p className="mt-2 text-xs text-ink-soft">+ {plural(fila.length - 6, 'produto', 'produtos')}</p>}
-
-          <div className="pt-5">
-            {pode('jornal') ? (
-              <button
-                onClick={() => navigate('/jornal')}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-navy text-sm font-semibold text-white hover:bg-navy-light"
-              >
-                <Icon name="Newspaper" size={17} /> {fila.length ? 'Montar jornal' : 'Abrir o jornal'}
-              </button>
-            ) : (
-              <p className="text-xs text-ink-soft">O gerente monta o jornal com os produtos que você bipar.</p>
-            )}
-            {pode('ofertas') && (
-              <button onClick={() => navigate('/ofertas')} className="mt-3 flex w-full items-center justify-between rounded-lg px-1 py-1.5 text-sm text-ink hover:text-bengala">
-                <span className="flex items-center gap-2"><Icon name="Tag" size={16} className="text-success" /> Ofertas ativas</span>
-                <span className="num-tab font-bold">{ofertasAtivas}</span>
-              </button>
-            )}
-          </div>
         </section>
       </div>
     </div>

@@ -104,7 +104,7 @@ export default function CadastroProdutoNovo({ inicial, comLote = false, titulo =
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-navy text-white"><Icon name="PackagePlus" size={19} /></span>
         <div className="min-w-0 flex-1">
           <div className="font-bold text-navy">{titulo}</div>
-          <div className="text-xs text-ink-soft">Preencha os dados e ele entra no cadastro e no jornal. Campos com * são obrigatórios.</div>
+          <div className="text-xs text-ink-soft">Preencha uma vez e ele fica salvo. Campos com * são obrigatórios.</div>
         </div>
       </div>
 

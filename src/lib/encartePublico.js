@@ -40,7 +40,7 @@ const CANAL = 'clawmarket-encarte'
 const CAMPOS_PUBLICOS = [
   'id', 'nome', 'marca', 'gramagem', 'setor', 'codigoBarras', 'seloOferta',
   'unidade', 'precoNormal', 'precoJornal', 'descontoJornal', 'origemFila',
-  'imagem', 'imagemCachePermanente', 'imagemTratamento', 'ajusteArte', 'encarteMercadoDia', 'estiloPreco',
+  'imagem', 'imagemCachePermanente', 'imagemTratamento', 'ajusteArte', 'encarteMercadoDia', 'soMercado', 'estiloPreco',
 ]
 
 const soPublico = (item) => {
@@ -53,7 +53,9 @@ const soPublico = (item) => {
 
 // Template de cada setor, tamanho do logo e fundos por template também vão para o site:
 // sem isso cada aba de setor caía no template padrão.
-const extrasDoJornal = ({ temasSetor, temasV, escalaLogo, fundos, mostrarGeral, mostrarMercado, pausados }) => ({
+const extrasDoJornal = ({ temasSetor, temasV, escalaLogo, fundos, mostrarGeral, mostrarMercado, pausados, periodosSetor }) => ({
+  // Setor publicado com datas próprias: { padaria: { de, ate } }. Sem isso, vale o período do jornal.
+  periodosSetor: periodosSetor && typeof periodosSetor === 'object' ? periodosSetor : {},
   // Setores desligados para ajuste: a aba fica no site com o aviso "Ajustando ofertas".
   pausados: Array.isArray(pausados) ? [...new Set(pausados.filter(Boolean))] : [],
   // Abas do site que a loja pode esconder (sem valor = aparece).
@@ -220,6 +222,17 @@ export async function carregarEncartePublicado() {
     return { ...encarte, itens }
   }
   return reserva || encarte || null
+}
+
+// O encarte que está no ar agora, para publicar um jornal sem apagar os outros. Diferente da leitura
+// do cliente, aqui uma falha é erro: publicar achando que não há nada no ar apagaria as ofertas.
+export async function lerEncarteNoAr() {
+  if (nuvemAtiva()) {
+    const daNuvem = await lerEncarteNuvem()
+    if (daNuvem === undefined) throw new Error('Não deu para conferir o que está no site agora. Veja a internet e tente de novo.')
+    if (daNuvem) return daNuvem
+  }
+  return (await lerDoSite()) || lerEncartePublicado() || null
 }
 
 // Chama `aoMudar(versao?)` sempre que uma nova versão for publicada. Devolve a função de cancelar.

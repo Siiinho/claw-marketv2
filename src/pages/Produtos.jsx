@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom'
 import { useStore, podeEditar } from '../store/StoreContext'
 import { Icon, StatusBadge, ProdutoThumb, EmptyState, Botao, Modal, Campo, inputCls, Pill, Abas, Segmentado, Acao } from '../components/ui'
 import {
-  SETORES, setorById, statusValidade, formatBRL, formatData, formatDataCurta, arquivoParaDataURL, dataISOmaisDias, noMercadoEncarte,
+  SETORES, setorById, formatBRL, formatData, formatDataCurta, arquivoParaDataURL, dataISOmaisDias,
   diasParaVencer, plural, loteResolvido, precisaDecisao, dataCadastro, todasBaixas, regraDaMarca,
 } from '../lib/utils'
 import {
@@ -77,7 +77,7 @@ function quando(iso) {
 }
 
 export default function Produtos() {
-  const { produtos, usuario, lojas, lojaAtiva, config, salvarProduto, excluirProduto, desfazerBaixa, toggleFila, toast } = useStore()
+  const { produtos, usuario, lojas, lojaAtiva, config, salvarProduto, excluirProduto, desfazerBaixa, toast } = useStore()
   const lojaNome = (id) => lojas.find((l) => l.id === id)?.nome || '—'
   const { busca } = useOutletContext()
   const editavel = podeEditar(usuario.papel)
@@ -191,7 +191,7 @@ export default function Produtos() {
       if (naJanela(p)) vencendo++
       if (precisaDecisao(p)) vencidos++
       const d = diasParaVencer(p.validade)
-      if (d != null && d >= 0 && d <= 2 && !p.naFila && !loteResolvido(p)) urgentes++
+      if (d != null && d >= 0 && d <= 2 && !loteResolvido(p)) urgentes++
     }
     return { recentes, vencendo, vencidos, urgentes }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -280,20 +280,8 @@ export default function Produtos() {
     }
   }
 
-  const adicionarFila = (p) => {
-    const origem = ['critico', 'atencao', 'vencido'].includes(statusValidade(p.validade).id) ? 'vencimento' : 'manual'
-    toggleFila(p.id, origem)
-    toast(p.naFila ? 'Removido da fila do jornal.' : 'Adicionado à fila do jornal! Toque na estrela se ele for oferta do Mercado Encarte.', p.naFila ? 'info' : 'sucesso')
-  }
-  // Estrela: só aparece para produto que está indo para o jornal; manda para a lista de estrelados (Mercado Encarte de hoje).
-  const alternarEstrela = (p) => {
-    const ligar = !noMercadoEncarte(p)
-    salvarProduto({ id: p.id, encarteMercadoDia: ligar ? dataISOmaisDias(0) : null })
-    toast(ligar ? `${p.nome} entrou nos estrelados (Mercado Encarte de hoje).` : `${p.nome} saiu dos estrelados.`, 'info')
-  }
   const AcoesProduto = ({ p }) => {
     const vencido = precisaDecisao(p)
-    const estrela = noMercadoEncarte(p)
     const sugestao = regraDaMarca(config, p.marca)
     return (
       <>
@@ -306,30 +294,6 @@ export default function Produtos() {
           </>
         ) : (
           <>
-            <Acao
-              tom="jornal"
-              ativo={!!p.naFila}
-              icone={p.naFila ? 'Check' : 'Newspaper'}
-              onClick={() => adicionarFila(p)}
-              aria-pressed={!!p.naFila}
-              data-acao="jornal"
-              title={p.naFila ? 'Está na fila do jornal. Toque para tirar.' : 'Mandar para a fila do jornal de ofertas'}
-            >
-              {p.naFila ? 'No jornal' : 'Pôr no jornal'}
-            </Acao>
-            {p.naFila && (
-              <Acao
-                tom="estrela"
-                ativo={estrela}
-                icone="Star"
-                iconeFill={estrela ? 'var(--color-offer)' : 'none'}
-                onClick={() => alternarEstrela(p)}
-                aria-pressed={estrela}
-                title="Estrela: entra no Mercado Encarte (oferta de hoje)"
-              >
-                {estrela ? 'Com estrela' : 'Dar estrela'}
-              </Acao>
-            )}
             {naJanela(p) && (
               <Acao tom="troca" icone="Repeat" onClick={() => abrirBaixa(p, 'troca')} aria-label={`Pedir troca de ${p.nome} ao fornecedor`}>Pedir troca</Acao>
             )}
@@ -371,8 +335,8 @@ export default function Produtos() {
         <Aviso
           tom="critico"
           icone="AlarmClock"
-          titulo={`${plural(contagem.urgentes, 'produto vence', 'produtos vencem')} em até 2 dias fora do jornal`}
-          texto="Ponha no jornal para vender a tempo ou peça troca ao fornecedor antes de vencer."
+          titulo={`${plural(contagem.urgentes, 'produto vence', 'produtos vencem')} em até 2 dias`}
+          texto="Peça troca ao fornecedor ou ponha em oferta no Jornal antes de vencer."
           acao={<Botao variante="escuro" onClick={() => { setDiasJanela(2); setAba('vencendo') }}>Ver quais são</Botao>}
         />
       ) : null}
