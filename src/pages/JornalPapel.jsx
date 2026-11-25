@@ -129,7 +129,7 @@ function Capa({ encarte, loja, tema, indice, destaques, compras, total }) {
   return (
     <div className="flex h-full flex-col px-7 pb-6 pt-5" style={{ fontFamily: SERIFA }}>
       <div className="flex justify-between text-[11px] font-bold uppercase tracking-[0.14em]"><span>Distribuição gratuita</span><span>Edição de {formatDataCurta(encarte.publicadoEm?.slice(0, 10) || dataISOmaisDias(0))}</span></div>
-      <h1 className="mt-1 whitespace-nowrap text-center uppercase leading-[0.95]" style={{ fontFamily: '"Alfa Slab One", serif', letterSpacing: '-0.01em', fontSize: Math.min(54, Math.floor(880 / Math.max(8, String(loja.nome).length))) }}>{loja.nome}</h1>
+      <h1 className="mt-1 whitespace-nowrap text-center uppercase leading-[0.95]" style={{ fontFamily: '"Alfa Slab One", serif', letterSpacing: '-0.01em', fontSize: Math.min(54, Math.floor(800 / Math.max(8, String(loja.nome).length))) }}>{loja.nome}</h1>
       <div className="mt-1 border-y-[3px] border-double py-1 text-center text-[12px] font-bold uppercase tracking-[0.12em]" style={{ borderColor: TINTA }}>
         {extenso(dataISOmaisDias(0))} · {plural(total, 'oferta', 'ofertas')} nesta edição
       </div>
