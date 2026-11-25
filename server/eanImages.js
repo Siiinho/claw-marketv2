@@ -132,7 +132,9 @@ export async function consultarContaEanImages(chave) {
 // ou variável da hospedagem). O navegador nunca recebe nem envia a chave.
 // EANIMAGES_COM_DADOS=0 desliga nome/descrição (economiza 1 crédito por produto novo).
 export async function responderEanImages(url) {
-  const chave = process.env.EANIMAGES_API_KEY || ''
+  // Chave do Supabase colada na linha errada do .env nunca pode ser enviada para a EAN Images.
+  const bruta = (process.env.EANIMAGES_API_KEY || '').trim()
+  const chave = /^(sb_|eyJ)/.test(bruta) ? '' : bruta
   const params = new URL(url, 'http://localhost').searchParams
   try {
     if (params.get('status')) return { status: 200, corpo: { configurada: Boolean(chave) } }

@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
-import { Icon, StatusBadge, ProdutoThumb, Botao, PrecoVarejo, inputCls, Secao } from '../components/ui'
+import { Icon, StatusBadge, ProdutoThumb, Botao, PrecoVarejo, inputCls, Secao, Campo } from '../components/ui'
 import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, precoComRegra, labelDias, dataISOmaisDias, plural } from '../lib/utils'
 import EstrelaMercado from '../components/EstrelaMercado'
 import CadastroProdutoNovo from '../components/CadastroProdutoNovo'
+import FotoGoogle from '../components/FotoGoogle'
+import SugestoesNome from '../components/SugestoesNome'
+import { ehBuscaPorNome, useBuscaNome } from '../lib/useBuscaNome'
 
 const CHAVE_ESTRELA = 'clawmarket.scanner.estrela'
 function lerEstrela() {
@@ -45,14 +48,28 @@ export default function Scanner() {
   }
   const [buscando, setBuscando] = useState(false)
   const inputRef = useRef(null)
+  const buscaNome = useBuscaNome(codigo, produtos)
+  const { porNome, sugestoes, procurandoNome, destaque, setDestaque } = buscaNome
+  const [abrindo, setAbrindo] = useState(null) // código escolhido na lista, até o produto abrir
 
-  const buscar = async (cod) => {
+  const escolherSugestao = async (item) => {
+    if (buscando) return
+    if (!item.codigoBarras) return toast('Esse produto está sem código de barras. Corrija em Produtos.', 'info')
+    setAbrindo(item.codigoBarras)
+    await buscar(item.codigoBarras)
+    setAbrindo(null)
+  }
+
+  // `escolher`: Enter pega o item marcado da lista; tocar no botão nunca escolhe por conta própria.
+  const buscar = async (cod, { escolher = false } = {}) => {
     const c = (cod ?? codigo).trim()
-    if (!c || buscando) return
+    if (!c || buscando) return undefined
+    if (ehBuscaPorNome(c)) {
+      if (sugestoes.length && (escolher || sugestoes.length === 1)) return escolherSugestao(sugestoes[destaque])
+      return toast(sugestoes.length ? 'Toque no produto certo da lista.' : procurandoNome ? 'Procurando pelo nome...' : 'Nenhum produto com esse nome. Tente outra palavra ou o código de barras.', 'info')
+    }
+    // O produto anterior continua na tela, travado, até o novo chegar: nada some e volta.
     setBuscando(true)
-    setResultado(undefined)
-    setVeredito(null)
-    setCodigo(c)
 
     try {
       let p = produtos.find((x) => x.codigoBarras === c)
@@ -129,6 +146,8 @@ export default function Scanner() {
         }
       }
 
+      setCodigo(c)
+      setVeredito(null)
       setResultado(p || null)
       setCodigoNovo(p ? '' : c)
       setValidadeLote(p?.validade || '')
@@ -136,6 +155,8 @@ export default function Scanner() {
       setQuantidadeLote('1')
       setNovoEstoque(p ? String(p.estoque) : '')
     } catch (_) {
+      setCodigo(c)
+      setVeredito(null)
       setResultado(null)
       setCodigoNovo(c)
       toast('Não foi possível consultar o catálogo agora.', 'erro')
@@ -228,6 +249,17 @@ export default function Scanner() {
     ].slice(0, 20))
   }
 
+  const corrigir = (dados) => setResultado((p) => (p ? { ...p, ...dados } : p))
+  const gravarCorrecao = () => {
+    const nome = resultado?.nome?.trim()
+    const salvo = produtos.find((p) => p.id === resultado?.id)
+    if (!salvo) return
+    if (!nome) return corrigir({ nome: salvo.nome })
+    if (nome === salvo.nome && (resultado.gramagem || '') === (salvo.gramagem || '')) return
+    salvarProduto({ id: resultado.id, nome, gramagem: (resultado.gramagem || '').trim() })
+    toast('Descrição corrigida.')
+  }
+
   const proximo = () => {
     setResultado(undefined)
     setVeredito(null)
@@ -283,9 +315,16 @@ export default function Scanner() {
               autoFocus
               value={codigo}
               onChange={(e) => setCodigo(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && buscar()}
-              inputMode="numeric"
-              placeholder="Código de barras"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); buscar(undefined, { escolher: true }) }
+                else if (e.key === 'ArrowDown' && sugestoes.length) { e.preventDefault(); setDestaque((i) => Math.min(sugestoes.length - 1, i + 1)) }
+                else if (e.key === 'ArrowUp' && sugestoes.length) { e.preventDefault(); setDestaque((i) => Math.max(0, i - 1)) }
+              }}
+              inputMode="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              aria-label="Código de barras ou nome do produto"
+              placeholder="Código de barras ou nome"
               className={`${inputCls} min-h-11 pl-9 text-base`}
             />
           </div>
@@ -298,6 +337,8 @@ export default function Scanner() {
             <span className="hidden sm:inline">{scanning ? 'Parar' : 'Câmera'}</span>
           </Botao>
         </div>
+
+        {porNome && <SugestoesNome codigo={codigo} busca={buscaNome} onEscolher={escolherSugestao} carregando={abrindo} />}
 
         {buscando && (
           <div className="mt-3 flex items-center gap-2 rounded-xl bg-cream-200 px-3 py-2 text-sm font-medium text-ink">
@@ -350,7 +391,7 @@ export default function Scanner() {
 
       {/* produto + verificação de validade */}
       {resultado && (
-        <div className="anim-in card-bengala p-4 md:p-5">
+        <div aria-busy={buscando} className={`anim-in card-bengala p-4 md:p-5 ${buscando ? 'pointer-events-none opacity-60' : ''}`}>
           <div className="flex items-center gap-4">
             <ProdutoThumb produto={resultado} size={64} />
             <div className="min-w-0 flex-1">
@@ -372,6 +413,16 @@ export default function Scanner() {
               )}
             </div>
           </div>
+
+          {/* foto ou descrição ruim: resolve aqui mesmo, sem sair do bipe */}
+          <details key={resultado.id} className="mt-3 rounded-xl border border-ink-soft/15 bg-white px-3 py-2" open={!resultado.imagem || undefined}>
+            <summary className="flex min-h-9 cursor-pointer items-center gap-2 text-sm font-bold text-navy"><Icon name="ImagePlus" size={16} /> {resultado.imagem ? 'Trocar foto ou descrição' : 'Colocar foto do produto'}</summary>
+            <div className="mt-2 grid gap-2 pb-1 sm:grid-cols-[1fr_130px]">
+              <Campo label="Descrição"><input className={inputCls} value={resultado.nome || ''} onChange={(e) => corrigir({ nome: e.target.value })} onBlur={gravarCorrecao} /></Campo>
+              <Campo label="Gramagem"><input className={inputCls} value={resultado.gramagem || ''} onChange={(e) => corrigir({ gramagem: e.target.value })} onBlur={gravarCorrecao} placeholder="350 g" /></Campo>
+            </div>
+            <FotoGoogle className="mb-2" produto={resultado} toast={toast} salvaNaHora onFoto={(foto) => { salvarProduto({ id: resultado.id, ...foto }); corrigir(foto) }} />
+          </details>
 
           {/* passo-chave: validade do lote visto na gôndola */}
           <div className="mt-4 rounded-xl border border-navy/15 bg-cream p-3.5">

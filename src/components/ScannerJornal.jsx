@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/StoreContext'
-import { buscarProdutoBengala, buscarProdutosPorNome, normalizarBusca } from '../lib/catalogoBengala'
+import { buscarProdutoBengala } from '../lib/catalogoBengala'
+import { ehBuscaPorNome, useBuscaNome } from '../lib/useBuscaNome'
 import { buscarImagemProduto, buscarProdutoAutomatizado } from '../lib/produtoApi'
-import { dataISOmaisDias, noMercadoEncarte, formatBRL, setorById } from '../lib/utils'
+import { dataISOmaisDias, noMercadoEncarte } from '../lib/utils'
 import { useLeitorCamera } from '../lib/useLeitorCamera'
 import { Botao, Icon, ProdutoThumb, inputCls } from './ui'
 import EstrelaMercado, { BotaoEstrela } from './EstrelaMercado'
 import CadastroProdutoNovo from './CadastroProdutoNovo'
+import SugestoesNome from './SugestoesNome'
 
 const CHAVE_ESTRELA = 'clawmarket.scanner.estrela'
 function lerEstrela() {
@@ -28,9 +30,6 @@ const rascunhoVazio = (codigo = '') => ({
 function codigoLimpo(valor) {
   return String(valor || '').replace(/\D/g, '')
 }
-// Com letra no campo, a busca é pelo nome; só números, é o código de barras.
-const ehBuscaPorNome = (valor) => /[a-zA-ZÀ-ÿ]/.test(String(valor || ''))
-
 // `embutido`: vai dentro de um passo do gerador (sem card, sem título e sem a lista de recentes,
 // porque a lista do próprio passo já mostra a fila).
 export default function ScannerJornal({ embutido = false } = {}) {
@@ -48,38 +47,9 @@ export default function ScannerJornal({ embutido = false } = {}) {
   const [rascunho, setRascunho] = useState(null)
   const [expandido, setExpandido] = useState(false)
   const inputRef = useRef(null)
-  // Busca pelo nome: produtos já cadastrados no app primeiro, depois a mercadologia da loja e a base de 28 mil.
-  const [sugestoes, setSugestoes] = useState([])
-  const [procurandoNome, setProcurandoNome] = useState(false)
-  const [destaque, setDestaque] = useState(0)
-  const porNome = ehBuscaPorNome(codigo)
-  useEffect(() => {
-    if (!porNome || normalizarBusca(codigo).length < 2) { setSugestoes([]); setProcurandoNome(false); return undefined }
-    let ativo = true
-    setProcurandoNome(true)
-    const espera = setTimeout(async () => {
-      const palavras = normalizarBusca(codigo).split(' ').filter(Boolean)
-      const cadastrados = produtos
-        .filter((p) => p.nome && palavras.every((w) => normalizarBusca(p.nome).includes(w)))
-        .slice(0, 6)
-        .map((p) => ({ codigoBarras: p.codigoBarras, nome: p.nome, setor: p.setor, precoNormal: p.precoNormal, origem: 'cadastrado', produto: p }))
-      let doCatalogo = []
-      try { doCatalogo = await buscarProdutosPorNome(codigo, { limite: 12 }) } catch (_) { /* catálogo fora do ar: fica só com os cadastrados */ }
-      if (!ativo) return
-      const jaListados = new Set(cadastrados.map((p) => codigoLimpo(p.codigoBarras).replace(/^0+/, '')).filter(Boolean))
-      // Nome que começa com a primeira palavra vem antes; depois o que já está no app, a mercadologia
-      // da loja e a base de 28 mil; por fim o nome mais curto (mais perto do que foi digitado).
-      const peso = { cadastrado: 0, loja: 100, base: 1000 }
-      const pontos = (p) => (normalizarBusca(p.nome).startsWith(palavras[0]) ? 0 : 5000) + (peso[p.origem] ?? 1000) + normalizarBusca(p.nome).length
-      const lista = [...cadastrados, ...doCatalogo.filter((p) => !jaListados.has(codigoLimpo(p.codigoBarras).replace(/^0+/, '')))]
-        .sort((x, y) => pontos(x) - pontos(y))
-        .slice(0, 12)
-      setSugestoes(lista)
-      setDestaque(0)
-      setProcurandoNome(false)
-    }, 180)
-    return () => { ativo = false; clearTimeout(espera) }
-  }, [codigo, porNome, produtos])
+  const busca = useBuscaNome(codigo, produtos)
+  const { porNome, sugestoes, procurandoNome, destaque, setDestaque } = busca
+  const [abrindo, setAbrindo] = useState(null) // código escolhido na lista, até o produto abrir
   // A estrela fica ligada entre um bipe e outro, para mandar vários produtos seguidos ao Mercado Encarte.
   const [estrela, setEstrelaEstado] = useState(lerEstrela)
   const setEstrela = (valor) => {
@@ -116,17 +86,20 @@ export default function ScannerJornal({ embutido = false } = {}) {
     inputRef.current?.focus()
   }
 
-  const escolherSugestao = (item) => {
-    setSugestoes([])
+  const escolherSugestao = async (item) => {
     if (item.produto) { adicionarConhecido(item.produto); return }
+    if (buscando) return
+    setAbrindo(item.codigoBarras)
+    await buscar(item.codigoBarras)
+    setAbrindo(null)
     setCodigo(item.codigoBarras)
-    buscar(item.codigoBarras)
   }
 
-  const buscar = async (valor = codigo) => {
+  // `escolher`: Enter no teclado pega o item marcado; tocar no botão nunca escolhe por conta própria.
+  const buscar = async (valor = codigo, { escolher = false } = {}) => {
     if (ehBuscaPorNome(valor)) {
-      if (sugestoes[destaque]) return escolherSugestao(sugestoes[destaque])
-      return toast(procurandoNome ? 'Procurando pelo nome...' : 'Nenhum produto com esse nome. Tente outra palavra ou o código de barras.', 'info')
+      if (sugestoes.length && (escolher || sugestoes.length === 1)) return escolherSugestao(sugestoes[destaque])
+      return toast(sugestoes.length ? 'Toque no produto certo da lista.' : procurandoNome ? 'Procurando pelo nome...' : 'Nenhum produto com esse nome. Tente outra palavra ou o código de barras.', 'info')
     }
     const c = codigoLimpo(valor)
     if (!c) return toast('Digite o nome, o código ou escaneie o código de barras.', 'erro')
@@ -208,10 +181,10 @@ export default function ScannerJornal({ embutido = false } = {}) {
             value={codigo}
             onChange={(evento) => setCodigo(evento.target.value)}
             onKeyDown={(evento) => {
-              if (evento.key === 'Enter') { evento.preventDefault(); buscar() }
+              if (evento.key === 'Enter') { evento.preventDefault(); buscar(codigo, { escolher: true }) }
               else if (evento.key === 'ArrowDown' && sugestoes.length) { evento.preventDefault(); setDestaque((i) => Math.min(sugestoes.length - 1, i + 1)) }
               else if (evento.key === 'ArrowUp' && sugestoes.length) { evento.preventDefault(); setDestaque((i) => Math.max(0, i - 1)) }
-              else if (evento.key === 'Escape') setSugestoes([])
+              else if (evento.key === 'Escape') setCodigo('')
             }}
             inputMode="search"
             enterKeyHint="search"
@@ -234,34 +207,7 @@ export default function ScannerJornal({ embutido = false } = {}) {
         </button>
       </div>
 
-      {porNome && (
-        <div className="mt-2 overflow-hidden rounded-xl border border-ink-soft/15 bg-white">
-          {procurandoNome && !sugestoes.length ? (
-            <p className="flex items-center gap-2 px-3 py-3 text-sm text-ink-soft"><Icon name="LoaderCircle" size={16} className="animate-spin" /> Procurando na base de produtos...</p>
-          ) : !sugestoes.length ? (
-            <p className="px-3 py-3 text-sm text-ink-soft">{normalizarBusca(codigo).length < 2 ? 'Continue digitando o nome.' : 'Nenhum produto com esse nome. Tente outra palavra, a marca ou o código de barras.'}</p>
-          ) : (
-            <ul id="sugestoes-nome" role="listbox" aria-label="Produtos encontrados pelo nome" className="max-h-80 divide-y divide-ink-soft/10 overflow-y-auto">
-              {sugestoes.map((item, i) => (
-                <li key={`${item.origem}-${item.codigoBarras || item.nome}-${i}`} id={`sugestao-${i}`} role="option" aria-selected={i === destaque}>
-                  <button type="button" onClick={() => escolherSugestao(item)} onMouseMove={() => i !== destaque && setDestaque(i)}
-                    className={`flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left ${i === destaque ? 'bg-cream-200' : 'bg-white'}`}>
-                    {item.produto ? <ProdutoThumb produto={item.produto} size={34} /> : <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-lg bg-cream-200 text-ink-soft"><Icon name="Package" size={17} /></span>}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-bold text-ink">{item.nome}</span>
-                      <span className="block truncate text-xs text-ink-soft">
-                        {[item.origem === 'cadastrado' ? (item.produto?.naFila ? 'Já na fila' : 'Cadastrado no app') : item.origem === 'loja' ? 'Mercadologia da loja' : 'Base de produtos (sem preço)', item.setor && setorById(item.setor)?.nome, item.codigoBarras].filter(Boolean).join(' · ')}
-                      </span>
-                    </span>
-                    {Number(item.precoNormal) > 0 && <span className="num-tab shrink-0 text-sm font-bold text-ink">{formatBRL(Number(item.precoNormal))}</span>}
-                    <Icon name="Plus" size={17} className="shrink-0 text-navy" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {porNome && <SugestoesNome codigo={codigo} busca={busca} onEscolher={escolherSugestao} carregando={abrindo} />}
 
       <EstrelaMercado ativo={estrela} onChange={setEstrela} className="mt-2 w-full" texto="Estrela ao adicionar: entra também no Mercado Encarte de hoje" />
 

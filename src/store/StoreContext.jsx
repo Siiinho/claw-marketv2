@@ -414,6 +414,7 @@ export function StoreProvider({ children }) {
     const pendentes = produtos.filter((p) => {
       const ean = String(p.codigoBarras || '').replace(/\D/g, '')
       if (ean.length < 8 || fotosConferidas.current.has(`${ean}|${p.imagem || ''}`)) return false
+      if (p.imagemManual && p.imagem) return false // foto escolhida por alguém da loja fica
       if (p.imagemOrigem !== 'catalogo') return true
       return nuvem && ehFotoDaPastaLocal(p.imagem) // foto do PC que ainda não foi para a nuvem
     })

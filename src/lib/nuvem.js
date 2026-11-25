@@ -129,6 +129,13 @@ export function assinarNuvem(aoMudar, filtroColecao) {
   return () => { try { cliente().removeChannel(canal) } catch (_) {} }
 }
 
+// Login atual, para o servidor do ClawMarket conferir quem está pedindo.
+export async function tokenNuvem() {
+  if (!nuvemAtiva()) return null
+  const { data } = await cliente().auth.getSession()
+  return data?.session?.access_token || null
+}
+
 // ---------- fotos dos produtos (pasta pública "produtos" do Supabase Storage) ----------
 const PASTA_FOTOS = 'produtos'
 

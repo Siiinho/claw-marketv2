@@ -7,6 +7,7 @@ import { buscarJornalOficial } from './server/jornalOficial.js'
 import { responderEanImages } from './server/eanImages.js'
 import { middlewareEncarte } from './server/encarteServidor.js'
 import { middlewareImagensProdutos } from './server/imagensProdutos.js'
+import { middlewareFotoProduto } from './server/fotoProduto.js'
 
 // Middleware de dev: expõe /api/jornal-oficial rodando no servidor (sem CORS).
 // Em produção, a mesma lógica vive em api/jornal-oficial.js (função serverless).
@@ -51,14 +52,21 @@ function encarteApi() {
   return {
     name: 'encarte-api',
     configureServer(server) {
+      server.middlewares.use('/api/foto-produto', middlewareFotoProduto)
       server.middlewares.use('/api/encarte', middlewareEncarte)
       server.middlewares.use('/api/imagens-produtos', middlewareImagensProdutos)
     },
     configurePreviewServer(server) {
+      server.middlewares.use('/api/foto-produto', middlewareFotoProduto)
       server.middlewares.use('/api/encarte', middlewareEncarte)
       server.middlewares.use('/api/imagens-produtos', middlewareImagensProdutos)
     },
   }
+}
+
+function chaveSecretaSupabase(chave) {
+  if (/^sb_secret_/.test(chave)) return true
+  try { return JSON.parse(Buffer.from(chave.split('.')[1], 'base64url').toString()).role === 'service_role' } catch (_) { return false }
 }
 
 // base './' lets the production build (dist/index.html) open directly from file://
@@ -72,6 +80,11 @@ export default defineConfig(({ mode }) => {
   // (públicas por natureza; quem protege os dados são as regras do banco) vão para o navegador.
   const supabaseUrl = env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || env.SUPABASE_URL || ''
   const supabaseAnon = env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || ''
+  // A chave secreta do Supabase nunca pode ir para o navegador: para o servidor com o aviso.
+  if (chaveSecretaSupabase(supabaseAnon)) throw new Error('VITE_SUPABASE_ANON_KEY está com a chave SECRETA do Supabase. Troque pela pública (sb_publishable_...) no .env.')
+  // O backend confere o login com as mesmas duas (ver server/fotoProduto.js).
+  process.env.CLAW_SUPABASE_URL = supabaseUrl
+  process.env.CLAW_SUPABASE_ANON_KEY = supabaseAnon
   return {
   base: './',
   define: {

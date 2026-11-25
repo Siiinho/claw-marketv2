@@ -241,71 +241,76 @@ export async function exportarPDFPaginas(elementos, nome = 'jornal', { formato =
   return oferecerArquivo(pdf.output('blob'), `${nome}.pdf`)
 }
 
-export function abrirJanelaPrevisualizacao(titulo = 'Pré-visualização do jornal') {
-  const janela = window.open('', '_blank')
-  if (!janela) throw new Error('O navegador bloqueou a pré-visualização. Permita pop-ups para este site.')
-  janela.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${String(titulo).replace(/[<>&"]/g, '')}</title></head><body style="font-family:Arial,sans-serif;padding:32px;text-align:center">Preparando pré-visualização…</body></html>`)
-  janela.document.close()
-  return janela
-}
+// Impressão direta: a caixa de impressão do navegador abre na própria tela, sem aba nova, pop-up
+// nem arquivo baixado. As páginas entram escondidas e só elas aparecem no papel.
+const ID_IMPRESSAO = 'cm-impressao'
+const ESTILO_IMPRESSAO = `
+  #${ID_IMPRESSAO} { position: fixed; left: -100000px; top: 0; width: 210mm; }
+  #${ID_IMPRESSAO} img { display: block; width: 210mm; height: 297mm; object-fit: contain; }
+  @media print {
+    @page { size: A4 portrait; margin: 0; }
+    html, body { margin: 0 !important; padding: 0 !important; height: auto !important; min-height: 0 !important; overflow: visible !important; background: #fff !important; }
+    body > *:not(#${ID_IMPRESSAO}) { display: none !important; }
+    #${ID_IMPRESSAO} { position: static !important; left: auto; width: auto; }
+    /* 296,5 mm: com a folha cheia, o arredondamento de alguns navegadores soltava uma página em branco */
+    #${ID_IMPRESSAO} img { width: 210mm; height: 296.5mm; break-after: page; page-break-after: always; break-inside: avoid; }
+    #${ID_IMPRESSAO} img:last-child { break-after: auto; page-break-after: auto; }
+  }
+`
+let limparImpressao = () => {}
 
-// Abre páginas já renderizadas em uma aba limpa e aciona a impressão nativa.
-// O navegador oferece tamanho do papel, margens, escala e "Salvar como PDF".
-export async function previsualizarImpressaoPaginas(elementos, titulo = 'Jornal de ofertas', janelaExistente = null) {
+export async function imprimirPaginas(elementos, titulo = 'Jornal de ofertas') {
   const paginas = elementos.filter(Boolean)
-  if (!paginas.length) throw new Error('Nenhuma página pronta para visualizar.')
-  const janela = janelaExistente || abrirJanelaPrevisualizacao(titulo)
-  const imagens = []
+  if (!paginas.length) throw new Error('Nenhuma página pronta para imprimir.')
+  if (typeof window.print !== 'function') throw new Error('Este navegador não imprime. Abra o jornal no Chrome ou no Safari.')
+  limparImpressao()
+
+  const caixa = document.createElement('div')
+  caixa.id = ID_IMPRESSAO
+  caixa.setAttribute('aria-hidden', 'true')
+  const estilo = document.createElement('style')
+  estilo.textContent = ESTILO_IMPRESSAO
+  const urls = []
+  const tituloAntes = document.title
+  let limpo = false
+  const limpar = () => {
+    if (limpo) return
+    limpo = true
+    caixa.remove()
+    estilo.remove()
+    urls.forEach((u) => URL.revokeObjectURL(u))
+    if (document.title === titulo) document.title = tituloAntes
+  }
+  limparImpressao = limpar
 
   try {
-    for (const pagina of paginas) {
+    for (const [indice, pagina] of paginas.entries()) {
       const canvas = await captura(pagina)
       try {
-        imagens.push(canvas.toDataURL('image/png'))
+        const url = URL.createObjectURL(await canvasParaBlob(canvas, 'image/jpeg', QUALIDADE_PDF))
+        urls.push(url)
+        const img = new Image()
+        img.alt = `Página ${indice + 1}`
+        img.src = url
+        await img.decode() // só abre a impressão com a página inteira na memória
+        caixa.append(img)
       } finally {
         canvas.width = 1
         canvas.height = 1
       }
     }
-
-    const tituloSeguro = String(titulo).replace(/[<>&"]/g, '')
-    janela.document.open()
-    janela.document.write(`<!doctype html>
-      <html lang="pt-BR">
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width,initial-scale=1">
-          <title>${tituloSeguro}</title>
-          <style>
-            @page { size: A4 portrait; margin: 0; }
-            * { box-sizing: border-box; }
-            html, body { margin: 0; background: #e8eaed; font-family: Arial, sans-serif; }
-            .toolbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px; color: #fff; background: #082b4f; box-shadow: 0 2px 10px #0003; }
-            .toolbar button { cursor: pointer; border: 0; border-radius: 8px; padding: 10px 16px; color: #fff; background: #e4232e; font-weight: 700; }
-            .paginas { display: grid; gap: 20px; justify-content: center; padding: 24px; }
-            .pagina { display: block; width: 210mm; height: 297mm; object-fit: contain; background: #fff; box-shadow: 0 8px 28px #0003; }
-            @media print {
-              html, body { background: #fff; }
-              .toolbar { display: none !important; }
-              .paginas { display: block; padding: 0; }
-              .pagina { width: 210mm; height: 297mm; box-shadow: none; break-after: page; page-break-after: always; }
-              .pagina:last-child { break-after: auto; page-break-after: auto; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="toolbar"><strong>${tituloSeguro}</strong><button type="button" onclick="window.print()">Imprimir / Salvar como PDF</button></div>
-          <main class="paginas">${imagens.map((src, indice) => `<img class="pagina" src="${src}" alt="Página ${indice + 1}">`).join('')}</main>
-          <script>
-            Promise.all(Array.from(document.images).map((img) => img.complete ? Promise.resolve() : new Promise((ok) => { img.onload = img.onerror = ok })))
-              .then(() => setTimeout(() => { window.focus(); window.print(); }, 250));
-          <\/script>
-        </body>
-      </html>`)
-    janela.document.close()
-    return janela
+    if (limpo) return // outra impressão começou no meio
+    document.head.append(estilo)
+    document.body.append(caixa)
+    document.title = titulo // nome sugerido se a pessoa escolher "Salvar como PDF"
+    await proximoFrame()
+    await proximoFrame()
+    // No celular a tela de impressão continua aberta depois do aviso de "terminou": espera mais.
+    const toque = window.matchMedia('(pointer: coarse)').matches
+    window.addEventListener('afterprint', () => setTimeout(limpar, toque ? 60000 : 500), { once: true })
+    window.print()
   } catch (erro) {
-    try { janela.close() } catch (_) {}
+    limpar()
     throw erro
   }
 }

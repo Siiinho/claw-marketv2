@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { SETORES, arquivoParaDataURL, dataISOmaisDias } from '../lib/utils'
 import { setorPeloNome } from '../lib/classificarSetor'
 import { Botao, Campo, Icon, ProdutoThumb, inputCls } from './ui'
+import FotoGoogle from './FotoGoogle'
 
 const UNIDADES = ['UNI', 'KG', 'PCT', 'CX', 'BDJ', 'DZ']
 const unidadePadrao = (setor) => (setor === 'hortifruti' || setor === 'acougue' ? 'KG' : 'UNI')
@@ -120,6 +121,8 @@ export default function CadastroProdutoNovo({ inicial, comLote = false, titulo =
           </label>
         </div>
       </div>
+
+      <FotoGoogle className="mb-3" produto={p} toast={toast} onFoto={(foto) => setP((atual) => ({ ...atual, ...foto }))} />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Campo label="Código de barras *"><input className={inputCls} inputMode="numeric" value={p.codigoBarras || ''} onChange={muda('codigoBarras')} /></Campo>
