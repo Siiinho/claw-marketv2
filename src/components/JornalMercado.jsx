@@ -11,7 +11,7 @@ import PrecoArte from './PrecoArte'
 // nos temas com arte, o fundo é o mesmo do template (public/temas/<id>/jornal.webp) e a arte do
 // título (titulo.webp) vai centralizada no topo; nos temas de setor, o fundo em CSS com o ícone.
 //  - Com dia marcado (Mercado Encarte), cada dia vira um bloco.
-//  - Sem dia, os blocos são os setores.
+//  - Sem dia, todos ficam juntos num bloco só, por setor e do menor preço para o maior.
 
 export const JORNAL_W = 1080
 export const JORNAL_H = 1527 // proporção A4
@@ -33,24 +33,22 @@ const diaDaSemana = (iso) => {
   return SEMANA[new Date(Date.UTC(a, m - 1, d)).getUTCDay()]
 }
 
-// Blocos do jornal: por dia (quando houver) ou por setor.
+// Ordem dentro do bloco: setor (na ordem da loja) e, em cada setor, do menor preço para o maior.
+const posSetor = (p) => { const i = SETORES.findIndex((s) => s.id === p.setor); return i < 0 ? SETORES.length : i }
+const precoDe = (p) => Number(p.precoJornal ?? p.precoPromo ?? p.precoNormal) || 0
+export const ordenarBloco = (itens) => [...itens].sort((a, b) => posSetor(a) - posSetor(b) || precoDe(a) - precoDe(b))
+
+// Blocos do jornal: todos juntos, lado a lado. Só separa quando a data da oferta é diferente.
 export function blocosDoJornal(itens) {
-  const comDia = itens.filter((p) => p.encarteMercadoDia)
-  if (comDia.length) {
-    const dias = [...new Set(comDia.map((p) => p.encarteMercadoDia))].sort()
-    const blocos = dias.map((dia) => ({
-      id: dia,
-      titulo: `Ofertas válidas somente ${diaDaSemana(dia)} dia ${formatData(dia)}`,
-      itens: comDia.filter((p) => p.encarteMercadoDia === dia),
-    }))
-    const semDia = itens.filter((p) => !p.encarteMercadoDia)
-    if (semDia.length) blocos.push({ id: 'semana', titulo: 'Ofertas da semana', itens: semDia })
-    return blocos
-  }
-  return SETORES
-    .map((s) => ({ id: s.id, titulo: `Ofertas de ${s.nome}`, itens: itens.filter((p) => p.setor === s.id) }))
-    .concat([{ id: 'outros', titulo: 'Mais ofertas', itens: itens.filter((p) => !SETORES.some((s) => s.id === p.setor)) }])
-    .filter((b) => b.itens.length)
+  const dias = [...new Set(itens.map((p) => p.encarteMercadoDia).filter(Boolean))].sort()
+  const blocos = dias.map((dia) => ({
+    id: dia,
+    titulo: `Ofertas válidas somente ${diaDaSemana(dia)} dia ${formatData(dia)}`,
+    itens: ordenarBloco(itens.filter((p) => p.encarteMercadoDia === dia)),
+  }))
+  const semDia = itens.filter((p) => !p.encarteMercadoDia)
+  if (semDia.length) blocos.push({ id: 'semana', titulo: 'Ofertas da semana', itens: ordenarBloco(semDia) })
+  return blocos
 }
 
 // Divide os blocos em páginas A4: linhas de 6 produtos; um bloco que não cabe continua na próxima.

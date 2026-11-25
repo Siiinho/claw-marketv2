@@ -4,7 +4,7 @@ import { Icon, ProdutoThumb } from './ui'
 
 // Lista da busca pelo nome. `carregando` é o código do item escolhido: a lista continua na tela,
 // com o item girando, até o produto abrir.
-export default function SugestoesNome({ codigo, busca, onEscolher, carregando = null }) {
+export default function SugestoesNome({ codigo, busca, onEscolher, onCadastrar, carregando = null }) {
   const { sugestoes, procurandoNome, destaque, setDestaque } = busca
   return (
     <div className="mt-2 overflow-hidden rounded-xl border border-ink-soft/15 bg-white">
@@ -34,6 +34,15 @@ export default function SugestoesNome({ codigo, busca, onEscolher, carregando = 
             )
           })}
         </ul>
+      )}
+      {onCadastrar && !procurandoNome && normalizarBusca(codigo).length >= 2 && (
+        <div className={`flex flex-wrap items-center gap-2 p-3 ${sugestoes.length ? 'border-t border-ink-soft/15 bg-cream' : 'bg-[#fff4e5]'}`}>
+          <span className="min-w-0 flex-1 text-sm font-semibold text-ink">{sugestoes.length ? 'Não é nenhum destes?' : 'Esse produto ainda não está cadastrado.'}</span>
+          <button type="button" onClick={() => onCadastrar(codigo.trim())} disabled={carregando !== null}
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-navy px-4 text-sm font-bold text-white hover:bg-navy-light disabled:opacity-50">
+            <Icon name="PackagePlus" size={18} /> Cadastrar produto
+          </button>
+        </div>
       )}
     </div>
   )

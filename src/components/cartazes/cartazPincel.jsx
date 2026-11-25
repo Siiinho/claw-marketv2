@@ -445,8 +445,8 @@ function Preco({ t, produto, w, h, semente }) {
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'flex-start', fontFamily: fonte, color: t.corPreco, lineHeight: 1, textShadow: sombra, transform: 'skewX(-6deg)' }}>
-          <span style={{ fontSize: s, letterSpacing: '-0.01em' }}>{reais}</span>
-          <span style={{ fontSize: s * 0.5, alignSelf: 'flex-end', marginLeft: -s * 0.015, marginBottom: -s * 0.07, width: s * virgula, lineHeight: 0.8 }}>,</span>
+          {/* a vírgula fica na linha de base do número: solta, ela caía abaixo do preço */}
+          <span style={{ fontSize: s, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>{reais}<span style={{ fontSize: s * 0.5, display: 'inline-block', width: s * virgula, lineHeight: 1 }}>,</span></span>
           <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: s * 0.05 }}>
             <span style={{ fontSize: s * 0.46, lineHeight: 1 }}>{centavos}</span>
             {t.centavosSublinhado && (
@@ -566,7 +566,7 @@ export const FolhaCartazesPincel = forwardRef(function FolhaCartazesPincel({ ite
           // linha de corte como borda: o contorno CSS não sai no PNG/PDF
           border: imp.porFolha > 1 ? '1px dashed #9a9a9a' : 'none', boxSizing: 'border-box',
         }
-        const conteudo = <CartazModelo produto={p} modelo={p.modeloCartaz || template} w={cartaz.largura - borda} h={cartaz.altura - borda} encarte={encarte} loja={loja} />
+        const conteudo = <CartazModelo key={p.modeloCartaz || template} produto={p} modelo={p.modeloCartaz || template} w={cartaz.largura - borda} h={cartaz.altura - borda} encarte={encarte} loja={loja} />
         return onAbrir ? (
           <button key={p.id || i} type="button" onClick={() => onAbrir(p)} aria-label={`Editar cartaz: ${p.nome}`} className="group" style={{ ...estilo, padding: 0, cursor: 'pointer', textAlign: 'left', background: 'none' }}>
             {conteudo}

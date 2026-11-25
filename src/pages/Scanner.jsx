@@ -2,11 +2,12 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
 import { Icon, StatusBadge, ProdutoThumb, Botao, PrecoVarejo, inputCls, Secao, Campo } from '../components/ui'
-import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, precoComRegra, labelDias, dataISOmaisDias, plural } from '../lib/utils'
+import { setorById, formatBRL, formatData, statusValidade, diasParaVencer, regraDoProduto, percentDesc, labelDias, dataISOmaisDias, plural } from '../lib/utils'
 import EstrelaMercado from '../components/EstrelaMercado'
 import CadastroProdutoNovo from '../components/CadastroProdutoNovo'
 import FotoGoogle from '../components/FotoGoogle'
 import SugestoesNome from '../components/SugestoesNome'
+import SugestaoPreco from '../components/SugestaoPreco'
 import { ehBuscaPorNome, useBuscaNome } from '../lib/useBuscaNome'
 
 const CHAVE_ESTRELA = 'clawmarket.scanner.estrela'
@@ -25,14 +26,13 @@ export default function Scanner() {
     salvarProdutoNaFila,
     registrarLote,
     removerDaFila,
-    criarOferta,
-    excluirOferta,
     ofertaDoProduto,
     config,
     toast,
   } = useStore()
   const [codigo, setCodigo] = useState('')
   const [codigoNovo, setCodigoNovo] = useState('') // código bipado que não existe em lugar nenhum
+  const [nomeNovo, setNomeNovo] = useState('') // nome digitado que não existe
   const [resultado, setResultado] = useState(undefined) // undefined | null | produto
   const [validadeLote, setValidadeLote] = useState('')
   const [codigoLote, setCodigoLote] = useState('')
@@ -148,6 +148,7 @@ export default function Scanner() {
 
       setCodigo(c)
       setVeredito(null)
+      setNomeNovo('')
       setResultado(p || null)
       setCodigoNovo(p ? '' : c)
       setValidadeLote(p?.validade || '')
@@ -185,6 +186,15 @@ export default function Scanner() {
     } catch (_) {}
   }
 
+  // O preço do jornal é sempre o que a pessoa escreveu. A validade só sugere.
+  const precoEscrito = (p) => Number(p.precoPromo) || (ofertaDoProduto(p.id) ? p.precoNormal * (1 - ofertaDoProduto(p.id).desconto / 100) : Number(p.precoNormal) || 0)
+  const usarSugestao = (valor) => {
+    salvarProduto({ id: resultado.id, precoPromo: valor })
+    setResultado((p) => ({ ...p, precoPromo: valor }))
+    setVeredito((v) => (v ? { ...v, precoNovo: valor, desconto: percentDesc(resultado.precoNormal, valor) } : v))
+    toast(`${resultado.nome}: preço de oferta ${formatBRL(valor)}.`)
+  }
+
   const verificar = () => {
     if (!resultado || !validadeLote) return toast('Informe a validade do lote.', 'erro')
     if (veredito) return
@@ -194,7 +204,6 @@ export default function Scanner() {
     const regra = regraDoProduto(dias, config?.regrasPreco || [])
     const origemFila = regra ? 'vencimento' : 'scanner'
     const jaEstavaNaFila = Boolean(resultado.naFila)
-    const ofertaExistente = ofertaDoProduto(resultado.id)
     const atualizado = {
       ...resultado,
       loja: 'loja3',
@@ -213,17 +222,13 @@ export default function Scanner() {
       codigoLote: codigoLote.trim(),
       quantidade,
     })
-    if (regra && !ofertaExistente) {
-      criarOferta(resultado.id, `Regra de validade · −${regra.desconto}%`, regra.desconto, validadeLote)
-    }
 
     const v = {
       tipo: 'jornal',
-      desconto: regra?.desconto || 0,
-      precoNovo: regra ? precoComRegra(resultado.precoNormal, regra) : resultado.precoNormal,
+      desconto: percentDesc(resultado.precoNormal, precoEscrito(resultado)),
+      precoNovo: precoEscrito(resultado),
       dias,
       jaEstavaNaFila,
-      ofertaCriada: Boolean(regra && !ofertaExistente),
     }
 
     confirmarComFeedback()
@@ -274,8 +279,6 @@ export default function Scanner() {
   const desfazerUltimaConfirmacao = () => {
     if (!resultado || !veredito) return
     removerDaFila(resultado.id)
-    const oferta = ofertaDoProduto(resultado.id)
-    if (veredito.ofertaCriada && oferta) excluirOferta(oferta.id)
     setResultado((p) => ({ ...p, naFila: false, origemFila: null }))
     setHistorico((h) => h.filter((item) => item.produtoId !== resultado.id))
     setVeredito(null)
@@ -338,7 +341,7 @@ export default function Scanner() {
           </Botao>
         </div>
 
-        {porNome && <SugestoesNome codigo={codigo} busca={buscaNome} onEscolher={escolherSugestao} carregando={abrindo} />}
+        {porNome && <SugestoesNome codigo={codigo} busca={buscaNome} onEscolher={escolherSugestao} carregando={abrindo} onCadastrar={(nome) => { setCodigoNovo(''); setNomeNovo(nome); setVeredito(null); setResultado(null); setCodigo('') }} />}
 
         {buscando && (
           <div className="mt-3 flex items-center gap-2 rounded-xl bg-cream-200 px-3 py-2 text-sm font-medium text-ink">
@@ -371,8 +374,8 @@ export default function Scanner() {
       {resultado === null && (
         // Código que não existe em lugar nenhum: passo de cadastro e depois segue para validade e jornal.
         <CadastroProdutoNovo
-          key={codigoNovo}
-          inicial={{ codigoBarras: codigoNovo.replace(/\D/g, '') }}
+          key={`${codigoNovo}|${nomeNovo}`}
+          inicial={{ codigoBarras: codigoNovo.replace(/\D/g, ''), nome: nomeNovo }}
           toast={toast}
           textoSalvar="Cadastrar e seguir para o jornal"
           onCancelar={() => { setResultado(undefined); setCodigo(''); inputRef.current?.focus() }}
@@ -457,6 +460,8 @@ export default function Scanner() {
             </Botao>
           </div>
 
+          {veredito && <SugestaoPreco className="mt-3 w-full" precoNormal={resultado.precoNormal} validade={resultado.validade} precoAtual={resultado.precoPromo} onUsar={usarSugestao} />}
+
           {/* veredito */}
           {veredito?.tipo === 'jornal' && (
             <div className="anim-in mt-3 overflow-hidden rounded-xl bg-bengala text-white">
@@ -470,18 +475,18 @@ export default function Scanner() {
                   </div>
                   <div className="text-sm text-white/85">
                     {labelDias(veredito.dias)}
-                    {veredito.desconto > 0 ? ` · desconto de ${veredito.desconto}% pela faixa` : ' · confira o preço no jornal'}
+                    {veredito.desconto > 0 ? ` · ${veredito.desconto}% de desconto` : ' · preço que você cadastrou'}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-white/75 line-through">{formatBRL(resultado.precoNormal)}</div>
+                  {veredito.desconto > 0 && <div className="text-xs text-white line-through">{formatBRL(resultado.precoNormal)}</div>}
                   <div className="inline-block rotate-[-2deg] rounded-md bg-white px-2 py-0.5">
                     <PrecoVarejo valor={veredito.precoNovo} className="text-2xl" cor="#c42b2b" />
                   </div>
                 </div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 bg-black/20 px-4 py-2.5 text-xs">
-                <span>{veredito.ofertaCriada ? 'Entrou na fila e a oferta foi criada.' : 'Já aparece no Jornal de Ofertas.'}</span>
+                <span>Já aparece no Jornal de Ofertas.</span>
                 <div className="flex gap-1.5">
                   <button onClick={desfazerUltimaConfirmacao} className="min-h-9 rounded-lg bg-white/10 px-3 font-semibold hover:bg-white/20">Desfazer</button>
                   <button onClick={() => navigate('/jornal')} className="min-h-9 rounded-lg bg-white/15 px-3 font-semibold hover:bg-white/25">Ver jornal</button>

@@ -13,6 +13,7 @@ import {
 import { importarPlanilha } from '../lib/importarCatalogo'
 import ModalBaixa from '../components/ModalBaixa'
 import FotoGoogle from '../components/FotoGoogle'
+import SugestaoPreco from '../components/SugestaoPreco'
 
 const vazio = {
   nome: '', marca: '', gramagem: '', setor: 'mercearia', estoque: 0, validade: '',
@@ -22,8 +23,8 @@ const vazio = {
 const RECENTE_DIAS = 7
 
 const TONS_AVISO = {
-  vencido: { borda: 'border-[#7a241b]/25', fundo: 'bg-[#f3dcd8]/70', cor: '#7a241b' },
-  critico: { borda: 'border-[#c42b2b]/25', fundo: 'bg-[#fbe5e5]/70', cor: '#a61f1f' },
+  vencido: { borda: 'border-[#7a1010]', fundo: 'bg-[#7a1010]', cor: '#7a1010' },
+  critico: { borda: 'border-[#ff9d00]', fundo: 'bg-[#ffb020]', cor: '#3d2600', texto: '#3d2600' },
 }
 function Aviso({ tom, icone, titulo, texto, acao }) {
   const t = TONS_AVISO[tom]
@@ -33,8 +34,8 @@ function Aviso({ tom, icone, titulo, texto, acao }) {
         <Icon name={icone} size={20} strokeWidth={2.1} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-bold leading-snug" style={{ color: t.cor }}>{titulo}</p>
-        <p className="mt-0.5 text-sm leading-snug text-ink">{texto}</p>
+        <p className="text-lg font-extrabold leading-snug" style={{ color: t.texto || '#fff' }}>{titulo}</p>
+        <p className="mt-0.5 text-sm font-semibold leading-snug" style={{ color: t.texto || '#fff' }}>{texto}</p>
       </div>
       <div className="w-full sm:w-auto [&>button]:w-full">{acao}</div>
     </div>
@@ -601,7 +602,8 @@ export default function Produtos() {
             <Campo label="Estoque"><input type="number" className={inputCls} value={form.estoque} onChange={(e) => setForm({ ...form, estoque: e.target.value })} /></Campo>
             <Campo label="Validade" obrigatorio><input type="date" className={inputCls} value={form.validade} onChange={(e) => setForm({ ...form, validade: e.target.value })} /></Campo>
             <Campo label="Preço normal (R$)" obrigatorio><input type="number" step="0.01" className={inputCls} value={form.precoNormal} onChange={(e) => setForm({ ...form, precoNormal: e.target.value })} /></Campo>
-            <Campo label="Preço promocional (R$)"><input type="number" step="0.01" className={inputCls} value={form.precoPromo} onChange={(e) => setForm({ ...form, precoPromo: e.target.value })} /></Campo>
+            <Campo label="Preço de oferta (R$)"><input type="number" step="0.01" className={inputCls} value={form.precoPromo} onChange={(e) => setForm({ ...form, precoPromo: e.target.value })} /></Campo>
+            <SugestaoPreco className="col-span-2" precoNormal={form.precoNormal} validade={form.validade} precoAtual={form.precoPromo} onUsar={(v) => setForm((f) => ({ ...f, precoPromo: v }))} />
             <div className="col-span-2 rounded-lg border border-info/25 bg-info/5 p-2.5">
               <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-info">
                 <Icon name="PackageSearch" size={14} /> Importar do catálogo (mercado BR) por código de barras

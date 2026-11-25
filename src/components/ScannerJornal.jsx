@@ -207,7 +207,7 @@ export default function ScannerJornal({ embutido = false } = {}) {
         </button>
       </div>
 
-      {porNome && <SugestoesNome codigo={codigo} busca={busca} onEscolher={escolherSugestao} carregando={abrindo} />}
+      {porNome && <SugestoesNome codigo={codigo} busca={busca} onEscolher={escolherSugestao} carregando={abrindo} onCadastrar={(nome) => { setRascunho({ ...rascunhoVazio(''), nome }); setCodigo('') }} />}
 
       <EstrelaMercado ativo={estrela} onChange={setEstrela} className="mt-2 w-full" texto="Estrela ao adicionar: entra também no Mercado Encarte de hoje" />
 
@@ -221,7 +221,7 @@ export default function ScannerJornal({ embutido = false } = {}) {
 
       {rascunho ? (
         <CadastroProdutoNovo
-          key={rascunho.codigoBarras}
+          key={`${rascunho.codigoBarras}|${rascunho.nome}`}
           inicial={rascunho}
           comLote
           titulo={rascunho.nome ? 'Complete o produto' : 'Produto não encontrado. Cadastre agora'}

@@ -77,9 +77,11 @@ async function captura(el, { escala } = {}) {
   for (const scale of escalas.length ? escalas : [1]) {
     // snapdom (github.com/zumerlab/snapdom): captura a página pelo próprio navegador,
     // várias vezes mais rápido que o html2canvas e fiel às fontes e aos SVGs.
+    // Sem cache: o React reaproveita os elementos ao trocar de modelo, e o cache devolvia as cores
+    // e molduras do modelo anterior (cartaz impresso diferente do escolhido).
     // Se falhar (navegador antigo, imagem bloqueada), cai no html2canvas.
     try {
-      const canvas = await snapdom.toCanvas(el, { scale, backgroundColor: '#ffffff' })
+      const canvas = await snapdom.toCanvas(el, { scale, backgroundColor: '#ffffff', cache: 'disabled' })
       if (canvas?.width > 1 && canvas?.height > 1) return canvas
     } catch (erro) {
       ultimoErro = erro

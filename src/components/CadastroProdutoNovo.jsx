@@ -108,27 +108,32 @@ export default function CadastroProdutoNovo({ inicial, comLote = false, titulo =
         </div>
       </div>
 
-      <div className="mb-3 flex items-center gap-3">
-        <ProdutoThumb produto={p} size={72} />
-        <div className="flex min-w-0 flex-1 flex-wrap gap-2">
-          <label className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg bg-bengala px-3 text-sm font-bold text-white">
-            <Icon name={lendoFoto ? 'LoaderCircle' : 'Camera'} size={16} className={lendoFoto ? 'animate-spin' : ''} /> Tirar foto
-            <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { receberFoto(e.target.files?.[0]); e.target.value = '' }} />
-          </label>
-          <label className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-ink-soft/20 bg-white px-3 text-sm font-bold text-ink">
-            <Icon name="ImagePlus" size={16} /> Escolher arquivo
-            <input type="file" accept="image/*" className="sr-only" onChange={(e) => { receberFoto(e.target.files?.[0]); e.target.value = '' }} />
-          </label>
-        </div>
-      </div>
-
-      <FotoGoogle className="mb-3" produto={p} toast={toast} onFoto={(foto) => setP((atual) => ({ ...atual, ...foto }))} />
-
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Campo label="Código de barras *"><input className={inputCls} inputMode="numeric" value={p.codigoBarras || ''} onChange={muda('codigoBarras')} /></Campo>
         <div className="col-span-2"><Campo label="Nome do produto *"><input className={inputCls} value={p.nome || ''} onChange={mudarNome} placeholder="Ex.: Arroz Tio João 5kg" autoFocus /></Campo></div>
         <Campo label="Marca"><input className={inputCls} value={p.marca || ''} onChange={muda('marca')} /></Campo>
         <Campo label="Gramagem"><input className={inputCls} value={p.gramagem || ''} onChange={muda('gramagem')} placeholder="350 g" /></Campo>
+        <div className="col-span-2 sm:col-span-3">
+          <div className="my-2">
+            <p className="mb-2 text-base font-extrabold text-navy">Foto do produto</p>
+            <div className="flex items-start gap-3">
+              <ProdutoThumb produto={p} size={88} />
+              <div className="min-w-0 flex-1 space-y-2">
+                <FotoGoogle produto={p} toast={toast} onNome={(nome) => mudarNome({ target: { value: nome } })} onFoto={(foto) => setP((atual) => ({ ...atual, ...foto }))} />
+                <div className="flex flex-wrap gap-2">
+                  <label className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg border-2 border-navy/35 bg-white px-3 text-sm font-bold text-navy hover:bg-cream">
+                    <Icon name="FolderInput" size={17} /> Importar do aparelho
+                    <input type="file" accept="image/*" className="sr-only" onChange={(e) => { receberFoto(e.target.files?.[0]); e.target.value = '' }} />
+                  </label>
+                  <label className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg border-2 border-navy/35 bg-white px-3 text-sm font-bold text-navy hover:bg-cream">
+                    <Icon name={lendoFoto ? 'LoaderCircle' : 'Camera'} size={17} className={lendoFoto ? 'animate-spin' : ''} /> Tirar foto
+                    <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { receberFoto(e.target.files?.[0]); e.target.value = '' }} />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <Campo label="Setor *">
           <select className={inputCls} value={p.setor || 'mercearia'} onChange={(e) => { setSetorTocado(true); trocarSetor(e.target.value) }}>
             {SETORES.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}

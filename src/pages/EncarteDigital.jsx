@@ -101,8 +101,8 @@ function CartaoProduto({ produto, onAbrir, tema, indice = 0, compras }) {
               {temDe && <div className="text-xs font-semibold text-ink-soft">De <span className="line-through">{formatBRL(produto.precoNormal)}</span></div>}
               <span className="cm-preco-lista"><SeloPreco valor={produto.precoJornal} tema={tema} estilo={produto.estiloPreco} /></span>
             </div>
-            {compras && <BotaoLista produto={produto} compras={compras} />}
           </div>
+          {compras && <div className="mt-2.5"><BotaoLista produto={produto} compras={compras} /></div>}
         </div>
       </div>
     </div>
@@ -146,10 +146,10 @@ function BotaoLista({ produto, compras, grande = false }) {
         type="button"
         onClick={(e) => { e.stopPropagation(); compras.alternar(produto) }}
         aria-pressed={na}
-        aria-label={na ? `Adicionado: ${produto.nome}. Toque para remover` : `Adicionar ${produto.nome}`}
+        aria-label={na ? `${produto.nome} está na sua lista. Toque para tirar` : `Adicionar ${produto.nome} à lista de compras`}
         className={`${base} h-14 w-full rounded-2xl px-4 text-[17px] ${na ? 'bg-[#0f7a40] text-white' : 'bg-navy text-white hover:bg-navy-light'}`}
       >
-        <Icon name={na ? 'CircleCheck' : 'ShoppingCart'} size={20} strokeWidth={2.25} /> {na ? 'Adicionado' : 'Adicionar'}
+        <Icon name={na ? 'ListChecks' : 'ListPlus'} size={21} strokeWidth={2.25} /> {na ? 'Está na sua lista' : 'Adicionar à lista de compras'}
       </button>
     )
   }
@@ -158,10 +158,10 @@ function BotaoLista({ produto, compras, grande = false }) {
       type="button"
       onClick={(e) => { e.stopPropagation(); compras.alternar(produto) }}
       aria-pressed={na}
-      aria-label={na ? `Remover ${produto.nome}` : `Adicionar ${produto.nome}`}
-      className={`${base} h-10 w-10 rounded-full ${na ? 'bg-[#0f7a40] text-white' : 'bg-cream text-navy hover:bg-cream-200'}`}
+      aria-label={na ? `Tirar ${produto.nome} da lista de compras` : `Adicionar ${produto.nome} à lista de compras`}
+      className={`${base} min-h-11 w-full rounded-xl px-2 text-[13px] leading-tight ${na ? 'bg-[#0f7a40] text-white' : 'border-2 border-navy bg-white text-navy hover:bg-cream'}`}
     >
-      <Icon name={na ? 'Check' : 'Plus'} size={20} strokeWidth={2.4} />
+      <Icon name={na ? 'ListChecks' : 'ListPlus'} size={18} strokeWidth={2.3} className="shrink-0" /> {na ? 'Na lista' : 'Adicionar à lista'}
     </button>
   )
 }
@@ -185,9 +185,9 @@ function ListaCompras({ compras, loja, encarte }) {
   if (!lista.length) {
     return (
       <div className="rounded-3xl bg-white px-6 py-14 text-center shadow-sm ring-1 ring-black/5">
-        <ImagemSetor id="compras" size={72} className="mx-auto" />
+        <Icon name="ListChecks" size={72} strokeWidth={1.6} className="mx-auto text-[#0f7a40]" />
         <p className="mt-4 text-xl font-extrabold text-navy">Sua lista está vazia</p>
-        <p className="mx-auto mt-1 max-w-sm text-base text-ink-soft">Toque no <span className="font-bold text-navy">+</span> de uma oferta para guardar o que você vai levar. A lista fica salva neste celular.</p>
+        <p className="mx-auto mt-1 max-w-sm text-base text-ink-soft">Toque em <span className="font-bold text-navy">Adicionar à lista</span> numa oferta para guardar o que você vai levar. A lista é só sua e fica salva neste celular.</p>
       </div>
     )
   }
@@ -196,10 +196,10 @@ function ListaCompras({ compras, loja, encarte }) {
       <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <div className="text-sm font-bold text-ink-soft">{lista.length} {lista.length === 1 ? 'item' : 'itens'} · {pegos} no carrinho</div>
+            <div className="text-sm font-bold text-ink-soft">{lista.length} {lista.length === 1 ? 'item' : 'itens'} · {pegos} já {pegos === 1 ? 'pego' : 'pegos'}</div>
             <div className="text-2xl font-extrabold tracking-[-0.01em] text-navy">Total estimado <span className="num-tab">{formatBRL(total)}</span></div>
           </div>
-          <Icon name="ShoppingCart" size={34} className="text-bengala" />
+          <Icon name="ListChecks" size={34} className="text-bengala" />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button type="button" onClick={compartilhar} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-cream px-3 text-sm font-bold text-navy transition-[transform,background-color] duration-150 ease-out hover:bg-cream-200 active:scale-[0.97]"><Icon name="Share2" size={18} /> Enviar lista</button>
@@ -751,7 +751,7 @@ export default function EncarteDigital() {
                 aria-label={compras.lista.length ? `Minha lista, ${plural(compras.lista.length, 'item', 'itens')}` : undefined}
                 className={`flex h-11 items-center gap-2 rounded-full px-4 text-sm font-black transition-transform duration-150 ease-out active:scale-[0.96] ${vista === 'compras' ? 'bg-[#0f7a40] text-white' : 'bg-white text-[#0f7a40] ring-1 ring-[#0f7a40]/40'}`}
               >
-                <ImagemAba id="compras" size={22} /> Minha lista
+                <Icon name="ListChecks" size={20} strokeWidth={2.3} /> Minha lista
                 {compras.lista.length > 0 && <span className={`num-tab min-w-[22px] rounded-full px-1.5 text-center text-xs leading-[22px] ${vista === 'compras' ? 'bg-white text-[#0f7a40]' : 'bg-[#0f7a40] text-white'}`}>{compras.lista.length}</span>}
               </button>
             </div>
@@ -857,7 +857,7 @@ export default function EncarteDigital() {
                   style={{ color: ativa ? cor : '#3b4656' }}
                 >
                   <span className="relative flex h-9 w-14 items-center justify-center rounded-full transition-colors duration-150" style={{ background: ativa ? `${cor}17` : 'transparent' }}>
-                    <ImagemAba id={id} size={28} className={ativa ? '' : 'opacity-90'} />
+                    {id === 'compras' ? <Icon name="ListChecks" size={28} strokeWidth={2.1} className="text-[#0f7a40]" /> : <ImagemAba id={id} size={28} className={ativa ? '' : 'opacity-90'} />}
                     {id === 'compras' && compras.lista.length > 0 && (
                       <span className="num-tab absolute -right-0.5 -top-1 min-w-[20px] rounded-full bg-[#0f7a40] px-1 text-center text-[11px] leading-[20px] text-white ring-2 ring-white">{compras.lista.length}</span>
                     )}

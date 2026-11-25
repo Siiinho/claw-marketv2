@@ -53,8 +53,7 @@
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* Telas do app (painel e abas), escolhida pelo usuário com a skill google-fonts ("Friendly SaaS"):
-   Plus Jakarta Sans em títulos e textos. O site do cliente e as artes continuam com as fontes acima. */
+/* Plus Jakarta Sans: fonte anterior das telas do app, mantida para voltar fácil. */
 @font-face {
   font-family: "Plus Jakarta Sans";
   font-style: normal;
@@ -336,20 +335,44 @@
    Fontes próprias, texto em peso 500 e letras pequenas um pouco maiores (escala major-second).
    .arte-fixa devolve as fontes e tamanhos originais dentro das artes (encarte, jornal, cartaz). */
 .app-ui {
-  --font-sans: "Plus Jakarta Sans", "Figtree", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Plus Jakarta Sans", "Figtree", "Segoe UI", sans-serif;
-  --text-xs: 0.8125rem;
+  --font-sans: "Figtree", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Figtree", "Segoe UI", sans-serif;
+  --text-xs: 0.875rem;
   --text-xs--line-height: 1.35;
-  --text-sm: 0.9375rem;
+  --text-sm: 1rem;
   --text-sm--line-height: 1.4;
+  --color-cream: #e7edf4;
+  --color-cream-200: #d5e0ec;
+  --color-info: #14579c;
   font-family: var(--font-sans);
-  --color-ink-soft: #2a3546;
+  --color-ink-soft: #1f2a3a;
   font-weight: 500;
   color: var(--color-ink);
 }
+.app-ui { background: var(--color-cream); }
+.app-ui .card-bengala { border: 1.5px solid rgba(8, 43, 79, 0.22); box-shadow: 0 2px 0 rgba(8, 43, 79, 0.06), 0 8px 22px rgba(8, 43, 79, 0.08); }
+/* "Ver mais" e opções recolhidas precisam parecer botão, não texto */
+.app-ui details > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.85rem;
+  border: 2px solid rgba(8, 43, 79, 0.35);
+  border-radius: 0.6rem;
+  background: #fff;
+  color: var(--color-navy);
+  font-weight: 700;
+}
+.app-ui details > summary::-webkit-details-marker { display: none; }
+.app-ui details > summary::after { content: "▾"; margin-left: auto; transition: rotate 0.15s ease; }
+.app-ui details[open] > summary::after { rotate: 180deg; }
+.app-ui details > summary:hover { border-color: var(--color-navy); background: var(--color-cream); }
+.arte-fixa details > summary { all: revert; }
 .app-ui :is(h1, h2, h3) { font-family: var(--font-display); letter-spacing: -0.015em; }
 .app-ui .display-bengala { font-weight: 800; letter-spacing: -0.02em; }
-.arte-fixa {
+.arte-fixa { --color-cream: #f3f5f8; --color-cream-200: #e8edf3; --color-info: #2e6fb0; --color-ink-soft: #3b4656;
   --font-sans: "Figtree", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Bricolage Grotesque", "Figtree", "Segoe UI", sans-serif;
   --text-xs: 0.75rem;

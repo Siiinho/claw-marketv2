@@ -4,7 +4,7 @@ import { Icon } from './ui'
 
 // Grade com os selos de oferta (usada no jornal e nos cartazes).
 export default function SeletorSelo({ value, onChange }) {
-  const atual = value || 'oferta'
+  const atual = value || 'nenhum'
   return (
     <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
       {SELOS_OFERTA.map((s) => (

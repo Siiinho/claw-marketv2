@@ -165,6 +165,13 @@ export default function CentralArtes({ itens, titulo, encarte, loja, temaId, set
                 })}
               </div>
             </div>
+            {ctrlCartaz?.comModeloProprio > 0 && (
+              <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border-2 border-[#b4530f] bg-[#fff4e5] p-3 text-sm text-[#5c2a05]">
+                <Icon name="TriangleAlert" size={20} className="shrink-0" />
+                <span className="min-w-0 flex-1 font-semibold">{plural(ctrlCartaz.comModeloProprio, 'cartaz tem', 'cartazes têm')} modelo próprio e {ctrlCartaz.comModeloProprio === 1 ? 'vai' : 'vão'} sair diferente do modelo marcado acima.</span>
+                <Botao variante="escuro" onClick={ctrlCartaz.onUsarEmTodos} disabled={!!ocupado}><Icon name="CopyCheck" size={16} /> Usar este modelo em todos</Botao>
+              </div>
+            )}
             <div className="flex flex-wrap gap-x-6 gap-y-4">
               <div>
                 <Rotulo>Tamanho do cartaz</Rotulo>
