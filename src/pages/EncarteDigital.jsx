@@ -116,7 +116,7 @@ const CHAVE_LISTA = 'clawmarket:lista-compras:v1'
 function lerLista() {
   try { const l = JSON.parse(localStorage.getItem(CHAVE_LISTA) || '[]'); return Array.isArray(l) ? l : [] } catch (_) { return [] }
 }
-function useListaCompras() {
+export function useListaCompras() {
   const [lista, setLista] = useState(lerLista)
   const gravar = useCallback((fn) => setLista((atual) => {
     const nova = fn(atual)
