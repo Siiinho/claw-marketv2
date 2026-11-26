@@ -106,7 +106,7 @@ function Nota({ compras, loja, aberta, setAberta, ultimo }) {
           <Icon name="ReceiptText" size={24} className="shrink-0 text-[#ffd23f]" />
           <span className="min-w-0 flex-1">
             <span className="block text-[15px] font-bold leading-tight">Minha nota</span>
-            <span className="block text-[13px] leading-tight text-white/80">{compras.lista.length ? `${plural(unidades, 'item', 'itens')} anotados` : 'Toque no produto para anotar'}</span>
+            <span className="block text-[13px] leading-tight text-white/80">{compras.lista.length ? plural(unidades, 'item anotado', 'itens anotados') : 'Toque no produto para anotar'}</span>
           </span>
           <span className="num-tab shrink-0 text-xl font-black text-[#ffd23f]">{formatBRL(total)}</span>
         </button>
