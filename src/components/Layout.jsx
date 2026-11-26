@@ -129,7 +129,7 @@ export default function Layout() {
                 {({ isActive }) => (
                   <>
                     <ImagemAba id={n.key} size={24} />
-                    {n.label}
+                    <span className="whitespace-nowrap">{n.label}</span>
                     {isActive && <span className="absolute inset-x-3 -bottom-2 h-[3px] rounded-t bg-offer" />}
                   </>
                 )}
@@ -174,7 +174,7 @@ export default function Layout() {
                 className="hidden h-10 items-center gap-2 rounded-lg bg-bengala px-4 text-sm font-semibold text-white hover:bg-bengala-dark md:inline-flex"
               >
                 <Icon name="CalendarSearch" size={18} />
-                Conferir validade
+                <span className="whitespace-nowrap"><span className="hidden xl:inline">Conferir </span>validade</span>
               </button>
             )}
             <div ref={refConta} className="relative hidden md:block">
