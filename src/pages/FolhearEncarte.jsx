@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../components/ui'
-import { formatBRL, noMercadoEncarte, dataISOmaisDias, plural, paraNumero } from '../lib/utils'
+import { SETORES, MERCADO_ENCARTE, formatBRL, noMercadoEncarte, dataISOmaisDias, plural, paraNumero } from '../lib/utils'
 import { carregarEncartePublicado, assinarEncarte } from '../lib/encartePublico'
-import { temaCampanhaById } from '../lib/temasCampanha'
+import { temaCampanhaById, temasDoSetor } from '../lib/temasCampanha'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina } from '../components/JornalMercado'
 import { ContextoEncarte } from '../components/ImagemProduto'
 import { semFundo } from '../lib/semFundo'
@@ -14,12 +14,7 @@ import { useListaCompras } from './EncarteDigital'
 // ele é circulado e entra na "nota" — uma nota de conferência que soma o total. Não é cupom fiscal
 // nem leva a pagamento: é só para o cliente saber quanto vai gastar antes de chegar no caixa.
 
-const LAYOUTS = [
-  { id: 'jornal', nome: 'Jornal da semana' },
-  { id: 'ancorado', nome: 'Ancorado' },
-  { id: 'grade', nome: '3 × 3' },
-  { id: 'destaque', nome: '1 + 7' },
-]
+const LAYOUTS_VALIDOS = ['jornal', 'ancorado', 'grade', 'destaque']
 
 // Som curto de papel virando (ruído filtrado), só depois de um toque.
 let audio = null
@@ -134,13 +129,11 @@ export default function FolhearEncarte() {
     return () => { ativo = false; parar() }
   }, [])
 
-  // protótipo: dá para trocar o layout aqui e comparar
-  const [escolhido, setEscolhido] = useState(null)
-  const layout = escolhido || (LAYOUTS.some((l) => l.id === encarte?.layout) ? encarte.layout : 'jornal')
+  // O layout é o que a loja escolheu no gerador. O cliente só escolhe o setor, e cada setor sai com a
+  // campanha e o período dele, como no site do cliente.
   const loja = encarte?.loja || LOJAS[0]
-  const tema = temaCampanhaById(encarte?.tema)
   const hoje = dataISOmaisDias(0)
-  const itens = useMemo(() => {
+  const todos = useMemo(() => {
     if (!encarte) return []
     const pausados = new Set(encarte.pausados || [])
     // ofertas do dia viram uma faixa própria no jornal; a de um dia que já passou volta a ser da semana
@@ -148,6 +141,27 @@ export default function FolhearEncarte() {
       .filter((p) => !pausados.has(p.setor) && (!p.soMercado || noMercadoEncarte(p, hoje)))
       .map((p) => (noMercadoEncarte(p, hoje) ? p : { ...p, encarteMercadoDia: null }))
   }, [encarte, hoje])
+  const doDia = todos.filter((p) => p.encarteMercadoDia && encarte?.mostrarMercado !== false)
+  const daSemana = todos.filter((p) => !p.soMercado)
+  const abas = [
+    ...(doDia.length ? [{ id: MERCADO_ENCARTE.id, nome: 'Ofertas de hoje', n: doDia.length }] : []),
+    ...(encarte?.mostrarGeral !== false && daSemana.length ? [{ id: 'todas', nome: 'Todas', n: daSemana.length }] : []),
+    ...SETORES.map((s) => ({ id: s.id, nome: s.nome, n: daSemana.filter((p) => p.setor === s.id).length })).filter((a) => a.n),
+  ]
+  const [abaEscolhida, setAba] = useState(null)
+  const aba = abas.some((a) => a.id === abaEscolhida) ? abaEscolhida : abas.find((a) => a.id === 'todas')?.id || abas[0]?.id
+  const ehHoje = aba === MERCADO_ENCARTE.id
+  const itens = ehHoje ? doDia : aba === 'todas' ? daSemana : daSemana.filter((p) => p.setor === aba)
+  const layout = ehHoje ? 'jornal' : LAYOUTS_VALIDOS.includes(encarte?.layout) ? encarte.layout : 'grade'
+  const temaGeral = temaCampanhaById(encarte?.tema)
+  const tema = aba && aba !== 'todas'
+    ? temaCampanhaById(encarte?.temasSetor?.[aba] || (encarte?.temasV === 2 ? encarte?.tema : temasDoSetor(aba)[0]?.id) || encarte?.tema)
+    : temaGeral
+  const periodoDaAba = (() => {
+    if (ehHoje) { const dias = doDia.map((p) => p.encarteMercadoDia).sort(); return { periodoDe: dias[0], periodoAte: dias[dias.length - 1] } }
+    const p = encarte?.periodosSetor?.[aba]
+    return p?.de ? { periodoDe: p.de, periodoAte: p.ate || p.de } : { periodoDe: encarte?.periodoDe, periodoAte: encarte?.periodoAte }
+  })()
   const paginas = useMemo(() => paginarEncarte(itens, layout), [itens, layout])
   const tamanho = tamanhoPagina(layout)
   const n = paginas.length
@@ -185,7 +199,7 @@ export default function FolhearEncarte() {
   const frente = (f) => (duplo ? 2 * f : f)
   const verso = (f) => (duplo ? 2 * f + 1 : null)
   const [virada, setVirada] = useState(0)
-  useEffect(() => { setVirada(0) }, [layout])
+  useEffect(() => { setVirada(0) }, [aba])
   useEffect(() => { setVirada((v) => Math.min(v, Math.max(0, duplo ? nFolhas : nFolhas - 1))) }, [nFolhas, duplo])
   const ultimoDuplo = useRef(duplo)
   useEffect(() => {
@@ -276,10 +290,10 @@ export default function FolhearEncarte() {
     else terminar(passou ? 0 : -180)
   }
 
-  const encarteDaPagina = encarte ? { periodoDe: encarte.periodoDe, periodoAte: encarte.periodoAte } : null
+  const encarteDaPagina = encarte ? periodoDaAba : null
   const pagina = (i, lado) => (i === null || i === undefined || i < 0 || i >= n ? null : (
     <Folha k={k} largura={tamanho.largura} altura={tamanho.altura} lado={lado}>
-      <PaginaEncarte tema={tema} pagina={paginas[i]} encarte={encarteDaPagina} loja={loja} layout={layout} numero={i + 1} total={n} onAbrir={tocarProduto} escalaLogo={encarte?.escalaLogo} fundo={encarte?.fundos?.[tema.id] || null} />
+      <PaginaEncarte tema={tema} pagina={paginas[i]} encarte={encarteDaPagina} loja={loja} layout={layout} numero={i + 1} total={n} onAbrir={tocarProduto} escalaLogo={encarte?.escalaLogo} fundo={encarte?.fundos?.[tema.id] || (tema.id === encarte?.tema ? encarte?.fundo : null) || null} />
     </Folha>
   ))
   const paginaDireita = (f) => (f < nFolhas && frente(f) < n ? frente(f) : null)
@@ -316,12 +330,13 @@ export default function FolhearEncarte() {
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
             {/* abas presas no topo do jornal: layout (protótipo) e a página */}
-            <div className="flex h-10 items-end gap-1 overflow-x-auto transition-[width] duration-300" style={{ width: larguraAberta }}>
-              {LAYOUTS.map((l) => (
-                <button key={l.id} type="button" onClick={() => setEscolhido(l.id)} aria-pressed={layout === l.id}
-                  className={`h-9 shrink-0 whitespace-nowrap rounded-t-xl px-3 text-[13px] font-bold ${layout === l.id ? 'h-10 bg-white text-[#111]' : 'bg-black/45 text-white hover:bg-black/60'}`}>{l.nome}</button>
+            <div className="flex h-10 items-end gap-1 overflow-x-auto transition-[width] duration-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ width: larguraAberta }}>
+              {abas.map((a) => (
+                <button key={a.id} type="button" onClick={(e) => { setAba(a.id); e.currentTarget.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }) }} aria-pressed={aba === a.id}
+                  className={`h-9 shrink-0 whitespace-nowrap rounded-t-xl px-3 text-[13px] font-bold ${aba === a.id ? 'h-10 bg-white text-[#111]' : 'bg-black/45 text-white hover:bg-black/60'}`}>
+                  {a.id === MERCADO_ENCARTE.id && <span aria-hidden="true" className="mr-1 text-[#d81e29]">★</span>}{a.nome} <span className={aba === a.id ? 'text-[#666]' : 'text-white/70'}>{a.n}</span>
+                </button>
               ))}
-              <span className="ml-auto shrink-0 self-center whitespace-nowrap pl-2 text-[13px] font-bold text-white/90">{doisAbertos ? `${numeroAtual}–${numeroAtual + 1}` : numeroAtual} / {n}</span>
             </div>
             <div
               ref={palcoRef}
@@ -361,6 +376,7 @@ export default function FolhearEncarte() {
               {podeVoltar && <button type="button" onClick={voltar} aria-label="Página anterior" className="absolute left-1.5 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm hover:bg-black/70"><Icon name="ChevronLeft" size={28} /></button>}
               {podeIr && <button type="button" onClick={ir} aria-label="Próxima página" className="absolute right-1.5 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm hover:bg-black/70"><Icon name="ChevronRight" size={28} /></button>}
               {dica && podeIr && <span style={{ left: duplo ? (soDireita ? W * 1.5 : W) : W / 2 }} className="pointer-events-none absolute bottom-3 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/70 px-3 py-1.5 text-[13px] font-semibold text-white">Arraste para virar a página →</span>}
+              {n > 1 && <span style={{ right: soDireita ? 8 : soEsquerda ? W + 8 : 8 }} className="pointer-events-none absolute bottom-2 z-20 rounded-full bg-black/60 px-2 py-0.5 text-[12px] font-bold text-white">{doisAbertos ? `${numeroAtual}–${numeroAtual + 1}` : numeroAtual} / {n}</span>}
               {atualizado && <span className="pointer-events-none absolute right-2 top-2 z-20 rounded-full bg-[#ffd23f] px-2.5 py-1 text-[12px] font-bold text-[#222]">Atualizado agora</span>}
             </div>
             {/* a nota presa embaixo do jornal */}
