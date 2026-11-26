@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Icon, Logo } from '../components/ui'
-import { formatBRL, formatDataCurta, noMercadoEncarte, dataISOmaisDias, plural, paraNumero } from '../lib/utils'
+import { Icon } from '../components/ui'
+import { formatBRL, noMercadoEncarte, dataISOmaisDias, plural, paraNumero } from '../lib/utils'
 import { carregarEncartePublicado, assinarEncarte } from '../lib/encartePublico'
 import { temaCampanhaById } from '../lib/temasCampanha'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina } from '../components/JornalMercado'
@@ -52,17 +52,17 @@ function Folha({ children, k, largura, altura, lado = 'direita' }) {
 // ---------- a nota (lista de compras) ----------
 const linha = (n = 32) => '-'.repeat(n)
 const semRS = (v) => formatBRL(v).replace('R$', '').trim()
-function Nota({ compras, loja, aberta, setAberta, ultimo }) {
+function Nota({ compras, loja, aberta, setAberta, ultimo, largura }) {
   const total = compras.lista.reduce((s, i) => s + (Number(i.preco) || 0) * (Number(i.qtd) || 1), 0)
   const unidades = compras.lista.reduce((s, i) => s + (Number(i.qtd) || 1), 0)
   const fonte = '"Courier New", ui-monospace, monospace'
   return (
     <>
       {aberta && <button type="button" aria-label="Fechar a nota" onClick={() => setAberta(false)} className="fixed inset-0 z-30 bg-black/40" />}
-      <div className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-[420px] px-3 pb-[max(.5rem,env(safe-area-inset-bottom))]">
+      <div className="relative z-40" style={{ width: largura }}>
         {/* a nota sai da "impressora" */}
         {aberta && (
-          <div className="cm-nota-sai relative mx-3 max-h-[68vh] overflow-y-auto bg-[#fdfdf8] px-4 pb-7 pt-4 text-[#222] shadow-[0_10px_30px_rgba(0,0,0,.35)]"
+          <div className="cm-nota-sai absolute bottom-full left-1/2 mb-[-4px] max-h-[70vh] w-[min(380px,calc(100vw-24px))] -translate-x-1/2 overflow-y-auto bg-[#fdfdf8] px-4 pb-7 pt-4 text-[#222] shadow-[0_10px_30px_rgba(0,0,0,.35)]"
             style={{ fontFamily: fonte, clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 8px), 95% 100%, 90% calc(100% - 8px), 85% 100%, 80% calc(100% - 8px), 75% 100%, 70% calc(100% - 8px), 65% 100%, 60% calc(100% - 8px), 55% 100%, 50% calc(100% - 8px), 45% 100%, 40% calc(100% - 8px), 35% 100%, 30% calc(100% - 8px), 25% 100%, 20% calc(100% - 8px), 15% 100%, 10% calc(100% - 8px), 5% 100%, 0 calc(100% - 8px))' }}>
             <p className="text-center text-[15px] font-bold uppercase">{loja.nome}</p>
             {loja.endereco && <p className="text-center text-[12px] leading-tight">{loja.endereco}</p>}
@@ -101,7 +101,7 @@ function Nota({ compras, loja, aberta, setAberta, ultimo }) {
         )}
         {/* a "impressora": sempre à mão, com o total */}
         <button type="button" onClick={() => setAberta((v) => !v)} aria-expanded={aberta}
-          className="relative flex min-h-14 w-full items-center gap-3 rounded-2xl bg-[#1f2937] px-4 text-left text-white shadow-[0_-4px_20px_rgba(0,0,0,.35)]">
+          className="relative flex min-h-14 w-full items-center gap-3 rounded-b-2xl bg-[#1f2937] px-4 text-left text-white shadow-[0_8px_20px_rgba(0,0,0,.35)]">
           <span aria-hidden="true" className="absolute inset-x-6 top-1.5 h-1 rounded-full bg-black/70" />
           <Icon name="ReceiptText" size={24} className="shrink-0 text-[#ffd23f]" />
           <span className="min-w-0 flex-1">
@@ -176,7 +176,7 @@ export default function FolhearEncarte() {
     return () => window.removeEventListener('resize', medir)
   }, [])
   const duplo = tela.w >= 900 && tela.w > tela.h
-  const k = Math.min((tela.w - (duplo ? 48 : 16)) / (tamanho.largura * (duplo ? 2 : 1)), (tela.h - 214) / tamanho.altura)
+  const k = Math.min((tela.w - (duplo ? 24 : 0)) / (tamanho.largura * (duplo ? 2 : 1)), (tela.h - 40 - 56 - 12) / tamanho.altura)
   const W = Math.round(tamanho.largura * k)
   const H = Math.round(tamanho.altura * k)
 
@@ -293,6 +293,8 @@ export default function FolhearEncarte() {
   // jornal fechado (só a capa) ou no fim (só a última): centraliza a página que está aberta
   const soDireita = duplo && !g && virada === 0
   const soEsquerda = duplo && !g && virada > 0 && baseDireita === null
+  // abas e nota acompanham a largura do que está aberto (uma página ou as duas)
+  const larguraAberta = duplo && !soDireita && !soEsquerda ? W * 2 : W
   const [dica, setDica] = useState(true)
   useEffect(() => { if (virada > 0) setDica(false) }, [virada])
 
@@ -309,25 +311,18 @@ export default function FolhearEncarte() {
         {/* a campanha ao fundo, escurecida, para o jornal saltar */}
         <div className="pointer-events-none absolute inset-0 bg-black/55" />
 
-        <header className="relative z-10 flex items-center gap-2 px-3 pt-[max(.5rem,env(safe-area-inset-top))]">
-          <Logo h={34} chip />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-extrabold leading-tight">Jornal de ofertas</p>
-            {encarte?.periodoDe && <p className="truncate text-[12px] leading-tight text-white/80">de {formatDataCurta(encarte.periodoDe)} a {formatDataCurta(encarte.periodoAte)} · {plural(itens.length, 'oferta', 'ofertas')}</p>}
-          </div>
-          {atualizado && <span className="shrink-0 rounded-full bg-[#ffd23f] px-2.5 py-1 text-[12px] font-bold text-[#222]">Atualizado agora</span>}
-        </header>
-        <div role="group" aria-label="Layout do jornal (protótipo)" className="relative z-10 mx-auto mt-2 flex w-max max-w-[calc(100%-24px)] gap-1 overflow-x-auto rounded-full bg-black/35 p-1">
-          {LAYOUTS.map((l) => (
-            <button key={l.id} type="button" onClick={() => setEscolhido(l.id)} aria-pressed={layout === l.id}
-              className={`min-h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-[13px] font-bold ${layout === l.id ? 'bg-white text-[#111]' : 'text-white'}`}>{l.nome}</button>
-          ))}
-        </div>
-
         {!encarte ? (
           <p className="absolute inset-0 flex items-center justify-center text-lg font-semibold">Abrindo o jornal de hoje…</p>
         ) : (
-          <div className="absolute inset-x-0 bottom-[74px] top-[96px] flex flex-col items-center justify-center gap-1.5">
+          <div className="absolute inset-0 flex flex-col items-center justify-center pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
+            {/* abas presas no topo do jornal: layout (protótipo) e a página */}
+            <div className="flex h-10 items-end gap-1 overflow-x-auto transition-[width] duration-300" style={{ width: larguraAberta }}>
+              {LAYOUTS.map((l) => (
+                <button key={l.id} type="button" onClick={() => setEscolhido(l.id)} aria-pressed={layout === l.id}
+                  className={`h-9 shrink-0 whitespace-nowrap rounded-t-xl px-3 text-[13px] font-bold ${layout === l.id ? 'h-10 bg-white text-[#111]' : 'bg-black/45 text-white hover:bg-black/60'}`}>{l.nome}</button>
+              ))}
+              <span className="ml-auto shrink-0 self-center whitespace-nowrap pl-2 text-[13px] font-bold text-white/90">{doisAbertos ? `${numeroAtual}–${numeroAtual + 1}` : numeroAtual} / {n}</span>
+            </div>
             <div
               ref={palcoRef}
               onPointerDown={aoTocar}
@@ -362,16 +357,16 @@ export default function FolhearEncarte() {
                 </div>
               )}
               {duplo && !soDireita && !soEsquerda && <div className="pointer-events-none absolute inset-y-0 z-10" style={{ left: W - 1, width: 2, background: 'rgba(0,0,0,.35)' }} />}
+              {/* setas presas nas laterais do jornal */}
+              {podeVoltar && <button type="button" onClick={voltar} aria-label="Página anterior" className="absolute left-1.5 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm hover:bg-black/70"><Icon name="ChevronLeft" size={28} /></button>}
+              {podeIr && <button type="button" onClick={ir} aria-label="Próxima página" className="absolute right-1.5 top-1/2 z-20 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm hover:bg-black/70"><Icon name="ChevronRight" size={28} /></button>}
+              {dica && podeIr && <span style={{ left: duplo ? (soDireita ? W * 1.5 : W) : W / 2 }} className="pointer-events-none absolute bottom-3 z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/70 px-3 py-1.5 text-[13px] font-semibold text-white">Arraste para virar a página →</span>}
+              {atualizado && <span className="pointer-events-none absolute right-2 top-2 z-20 rounded-full bg-[#ffd23f] px-2.5 py-1 text-[12px] font-bold text-[#222]">Atualizado agora</span>}
             </div>
-            <div className="flex items-center gap-4">
-              <button type="button" onClick={voltar} disabled={!podeVoltar} aria-label="Página anterior" className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 disabled:opacity-30"><Icon name="ChevronLeft" size={24} /></button>
-              <span className="min-w-[150px] text-center text-[14px] font-semibold">{dica && podeIr ? 'Arraste para virar a página' : doisAbertos ? `Páginas ${numeroAtual} e ${numeroAtual + 1} de ${n}` : `Página ${numeroAtual} de ${n}`}</span>
-              <button type="button" onClick={ir} disabled={!podeIr} aria-label="Próxima página" className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 disabled:opacity-30"><Icon name="ChevronRight" size={24} /></button>
-            </div>
+            {/* a nota presa embaixo do jornal */}
+            <Nota compras={compras} loja={loja} aberta={notaAberta} setAberta={setNotaAberta} ultimo={ultimo} largura={larguraAberta} />
           </div>
         )}
-
-        {encarte && <Nota compras={compras} loja={loja} aberta={notaAberta} setAberta={setNotaAberta} ultimo={ultimo} />}
       </div>
     </ContextoEncarte.Provider>
   )
