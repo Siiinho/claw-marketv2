@@ -17,7 +17,7 @@ const Scanner = lazy(() => import('./pages/Scanner'))
 const Usuarios = lazy(() => import('./pages/Usuarios'))
 const Config = lazy(() => import('./pages/Config'))
 const EncarteDigital = lazy(() => import('./pages/EncarteDigital'))
-const JornalPapel = lazy(() => import('./pages/JornalPapel'))
+const JornalPapel = lazy(() => import('./pages/FolhearEncarte'))
 
 function Carregando() {
   return (

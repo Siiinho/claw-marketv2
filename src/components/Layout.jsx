@@ -11,7 +11,7 @@ const SUBTITULOS = {
   ofertas: 'Descontos e promoções ativas',
   precificacao: 'Desconto automático conforme o vencimento',
   cartazes: 'Cartazes e etiquetas de gôndola para imprimir',
-  jornal: 'Bipe, coloque o preço, escolha o template e publique',
+  jornal: 'Bipe, coloque o preço, escolha a campanha e publique',
   relatorios: 'Indicadores e perdas',
   esg: 'Impacto ambiental e desperdício evitado',
   scanner: 'Confira a validade dos produtos da gôndola',

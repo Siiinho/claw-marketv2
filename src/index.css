@@ -382,3 +382,8 @@
   font-weight: 400;
 }
 .arte-fixa :is(h1, h2, h3) { font-family: inherit; letter-spacing: normal; }
+
+/* Marca de caneta no produto que o cliente pôs na lista (jornal para folhear). */
+.cm-caneta { stroke-dasharray: 640; stroke-dashoffset: 640; animation: cm-risco .5s ease-out forwards; }
+@keyframes cm-risco { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .cm-caneta { animation: none; stroke-dashoffset: 0; } }

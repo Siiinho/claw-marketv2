@@ -63,7 +63,7 @@ const dataValida = (iso, padrao) => (iso && iso >= dataISOmaisDias(0) ? iso : pa
 const PASSOS = [
   { titulo: 'Bipar', ajuda: 'Bipe ou procure pelo nome. Só os produtos desta lista entram no jornal.' },
   { titulo: 'Preço e selo', ajuda: 'Confira o preço de cada produto. O que estiver escrito aqui sai no jornal.' },
-  { titulo: 'Template', ajuda: 'Escolha o template e depois onde o jornal vai aparecer.' },
+  { titulo: 'Campanha', ajuda: 'Escolha a campanha e depois onde o jornal vai aparecer.' },
   { titulo: 'Publicar', ajuda: 'Confira, publique no site do cliente e imprima.' },
 ]
 
@@ -149,7 +149,7 @@ export default function Jornal() {
       const dataUrl = await prepararFundoTemplate(arquivo)
       if (!salvarFundoTemplate(temaId, dataUrl)) return toast('Imagem grande demais para guardar neste aparelho.', 'erro')
       setFundo(dataUrl)
-      toast('Fundo salvo para este template.')
+      toast('Fundo salvo para esta campanha.')
     } catch (erro) {
       toast(erro.message, 'erro')
     }
@@ -547,7 +547,7 @@ export default function Jornal() {
       {tela === 'montar' && passo === 2 && (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
           <div className="min-w-0 space-y-4">
-            <Secao titulo="Escolha o template">
+            <Secao titulo="Escolha a campanha">
               <SeletorTema todos value={temaId} onChange={setTemaId} />
             </Secao>
             <Secao titulo="Onde este jornal vai aparecer?" descricao={textoDestino}>
@@ -597,11 +597,12 @@ export default function Jornal() {
               {destino === 'geral' && (
                 <>
                   <Rotulo className="mt-4">Disposição dos produtos</Rotulo>
-                  <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     {[
                       ['grade', 'LayoutGrid', 'Grade 3 × 3', 'Até 9 por página'],
                       ['destaque', 'LayoutPanelTop', '1 destaque + 7', 'O primeiro sai grande'],
                       ['jornal', 'Newspaper', 'Jornal da semana', 'Muitos por página'],
+                      ['ancorado', 'LayoutDashboard', 'Ancorado', 'Destaques com a big idea'],
                     ].map(([id, icone, nome, desc]) => (
                       <Escolha key={id} ativo={layout === id} onClick={() => setLayout(id)} icone={icone} titulo={nome} descricao={desc} />
                     ))}
@@ -613,7 +614,7 @@ export default function Jornal() {
               <Rotulo className="mt-5">Fundo próprio para {temaArte.nome}</Rotulo>
               <p className="text-xs text-ink-soft">Arte de 1080 × 1350 sem produtos, sem logo e sem validade.</p>
               <div className="mt-2 flex items-center gap-2">
-                {fundo && <img src={fundo} alt="Fundo do template" className="h-14 w-11 rounded object-cover ring-1 ring-black/10" />}
+                {fundo && <img src={fundo} alt="Fundo da campanha" className="h-14 w-11 rounded object-cover ring-1 ring-black/10" />}
                 <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border-2 border-navy/35 bg-white px-3 text-sm font-bold text-navy hover:bg-cream">
                   <Icon name="ImageUp" size={16} /> {fundo ? 'Trocar fundo' : 'Enviar fundo'}
                   <input type="file" accept="image/*" className="sr-only" onChange={(e) => { trocarFundo(e.target.files?.[0]); e.target.value = '' }} />
@@ -672,7 +673,7 @@ export default function Jornal() {
                 <dl className="grid gap-2 text-base">
                   <Resumo rotulo="Jornal" valor={nomeDestino} onMudar={() => irPara(2)} />
                   <Resumo rotulo="Produtos" valor={plural(itensJornal.length, 'produto', 'produtos')} onMudar={() => irPara(1)} />
-                  <Resumo rotulo="Template" valor={temaArte.nome} onMudar={() => irPara(2)} />
+                  <Resumo rotulo="Campanha" valor={temaArte.nome} onMudar={() => irPara(2)} />
                 </dl>
                 <p className="mt-2 text-sm text-ink-soft">{textoDestino}</p>
 

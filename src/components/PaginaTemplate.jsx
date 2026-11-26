@@ -1,3 +1,4 @@
+import ImagemProduto, { MarcaLista, useContextoEncarte } from './ImagemProduto'
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './ui'
 import { formatBRL, formatData, setorById } from '../lib/utils'
@@ -114,6 +115,7 @@ function SeloPrecoOval({ produto, tema, k, indice = 0 }) {
 
 export function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
   const setor = setorById(produto.setor)
+  const { semFundo: soltas } = useContextoEncarte()
   // Fator de escala da célula: cresce com a área, sem deixar o selo de preço sair da célula.
   const k = Math.max(0.8, Math.min(2.6,
     Math.sqrt((estilo.width * estilo.height) / (CELULA_BASE.w * CELULA_BASE.h)),
@@ -131,19 +133,19 @@ export function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
       onClick={() => onAbrir?.(produto)}
       aria-label={`Ver oferta: ${produto.nome}`}
       className="cm-celula absolute overflow-hidden text-left focus:outline-none focus-visible:ring-8 focus-visible:ring-white"
-      style={{ ...estilo, borderRadius: raio, background: tema.celula || '#ffffff', '--cm-i': indice }}
+      style={{ ...estilo, borderRadius: raio, background: soltas ? 'rgba(0,0,0,.2)' : tema.celula || '#ffffff', border: soltas ? `3px solid ${tema.corDestaque}` : undefined, '--cm-i': indice }}
     >
       <Camada nome="nome" produto={produto} estilo={estilo} origem="50% 0%">
       <div
         className="absolute left-0 right-0 top-0 text-center uppercase leading-[0.95]"
-        style={{ color: tema.nomeCor || '#111', fontFamily: 'var(--font-encarte)', fontWeight: 800, letterSpacing: '0.005em', fontSize: 29 * k, height: 62 * k, padding: `${6 * Math.min(k, 1.5)}px ${10 * k}px 0`, overflow: 'hidden' }}
+        style={{ color: soltas ? '#ffffff' : tema.nomeCor || '#111', textShadow: soltas ? contornoTexto(tema.contorno || '#000', 3) : undefined, fontFamily: 'var(--font-encarte)', fontWeight: 800, letterSpacing: '0.005em', fontSize: 29 * k, height: 62 * k, padding: `${6 * Math.min(k, 1.5)}px ${10 * k}px 0`, overflow: 'hidden' }}
       >
         {produto.nome}
       </div>
       </Camada>
       <Camada nome="foto" produto={produto} estilo={estilo} origem={`50% ${(topoFoto + (estilo.height - topoFoto) / 2) / estilo.height * 100}%`}>
       {produto.imagem ? (
-        <img
+        <ImagemProduto
           src={produto.imagem}
           alt=""
           className="cm-foto absolute object-contain"
@@ -167,6 +169,7 @@ export function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
       <Camada nome="preco" produto={produto} estilo={estilo} origem={`calc(100% - ${106 * k}px) calc(100% - ${61 * k}px)`}>
         <SeloPrecoOval produto={produto} tema={tema} k={k} indice={indice} />
       </Camada>
+      <MarcaLista id={produto.id} />
     </button>
     </>
   )

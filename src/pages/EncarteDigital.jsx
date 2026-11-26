@@ -7,7 +7,7 @@ import { temaCampanhaById, temasDoSetor, caminhoArte } from '../lib/temasCampanh
 import SeloArte from '../components/SeloArte'
 import { SimboloClawMarket } from '../components/MarcaClawMarket'
 import { Escalado } from '../components/PaginaTemplate'
-import { PaginaEncarte, paginarEncarte, tamanhoPagina, ehFormatoJornal, alturaUsada } from '../components/JornalMercado'
+import { PaginaEncarte, paginarEncarte, tamanhoPagina, ehFormatoJornal, alturaDaPagina } from '../components/JornalMercado'
 import PrecoArte from '../components/PrecoArte'
 import { LOJAS } from '../data/seed'
 
@@ -799,7 +799,7 @@ export default function EncarteDigital() {
               {paginas.map((pagina, i) => (
                 <div key={`${encarte.versao}-${setorFiltro}-${i}`} className="min-w-0 overflow-hidden rounded-2xl shadow-[0_10px_30px_-12px_rgba(8,43,79,0.35)] ring-1 ring-black/[0.06]">
                   <PaginaViva>
-                    <Escalado largura={tamanho.largura} altura={ehFormatoJornal(layout) ? alturaUsada(pagina) : tamanho.altura}>
+                    <Escalado largura={tamanho.largura} altura={ehFormatoJornal(layout) ? alturaDaPagina(pagina, layout) : tamanho.altura}>
                       <PaginaEncarte animado compacto tema={tema} pagina={pagina} encarte={encarteDaAba} loja={loja} fundo={fundoDoTema} layout={layout} numero={i + 1} total={paginas.length} onAbrir={abrir} />
                     </Escalado>
                   </PaginaViva>
