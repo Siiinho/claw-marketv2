@@ -10,7 +10,7 @@ import {
 import { uid, statusValidade, paraNumero } from '../lib/utils'
 import { restaurarImagensSalvas } from '../lib/produtoApi'
 import {
-  nuvemAtiva, sessaoNuvem, entrarNuvem, criarContaNuvem, sairNuvem, trocarSenhaNuvem,
+  nuvemAtiva, sessaoNuvem, entrarNuvem, criarContaNuvem, sairNuvem, trocarSenhaNuvem, nomeDoConvite,
   listarPerfisNuvem, alterarPapelNuvem, baixarTudoNuvem, gravarNuvem, assinarNuvem, enviarFotoNuvem,
 } from '../lib/nuvem'
 import { fotoDoCatalogo, ehFotoDaPastaLocal } from '../lib/catalogoBengala'
@@ -185,6 +185,8 @@ export function StoreProvider({ children }) {
   const [auditoria, setAuditoria] = useState(dadosSessao.auditoria ?? [])
   // mescla os padrões por baixo do salvo (backfill de chaves novas, ex.: regrasPreco)
   const [config, setConfig] = useState({ ...CONFIG_SEED, ...(dadosSessao.config || {}), nomeMercado: CONFIG_SEED.nomeMercado })
+  // de qual mercado são os dados guardados neste aparelho (instalações antigas: Bengala)
+  const mercadoDosDados = useRef(dadosSessao.mercadoId || 'bengala')
   const [jornalOficial, setJornalOficial] = useState(() => {
     const sj = dadosSessao.jornalOficial
     // migra instalações antigas: capa de 2023 (Outubro Rosa) ou sem o campo `ym`
@@ -216,7 +218,7 @@ export function StoreProvider({ children }) {
         ? { ...p, imagem: null }
         : p
     )
-    const dump = { produtos: produtosLeves, ofertas, jornais, lotes, auditoria, config, jornalOficial, lojaAtiva }
+    const dump = { produtos: produtosLeves, ofertas, jornais, lotes, auditoria, config, jornalOficial, lojaAtiva, mercadoId: mercadoDosDados.current }
     try {
       localStorage.setItem(DADOS_LOJA_KEY, JSON.stringify(dump))
     } catch (_) {}
@@ -259,13 +261,15 @@ export function StoreProvider({ children }) {
   // Cadastro: nome e senha. Toda conta nova começa como repositor; o admin muda a função
   // na tela Usuários.
   const registrar = useCallback(
-    async ({ nome, senha }) => {
+    async ({ nome, senha, mercadoNome, convite }) => {
       const nomeT = (nome || '').trim()
       if (!nomeT || !senha) return { ok: false, erro: 'Informe nome e senha.' }
+      if (mercadoNome !== undefined && String(mercadoNome).trim().length < 3) return { ok: false, erro: 'Escreva o nome do mercado.' }
+      if (convite !== undefined && nuvem && !(await nomeDoConvite(convite))) return { ok: false, erro: 'Código do mercado não encontrado. Peça o código ao dono do mercado.' }
       if (nomeT.toLowerCase() === 'admin' || nomeT.toLowerCase().startsWith('admin ')) return { ok: false, erro: 'Esse nome é reservado. Escolha outro.' }
       if (senha.length < 4) return { ok: false, erro: 'A senha precisa de pelo menos 4 caracteres.' }
       if (nuvem) {
-        const r = await criarContaNuvem({ nome: nomeT, senha })
+        const r = await criarContaNuvem({ nome: nomeT, senha, mercadoNome, convite })
         if (r.ok) setUsuario(r.usuario)
         return r
       }
@@ -363,17 +367,25 @@ export function StoreProvider({ children }) {
           else if (l.colecao === 'jornalOficial') oficialRemoto = l.dados
         }
         // O que só existe neste aparelho (e nunca foi apagado na nuvem) entra junto e sobe.
+        // Se o aparelho guardava dados de OUTRO mercado, eles não sobem: vale só a nuvem deste login.
+        const mercadoLogin = usuario.mercadoId || 'bengala'
+        const mesmoMercado = mercadoDosDados.current === mercadoLogin
+        mercadoDosDados.current = mercadoLogin
         const juntar = (local, colecao) => {
           const m = new Map(remoto[colecao])
+          if (!mesmoMercado) return [...m.values()]
           for (const item of local) if (item?.id && !m.has(item.id) && !mapa.has(`${colecao}:${item.id}`)) m.set(item.id, item)
           return [...m.values()]
         }
+        const nomeDoMercado = usuario.mercadoNome || CONFIG_SEED.nomeMercado
         setProdutos((local) => juntar(local, 'produtos'))
         setOfertas((local) => juntar(local, 'ofertas'))
         setJornais((local) => juntar(local, 'jornais').sort((a, b) => String(b.criadoEm || '').localeCompare(String(a.criadoEm || ''))))
         setLotes((local) => juntar(local, 'lotes'))
         setAuditoria((local) => juntar(local, 'auditoria').sort((a, b) => String(b.criadoEm || '').localeCompare(String(a.criadoEm || ''))).slice(0, 1000))
-        if (configRemota) setConfig({ ...CONFIG_SEED, ...configRemota, nomeMercado: CONFIG_SEED.nomeMercado })
+        if (configRemota) setConfig({ ...CONFIG_SEED, ...configRemota, nomeMercado: nomeDoMercado })
+        else if (!mesmoMercado) setConfig({ ...CONFIG_SEED, nomeMercado: nomeDoMercado })
+        else setConfig((c) => ({ ...c, nomeMercado: nomeDoMercado }))
         if (oficialRemoto) setJornalOficial(oficialRemoto)
         pronta.current = true
         setNuvemStatus('online')
@@ -392,7 +404,7 @@ export function StoreProvider({ children }) {
           else if (l.colecao === 'jornais') aplicar(setJornais)
           else if (l.colecao === 'lotes') aplicar(setLotes)
           else if (l.colecao === 'auditoria') aplicar(setAuditoria)
-          else if (l.colecao === 'config' && !l.excluido) setConfig({ ...CONFIG_SEED, ...l.dados, nomeMercado: CONFIG_SEED.nomeMercado })
+          else if (l.colecao === 'config' && !l.excluido) setConfig({ ...CONFIG_SEED, ...l.dados, nomeMercado: nomeDoMercado })
           else if (l.colecao === 'jornalOficial' && !l.excluido) setJornalOficial(l.dados)
         })
       } catch (_) {

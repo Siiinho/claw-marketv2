@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react'
+import { caminhoDoMercado } from './nuvem'
 
 // Cadastro do mercado: logo, lojas, WhatsApp, redes, formas de pagamento e como é o encarte.
 // Fica em config.mercado (no app) e vai junto com o encarte publicado (encarte.marca), para o
@@ -13,7 +14,7 @@ export const PAGAMENTOS = {
 export const CAMPOS_LOJA = ['nome', 'endereco', 'cidade', 'whatsapp', 'telefone', 'estacionamento', 'horario', 'horario2', 'linkGrupo', 'foraDoRodape']
 
 // Página pública do QR de ofertas (o cliente escolhe a loja e entra no grupo dela).
-export const paginaWhatsapp = () => (typeof window === 'undefined' ? '' : `${window.location.origin}${import.meta.env.BASE_URL}#/whatsapp`)
+export const paginaWhatsapp = () => (typeof window === 'undefined' ? '' : `${window.location.origin}${import.meta.env.BASE_URL}${caminhoDoMercado('whatsapp')}`)
 export const lojaVazia = () => ({ id: `loja-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, nome: '', endereco: '', cidade: '', whatsapp: '', telefone: '', estacionamento: false, horario: '', horario2: '', linkGrupo: '', foraDoRodape: false })
 
 // Rodapé já validado do jornal impresso do Bengala: é a base do modelo, e o Bengala começa com ele preenchido.

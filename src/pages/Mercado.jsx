@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useStore } from '../store/StoreContext'
 import { Icon, Botao, Campo, inputCls, Secao, Escolha, Abas } from '../components/ui'
 import { arquivoParaDataURL } from '../lib/utils'
@@ -7,6 +7,7 @@ import { PAGAMENTOS, lojaVazia, marcaPublica, MarcaContexto, ehBengala, BENGALA_
 import RodapeModelo, { RODAPE_W, RODAPE_H, TEXTOS_PADRAO } from '../components/RodapeModelo'
 import logoBengala from '../assets/logo.png'
 import { RodapeOficial } from '../components/PaginaTemplate'
+import { caminhoDoMercado } from '../lib/nuvem'
 
 // Logo com fundo transparente: reduz mantendo PNG (o JPEG pintaria o fundo de branco).
 function logoParaDataURL(file, max = 640) {
@@ -34,7 +35,8 @@ const inicial = (config) => {
   const m = config?.mercado || {}
   const bengala = /bengala/i.test(m.nome || config?.nomeMercado || '') || !(m.nome || config?.nomeMercado)
   const p = bengala ? BENGALA_PADRAO : {}
-  const lojas = (m.lojas?.length ? m.lojas : p.lojas || LOJAS).map((l) => ({ ...lojaVazia(), ...l }))
+  // mercado novo começa com uma loja em branco; o Bengala, com as lojas dele
+  const lojas = (m.lojas?.length ? m.lojas : p.lojas || (bengala ? LOJAS : [{}])).map((l) => ({ ...lojaVazia(), ...l }))
   return {
     nome: m.nome || config?.nomeMercado || p.nome || '',
     logo: m.logo || '',
@@ -107,7 +109,11 @@ function Marcar({ grupo, f, setF }) {
 
 export default function Mercado() {
   const { config, salvarConfig, toast } = useStore()
-  const [f, setF] = useState(() => inicial(config))
+  const [f, setFEstado] = useState(() => inicial(config))
+  // a nuvem chega depois de abrir a tela: enquanto ninguém mexeu, o formulário acompanha
+  const mexeu = useRef(false)
+  const setF = (v) => { mexeu.current = true; setFEstado(v) }
+  useEffect(() => { if (!mexeu.current) setFEstado(inicial(config)) }, [config.mercado, config.nomeMercado])
   const [aba, setAba] = useState('dados')
   const set = (campo, valor) => setF((v) => ({ ...v, [campo]: valor }))
   const setLoja = (i, campo, valor) => setF((v) => ({ ...v, lojas: v.lojas.map((l, k) => (k === i ? { ...l, [campo]: valor } : l)) }))
@@ -171,7 +177,7 @@ export default function Mercado() {
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-[#e8f8ec] p-3">
             <Icon name="MessageCircle" size={18} className="text-[#15803d]" />
             <span className="min-w-0 flex-1 font-semibold text-ink">Página de ofertas no WhatsApp</span>
-            <a href="#/whatsapp" target="_blank" rel="noopener" className="inline-flex min-h-10 items-center gap-1 rounded-lg bg-[#15803d] px-3 font-bold text-white"><Icon name="ExternalLink" size={15} /> Abrir</a>
+            <a href={caminhoDoMercado('whatsapp')} target="_blank" rel="noopener" className="inline-flex min-h-10 items-center gap-1 rounded-lg bg-[#15803d] px-3 font-bold text-white"><Icon name="ExternalLink" size={15} /> Abrir</a>
             <button type="button" className="inline-flex min-h-10 items-center gap-1 rounded-lg border-2 border-[#15803d] px-3 font-bold text-[#15803d]" onClick={() => { navigator.clipboard?.writeText(paginaWhatsapp()); toast('Link copiado!') }}><Icon name="Copy" size={15} /> Copiar link</button>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">

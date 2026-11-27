@@ -1,5 +1,6 @@
-import { lazy, Suspense, useState } from 'react'
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
+import { definirMercadoSite } from './lib/nuvem'
 import { useStore, podeVer } from './store/StoreContext'
 import { MarcaContexto, marcaPublica } from './lib/marca'
 import AberturaApp from './components/AberturaApp'
@@ -30,6 +31,14 @@ function Carregando() {
       <Icon name="LoaderCircle" size={20} className="animate-spin" /> Carregando…
     </div>
   )
+}
+
+// Site do cliente de outro mercado: #/m/<mercado>/encarte (o Bengala segue em #/encarte).
+function DoMercado({ children }) {
+  const { mercado } = useParams()
+  definirMercadoSite(mercado)
+  useEffect(() => () => definirMercadoSite(null), [])
+  return <div key={mercado} className="contents">{children}</div>
 }
 
 function Protegida({ chave, children }) {
@@ -79,7 +88,7 @@ function TrocarSenhaObrigatoria() {
 export default function App() {
   const { usuario, carregandoSessao, config } = useStore()
   // abertura animada só ao entrar no app (o site do cliente abre direto no jornal)
-  const [comAbertura] = useState(() => typeof window === 'undefined' || !/^#\/(encarte|folhear|whatsapp)/.test(window.location.hash))
+  const [comAbertura] = useState(() => typeof window === 'undefined' || !/^#\/(m\/[^/]+\/)?(encarte|folhear|whatsapp)/.test(window.location.hash))
   return (
     <MarcaContexto.Provider value={marcaPublica(config?.mercado)}>
       {comAbertura && <AberturaApp pronto={!carregandoSessao} />}
@@ -93,6 +102,9 @@ export default function App() {
           <Route path="/folhear" element={<JornalPapel />} />
           {/* público: o QR verde do rodapé abre aqui (escolher a loja e entrar no grupo de ofertas) */}
           <Route path="/whatsapp" element={<WhatsappOfertas />} />
+          <Route path="/m/:mercado/encarte" element={<DoMercado><JornalPapel /></DoMercado>} />
+          <Route path="/m/:mercado/folhear" element={<DoMercado><JornalPapel /></DoMercado>} />
+          <Route path="/m/:mercado/whatsapp" element={<DoMercado><WhatsappOfertas /></DoMercado>} />
           <Route path="/login" element={carregandoSessao ? <Carregando /> : usuario ? <Navigate to="/" replace /> : <Login />} />
           <Route element={<Protegida><Layout /></Protegida>}>
             <Route index element={<Dashboard />} />

@@ -148,3 +148,10 @@ end;
 $$;
 revoke all on function public.cm_registrar_visita(text, boolean) from public;
 grant execute on function public.cm_registrar_visita(text, boolean) to anon, authenticated;
+
+-- 27/11/2026: vários mercados (aplicado como migração "multi_mercado_etapa1").
+-- cm_mercados (id = endereço do mercado, convite = código da equipe); cm_perfis.mercado_id e
+-- cm_itens.mercado_id (padrão 'bengala'); cm_meu_mercado(); RLS por mercado em itens, perfis e
+-- visitas; cm_novo_usuario cria mercado (mercado_nome) ou entra na equipe (convite);
+-- cm_convite_mercado(código) para o login; cm_registrar_visita(pagina, novo, mercado).
+-- O Bengala guarda ids como sempre; outros mercados guardam "<mercado>~<id>" (ver src/lib/nuvem.js).

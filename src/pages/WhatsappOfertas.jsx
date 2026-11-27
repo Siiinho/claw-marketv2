@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { carregarEncartePublicado, assinarEncarte } from '../lib/encartePublico'
-import { registrarVisita } from '../lib/nuvem'
+import { registrarVisita, caminhoDoMercado } from '../lib/nuvem'
 import { MarcaContexto, ehBengala, linkWhatsapp, BENGALA_PADRAO } from '../lib/marca'
 import logoBengala from '../assets/logo-bengala-transparente.png'
 
@@ -28,7 +28,7 @@ function Balao({ marca }) {
 export default function WhatsappOfertas() {
   const [encarte, setEncarte] = useState(null)
   const [carregou, setCarregou] = useState(false)
-  useEffect(() => { if (encarte?.marca?.nome) document.title = `Ofertas · ${encarte.marca.nome}` }, [encarte])
+  useEffect(() => { if (encarte) document.title = `Ofertas · ${encarte.marca?.nome || 'Bengala Supermercado'}` }, [encarte])
   useEffect(() => { registrarVisita('whatsapp') }, [])
   useEffect(() => {
     let ativo = true
@@ -87,7 +87,7 @@ export default function WhatsappOfertas() {
           </div>
 
           {temJornal && (
-            <Link to="/folhear" className="mt-8 flex min-h-14 items-center justify-center gap-2 rounded-xl border-[3px] border-[#222] bg-[#ffd23f] px-4 text-[clamp(18px,5vw,24px)] font-black uppercase shadow-[6px_6px_0_#222]">
+            <Link to={caminhoDoMercado('encarte').slice(1)} className="mt-8 flex min-h-14 items-center justify-center gap-2 rounded-xl border-[3px] border-[#222] bg-[#ffd23f] px-4 text-[clamp(18px,5vw,24px)] font-black uppercase shadow-[6px_6px_0_#222]">
               Ver o jornal de ofertas de hoje
             </Link>
           )}

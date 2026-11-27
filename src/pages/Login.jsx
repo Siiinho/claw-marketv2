@@ -13,7 +13,9 @@ const DESTAQUES = [
 export default function Login() {
   const { login, registrar, toast } = useStore()
   const navigate = useNavigate()
-  const [modo, setModo] = useState('entrar') // entrar | criar
+  const [modo, setModo] = useState('entrar') // entrar | mercado | equipe
+  const [mercadoNome, setMercadoNome] = useState('')
+  const [convite, setConvite] = useState('')
   const [identificador, setIdentificador] = useState('')
   const [senha, setSenha] = useState('')
   const [nome, setNome] = useState('')
@@ -45,10 +47,10 @@ export default function Login() {
     setEnviando(true)
     setErro('')
     try {
-      const r = await registrar({ nome, senha })
+      const r = await registrar(modo === 'mercado' ? { nome, senha, mercadoNome } : { nome, senha, convite })
       if (r.ok) {
-        toast(`Conta criada. Bem-vindo, ${nome}!`)
-        navigate('/')
+        toast(modo === 'mercado' ? `${mercadoNome.trim()} cadastrado! Agora coloque a logo e as lojas.` : `Conta criada. Bem-vindo, ${nome}!`)
+        navigate(modo === 'mercado' ? '/mercado' : '/')
       } else setErro(r.erro)
     } catch (_) {
       setErro('Sem conexão com o servidor. Tente de novo.')
@@ -99,7 +101,7 @@ export default function Login() {
       <div className="flex flex-1 items-start justify-center bg-cream p-6 md:items-center md:p-12">
         <div className="w-full max-w-sm">
           <div className="mb-5 flex gap-1 rounded-lg bg-cream-200 p-1">
-            {[['entrar', 'Entrar'], ['criar', 'Criar conta']].map(([id, l]) => (
+            {[['entrar', 'Entrar'], ['mercado', 'Novo mercado'], ['equipe', 'Sou da equipe']].map(([id, l]) => (
               <button
                 key={id}
                 onClick={() => { setModo(id); setErro('') }}
@@ -125,20 +127,35 @@ export default function Login() {
             </form>
           ) : (
             <form onSubmit={criar} className="space-y-4">
+              {modo === 'mercado' ? (
+                <div>
+                  <label htmlFor="criar-mercado" className="mb-1 block text-sm font-medium">Nome do mercado</label>
+                  <input id="criar-mercado" value={mercadoNome} onChange={(e) => setMercadoNome(e.target.value)} placeholder="Ex.: Supermercado Bom Preço" autoComplete="organization" className={CLS} />
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor="criar-convite" className="mb-1 block text-sm font-medium">Código do mercado</label>
+                  <input id="criar-convite" value={convite} onChange={(e) => setConvite(e.target.value)} placeholder="6 letras e números" autoCapitalize="none" className={`${CLS} tracking-widest`} />
+                </div>
+              )}
               <div>
-                <label htmlFor="criar-usuario" className="mb-1 block text-sm font-medium">Nome de usuário</label>
+                <label htmlFor="criar-usuario" className="mb-1 block text-sm font-medium">{modo === 'mercado' ? 'Seu nome de usuário (dono)' : 'Seu nome de usuário'}</label>
                 <input id="criar-usuario" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Crie seu nome de usuário" autoComplete="username" className={CLS} />
               </div>
-              <p className="rounded-lg bg-cream-200 px-3 py-2 text-xs text-ink-soft">A conta nova começa como Repositor. O administrador muda a função na tela Usuários.</p>
+              <p className="rounded-lg bg-cream-200 px-3 py-2 text-xs text-ink-soft">
+                {modo === 'mercado'
+                  ? 'Você vira o dono (administrador) do mercado. Depois, passe o código do mercado para a sua equipe entrar.'
+                  : 'O dono do mercado vê o código na tela Usuários. Você entra como Repositor e o dono muda a sua função.'}
+              </p>
               <div>
                 <label htmlFor="criar-senha" className="mb-1 block text-sm font-medium">Senha</label>
                 <input id="criar-senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="••••••" autoComplete="new-password" className={CLS} />
               </div>
               {erro && <p className="text-sm text-critical">{erro}</p>}
-              <Botao type="submit" className="w-full py-2.5" disabled={enviando}>{enviando ? 'Criando…' : 'Criar conta e entrar'}</Botao>
+              <Botao type="submit" className="w-full py-2.5" disabled={enviando}>{enviando ? 'Criando…' : modo === 'mercado' ? 'Cadastrar meu mercado' : 'Entrar na equipe'}</Botao>
             </form>
           )}
-          <p className="mt-6 text-center text-xs text-ink-soft">Cada conta mantém seus próprios produtos, bipagens, ofertas e jornais.</p>
+          <p className="mt-6 text-center text-xs text-ink-soft">Cada mercado tem os próprios produtos, ofertas, jornais e site. Um mercado não vê o outro.</p>
         </div>
       </div>
     </div>

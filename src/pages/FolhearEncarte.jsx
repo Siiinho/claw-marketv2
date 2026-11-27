@@ -185,7 +185,7 @@ function Nota({ compras, loja, aberta, setAberta, ultimo, largura, barraRef, pul
 export default function FolhearEncarte() {
   const [encarte, setEncarte] = useState(null)
   const [atualizado, setAtualizado] = useState(false)
-  useEffect(() => { if (encarte?.marca?.nome) document.title = `Ofertas · ${encarte.marca.nome}` }, [encarte])
+  useEffect(() => { if (encarte) document.title = `Ofertas · ${encarte.marca?.nome || 'Bengala Supermercado'}` }, [encarte])
   useEffect(() => { registrarVisita('jornal') }, [])
   const compras = useListaCompras()
   useEffect(() => {
