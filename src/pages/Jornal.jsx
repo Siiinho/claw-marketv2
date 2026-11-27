@@ -81,7 +81,13 @@ export default function Jornal() {
 
   // ---- o jornal que está sendo montado ----
   const remessa = remessaDe(produtos, usuario?.id)
-  const [destino, setDestino] = useState(() => destinoValido(rascunho.destino))
+  const [destino, setDestinoEstado] = useState(() => destinoValido(rascunho.destino))
+  const destinoTocado = useRef(false)
+  const setDestino = (id) => { destinoTocado.current = true; setDestinoEstado(id) }
+  const [trocarTudo, setTrocarTudo] = useState(false)
+  const [jornalVendo, setJornalVendo] = useState(null)
+  const [jornalApagar, setJornalApagar] = useState(null)
+  const [retirando, setRetirando] = useState(null)
   const ehMercado = destino === MERCADO_ENCARTE.id
   const ehSetor = destino !== 'geral' && !ehMercado
   const nomeDestino = ehMercado ? 'Jornal da estrela' : ehSetor ? setorById(destino).nome : 'Jornal geral'
@@ -198,6 +204,11 @@ export default function Jornal() {
 
   // ---- montagem do conteúdo ----
   const ordemSetor = (p) => Math.max(0, SETORES.findIndex((s) => s.id === p.setor))
+  // Remessa toda de um setor: já vai para o jornal daquele setor (o geral trocaria o site inteiro).
+  const setorUnico = remessa.length && remessa.every((p) => p.setor && p.setor === remessa[0].setor) ? remessa[0].setor : null
+  useEffect(() => {
+    if (setorUnico && !destinoTocado.current && destino === 'geral') setDestinoEstado(setorUnico)
+  }, [setorUnico, destino])
   const itensJornal = [...itensDoDestino(remessa, destino)].sort((a, b) => ordemSetor(a) - ordemSetor(b))
   const foraDoSetor = ehSetor ? remessa.filter((p) => p.setor !== destino) : []
   const paraArte = (p) => comAjustePadrao({
@@ -267,7 +278,9 @@ export default function Jornal() {
     setConfirmarNovo(false)
     setAcabouDePublicar(false)
     setImpresso(false)
-    setDestino('geral')
+    destinoTocado.current = false
+    setDestinoEstado('geral')
+    setTrocarTudo(false)
     setTitulo(TITULO_PADRAO)
     setPeriodoDe(dataISOmaisDias(0))
     setPeriodoAte(dataISOmaisDias(6))
@@ -320,7 +333,7 @@ export default function Jornal() {
     setPublicando(true)
     try {
       const noAr = await lerEncarteNoAr()
-      const montado = montarPublicacao({ noAr, itens: itensArte, destino, tema: temaId, fundo, periodoDe: validadeDe, periodoAte: validadeAte, layout, escalaLogo })
+      const montado = montarPublicacao({ noAr, itens: itensArte, destino, tema: temaId, fundo, periodoDe: validadeDe, periodoAte: validadeAte, layout, escalaLogo, trocarTudo })
       const dados = {
         ...montado,
         titulo: destino === 'geral' ? titulo : noAr?.titulo || titulo,
@@ -351,6 +364,27 @@ export default function Jornal() {
       toast(erro.message, 'erro')
     } finally {
       setPublicando(false)
+    }
+  }
+
+  // Tira do site as ofertas de um jornal salvo (o resto do site continua). O jornal fica no histórico.
+  const retirarDoSite = async (jornal) => {
+    setRetirando(jornal.id)
+    try {
+      const noAr = await lerEncarteNoAr()
+      const ids = new Set((jornal.produtos || []).map((p) => p.id))
+      const antes = noAr?.itens || []
+      const tira = (p) => ids.has(p.id) && (jornal.tipo !== 'setor' || p.setor === jornal.setor)
+      const itens = antes.filter((p) => !tira(p))
+      if (!noAr || itens.length === antes.length) { toast('As ofertas deste jornal já não estão no site.', 'info'); return }
+      const ficam = new Set(itens.map((p) => p.setor))
+      const limpar = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([s]) => s === MERCADO_ENCARTE.id || ficam.has(s)))
+      await enviarEncarteAoSite({ ...noAr, itens, temasSetor: limpar(noAr.temasSetor), periodosSetor: limpar(noAr.periodosSetor) })
+      toast(`${plural(antes.length - itens.length, 'oferta saiu', 'ofertas saíram')} do site.`)
+    } catch (erro) {
+      toast(erro?.message || 'Não deu para retirar agora. Tente de novo.', 'erro')
+    } finally {
+      setRetirando(null)
     }
   }
 
@@ -434,7 +468,7 @@ export default function Jornal() {
   }
 
   const textoDestino = destino === 'geral'
-    ? 'Troca todas as ofertas do site por estas. O jornal da estrela continua.'
+    ? (trocarTudo ? 'Começa do zero: tira do site os setores que não estão aqui. O jornal da estrela continua.' : 'Troca só os setores destes produtos. Os outros setores que já estão no site continuam.')
     : ehMercado
       ? 'Troca só o jornal da estrela. O geral e os setores continuam.'
       : `Troca só ${nomeDestino}. Os outros setores continuam.`
@@ -557,6 +591,12 @@ export default function Jornal() {
                 <Escolha ativo={destino === 'geral'} onClick={() => setDestino('geral')} icone="Store" titulo="Jornal geral" descricao="O jornal principal do mercado" extra={remessa.length} />
                 <Escolha ativo={ehMercado} onClick={() => setDestino(MERCADO_ENCARTE.id)} icone="Star" iconeCor="var(--color-bengala)" titulo="Jornal da estrela" descricao="As ofertas especiais do dia" extra={remessa.length} />
               </div>
+              {destino === 'geral' && (
+                <label className="mt-3 flex min-h-11 items-start gap-2 rounded-xl bg-cream-200/60 p-3 text-sm font-semibold text-ink">
+                  <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-navy)]" checked={trocarTudo} onChange={(e) => setTrocarTudo(e.target.checked)} />
+                  <span>Começar o jornal do zero <span className="block font-normal text-ink-soft">Tira do site os setores que não estão neste jornal.</span></span>
+                </label>
+              )}
               <Rotulo className="mt-5">Ou só um setor</Rotulo>
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                 {SETORES.map((s) => {
@@ -789,7 +829,7 @@ export default function Jornal() {
 
       {/* ============ HISTÓRICO ============ */}
       {tela === 'historico' && (
-        <Secao titulo="Jornais salvos" descricao="Cada um guarda os produtos, preços e imagens daquele dia.">
+        <Secao titulo="Jornais salvos" descricao="Ver: abre o jornal daquele dia. Retirar do site: tira essas ofertas do site do cliente (fica salvo aqui). Lixeira: apaga daqui.">
           {jornais.length === 0 ? (
             <EmptyState icon="History" titulo="Nenhum jornal salvo" descricao="Ao publicar ou imprimir, o jornal aparece aqui." />
           ) : (
@@ -798,11 +838,12 @@ export default function Jornal() {
                 <li key={jornal.id} className="flex min-w-0 items-center gap-3 py-3">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cream-200 text-navy"><Icon name="Newspaper" size={19} /></span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-ink">{jornal.titulo}</span>
-                    <span className="block text-xs text-ink-soft">{plural(jornal.totalItens, 'produto', 'produtos')} · {jornal.tipo === 'setor' && jornal.setor ? setorById(jornal.setor).nome : jornal.tipo === 'estrela' ? 'Estrela' : 'Geral'} · {new Date(jornal.criadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    <span className="block truncate text-base font-bold text-ink">{jornal.tipo === 'setor' && jornal.setor ? setorById(jornal.setor).nome : jornal.tipo === 'estrela' ? 'Jornal da estrela' : 'Jornal geral'}</span>
+                    <span className="block text-sm text-ink-soft">{plural(jornal.totalItens, 'produto', 'produtos')} · {new Date(jornal.criadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
                   </span>
-                  <Botao variante="contorno" className="shrink-0 px-3" onClick={() => setHistoricoParaAbrir({ jornal })}><Icon name="Printer" size={15} /> <span className="hidden sm:inline">Imprimir</span></Botao>
-                  <button type="button" onClick={() => excluirJornal(jornal.id)} aria-label={`Excluir ${jornal.titulo}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-critical/10 hover:text-critical"><Icon name="Trash2" size={16} /></button>
+                  <Botao variante="contorno" className="shrink-0 px-3" onClick={() => setJornalVendo(jornal)} aria-label={`Ver ${jornal.titulo}`}><Icon name="Eye" size={15} /> <span className="hidden sm:inline">Ver</span></Botao>
+                  <Botao variante="contorno" className="shrink-0 px-3" disabled={retirando === jornal.id} onClick={() => retirarDoSite(jornal)} aria-label="Retirar estas ofertas do site"><Icon name="EyeOff" size={15} /> <span className="hidden sm:inline">{retirando === jornal.id ? 'Retirando…' : 'Retirar do site'}</span></Botao>
+                  <button type="button" onClick={() => setJornalApagar(jornal)} aria-label={`Apagar ${jornal.titulo}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-critical/10 hover:text-critical"><Icon name="Trash2" size={16} /></button>
                 </li>
               ))}
             </ul>
@@ -829,6 +870,41 @@ export default function Jornal() {
           ))}
         </div>
       ) : null}
+
+      <Modal
+        open={!!jornalVendo}
+        onClose={() => setJornalVendo(null)}
+        largura="max-w-3xl"
+        titulo={jornalVendo ? `${jornalVendo.tipo === 'setor' && jornalVendo.setor ? setorById(jornalVendo.setor).nome : jornalVendo.tipo === 'estrela' ? 'Jornal da estrela' : 'Jornal geral'} · ${new Date(jornalVendo.criadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}` : ''}
+        footer={jornalVendo && <>
+          <Botao variante="contorno" onClick={() => setJornalVendo(null)}>Fechar</Botao>
+          <Botao variante="escuro" onClick={() => { setHistoricoParaAbrir({ jornal: jornalVendo }) }}><Icon name="Printer" size={15} /> Imprimir</Botao>
+        </>}
+      >
+        {jornalVendo && (
+          <div className="space-y-4">
+            {paginasDoHistorico(jornalVendo).map((itens, indice, todas) => (
+              <div key={indice} className="overflow-hidden rounded-xl shadow ring-1 ring-black/5">
+                <Escalado largura={tamanhoPagina(jornalVendo.layoutArte).largura} altura={tamanhoPagina(jornalVendo.layoutArte).altura}>
+                  <PaginaEncarte tema={temaCampanhaById(jornalVendo.temaArte || temaId)} pagina={itens} encarte={{ periodoDe: jornalVendo.validadeDe, periodoAte: jornalVendo.validadeAte }} loja={lojaAtual} fundo={jornalVendo.fundoArte || null} layout={jornalVendo.layoutArte || 'grade'} escalaLogo={jornalVendo.escalaLogo} numero={indice + 1} total={todas.length} />
+                </Escalado>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!jornalApagar}
+        onClose={() => setJornalApagar(null)}
+        titulo="Apagar este jornal salvo?"
+        footer={<>
+          <Botao variante="contorno" onClick={() => setJornalApagar(null)}>Cancelar</Botao>
+          <Botao variante="escuro" onClick={() => { excluirJornal(jornalApagar.id); setJornalApagar(null); toast('Jornal apagado do histórico.', 'info') }}>Apagar</Botao>
+        </>}
+      >
+        <p className="text-ink">Ele sai só desta lista. Se as ofertas dele estiverem no site, continuam lá (use "Retirar do site" para tirar).</p>
+      </Modal>
 
       <Modal
         open={confirmarNovo}

@@ -19,11 +19,12 @@ export const itensDoDestino = (remessa, destino) =>
   (destino === 'geral' || destino === MERCADO_ENCARTE.id ? remessa : remessa.filter((p) => p.setor === destino))
 
 // O que vai para o site ao publicar `destino`, sem mexer nos outros jornais que já estão no ar:
-//  - geral: troca todas as ofertas; o jornal da estrela continua;
+//  - geral: troca os setores que vieram nesta remessa; os outros setores e a estrela continuam.
+//    Só com `trocarTudo` ele começa do zero (tira os outros setores);
 //  - mercado-encarte (estrela): troca só o jornal da estrela;
 //  - setor: troca só aquele setor.
 // `noAr` é o encarte publicado (ou null); `itens` já vêm com preço e, na estrela, com o dia.
-export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe, periodoAte, layout, escalaLogo }) {
+export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe, periodoAte, layout, escalaLogo, trocarTudo = false }) {
   const antigos = Array.isArray(noAr?.itens) ? noAr.itens : []
   const novos = new Map(itens.map((p) => [p.id, p]))
   const base = {
@@ -37,6 +38,35 @@ export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe,
     temasSetor: temasResolvidos(noAr),
     periodosSetor: { ...(noAr?.periodosSetor || {}) },
     temasV: 2,
+  }
+  if (destino === 'geral' && !trocarTudo) {
+    // os setores que ficam guardam a campanha e o período que já mostram hoje
+    const setoresNovos = new Set(itens.map((p) => p.setor))
+    const ficam = antigos.filter((p) => !novos.has(p.id) && !setoresNovos.has(p.setor) && !p.soMercado)
+    const temasSetor = { ...base.temasSetor }
+    const periodosSetor = { ...base.periodosSetor }
+    for (const s of setoresNovos) { delete temasSetor[s]; delete periodosSetor[s] }
+    for (const s of new Set(ficam.map((p) => p.setor).filter(Boolean))) {
+      if (!temasSetor[s]) temasSetor[s] = noAr?.tema || tema
+      if (!periodosSetor[s] && noAr?.periodoDe) periodosSetor[s] = { de: noAr.periodoDe, ate: noAr.periodoAte || noAr.periodoDe }
+    }
+    return {
+      ...base,
+      tema,
+      layout,
+      escalaLogo,
+      periodoDe,
+      periodoAte,
+      fundo: fundo || null,
+      temasSetor,
+      periodosSetor,
+      itens: [
+        ...ficam,
+        // da estrela que não veio agora: continua só na estrela
+        ...antigos.filter((p) => !novos.has(p.id) && !ficam.includes(p) && noMercadoEncarte(p)).map((p) => ({ ...p, soMercado: true })),
+        ...itens.map((p) => semEstrela(p, antigos.find((a) => a.id === p.id && noMercadoEncarte(a))?.encarteMercadoDia)),
+      ],
+    }
   }
   if (destino === 'geral') {
     const estrelaAtual = antigos.filter((p) => noMercadoEncarte(p))
