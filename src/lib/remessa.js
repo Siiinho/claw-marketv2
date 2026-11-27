@@ -19,12 +19,14 @@ export const itensDoDestino = (remessa, destino) =>
   (destino === 'geral' || destino === MERCADO_ENCARTE.id ? remessa : remessa.filter((p) => p.setor === destino))
 
 // O que vai para o site ao publicar `destino`, sem mexer nos outros jornais que já estão no ar:
-//  - geral: troca os setores que vieram nesta remessa; os outros setores e a estrela continuam.
+//  - os produtos que já estão no site continuam (geral e setor), a não ser os de `retirar`;
+//  - geral: atualiza os setores que vieram nesta remessa; os outros setores e a estrela continuam.
 //    Só com `trocarTudo` ele começa do zero (tira os outros setores);
 //  - mercado-encarte (estrela): troca só o jornal da estrela;
 //  - setor: troca só aquele setor.
 // `noAr` é o encarte publicado (ou null); `itens` já vêm com preço e, na estrela, com o dia.
-export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe, periodoAte, layout, escalaLogo, trocarTudo = false }) {
+export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe, periodoAte, layout, escalaLogo, trocarTudo = false, retirar = [] }) {
+  const tirar = new Set(retirar)
   const antigos = Array.isArray(noAr?.itens) ? noAr.itens : []
   const novos = new Map(itens.map((p) => [p.id, p]))
   const base = {
@@ -44,14 +46,15 @@ export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe,
   if (destino === 'geral' && !trocarTudo) {
     // os setores que ficam guardam a campanha e o período que já mostram hoje
     const setoresNovos = new Set(itens.map((p) => p.setor))
-    const ficam = antigos.filter((p) => !novos.has(p.id) && !setoresNovos.has(p.setor) && !p.soMercado)
+    // fica tudo o que já estava no site, menos o que a pessoa mandou retirar
+    const ficam = antigos.filter((p) => !novos.has(p.id) && !p.soMercado && !(setoresNovos.has(p.setor) && tirar.has(p.id)))
     const temasSetor = { ...base.temasSetor }
     const periodosSetor = { ...base.periodosSetor }
     const layoutsSetor = { ...base.layoutsSetor }
     for (const s of setoresNovos) { delete temasSetor[s]; delete periodosSetor[s]; delete layoutsSetor[s] }
     // os setores que ficam guardam o layout que já mostram
     for (const s of new Set(antigos.filter((p) => !setoresNovos.has(p.setor)).map((p) => p.setor).filter(Boolean))) if (!layoutsSetor[s] && noAr?.layout) layoutsSetor[s] = noAr.layout
-    for (const s of new Set(ficam.map((p) => p.setor).filter(Boolean))) {
+    for (const s of new Set(ficam.map((p) => p.setor).filter((s) => s && !setoresNovos.has(s)))) {
       if (!temasSetor[s]) temasSetor[s] = noAr?.tema || tema
       if (!periodosSetor[s] && noAr?.periodoDe) periodosSetor[s] = { de: noAr.periodoDe, ate: noAr.periodoAte || noAr.periodoDe }
     }
@@ -118,7 +121,7 @@ export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe,
     layoutsSetor: { ...base.layoutsSetor, [destino]: layout || base.layout },
     itens: [
       ...antigos.filter((p) => !novos.has(p.id)).flatMap((p) => (
-        p.setor !== destino || p.soMercado ? [p] : noMercadoEncarte(p) ? [{ ...p, soMercado: true }] : []
+        p.setor !== destino || p.soMercado || !tirar.has(p.id) ? [p] : noMercadoEncarte(p) ? [{ ...p, soMercado: true }] : []
       )),
       ...itens.map((p) => semEstrela(p, antigos.find((a) => a.id === p.id && noMercadoEncarte(a))?.encarteMercadoDia)),
     ],
