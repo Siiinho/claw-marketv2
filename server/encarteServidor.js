@@ -66,6 +66,20 @@ function limparAjuste(ajuste) {
 
 const idValido = (v) => typeof v === 'string' && /^[a-z0-9-]{1,40}$/.test(v)
 
+// Cadastro do mercado que vai para o site: só textos curtos, lojas e as imagens guardadas em arquivo.
+async function limparMarca(m) {
+  if (!m || typeof m !== 'object') return null
+  const lista = (v, n = 20) => (Array.isArray(v) ? v.slice(0, n).map((x) => texto(x, 60)).filter(Boolean) : [])
+  return {
+    ...Object.fromEntries(['nome', 'whatsappOfertas', 'instagram', 'facebook', 'avisos', 'encarteModo'].map((c) => [c, texto(m[c], 300)]).filter(([, v]) => v)),
+    rodapeModo: ['gerado', 'imagem'].includes(m.rodapeModo) ? m.rodapeModo : undefined,
+    logo: m.logo ? await guardarImagem(m.logo) : null,
+    rodapeImagem: m.rodapeImagem ? await guardarImagem(m.rodapeImagem) : null,
+    lojas: (Array.isArray(m.lojas) ? m.lojas.slice(0, 10) : []).map((l) => Object.fromEntries(['nome', 'endereco', 'cidade', 'whatsapp', 'telefone', 'horario'].map((c) => [c, texto(l?.[c], 200)]).filter(([, v]) => v))),
+    pagamentos: { credito: lista(m.pagamentos?.credito), alimentacao: lista(m.pagamentos?.alimentacao), outros: lista(m.pagamentos?.outros) },
+  }
+}
+
 async function limparEncarte(corpo) {
   const itens = Array.isArray(corpo?.itens) ? corpo.itens.slice(0, 600) : []
   const limpos = []
@@ -104,6 +118,7 @@ async function limparEncarte(corpo) {
     fundos: Object.fromEntries((await Promise.all(Object.entries(corpo?.fundos || {}).filter(([k]) => idValido(k)).slice(0, 20)
       .map(async ([k, v]) => [k, await guardarImagem(v)]))).filter(([, v]) => v)),
     loja,
+    marca: await limparMarca(corpo?.marca),
     itens: limpos,
   }
 }

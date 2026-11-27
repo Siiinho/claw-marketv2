@@ -9,6 +9,7 @@ import {
 } from '../lib/utils'
 import { publicarEncarte, lerEncartePublicado, lerEncarteNoAr, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, atualizarPausadosNoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
 import { remessaDe, precoNoJornal, itensDoDestino, montarPublicacao } from '../lib/remessa'
+import { marcaPublica } from '../lib/marca'
 import SeletorTema from '../components/SeletorTema'
 import SeletorSelo, { BotaoAplicarTodos } from '../components/SeletorSelo'
 import PrecoArte, { ESTILOS_PRECO, estiloPrecoById } from '../components/PrecoArte'
@@ -328,6 +329,7 @@ export default function Jornal() {
         mostrarMercado: config.siteMostrarMercado !== false,
         pausados,
         loja: lojaAtual,
+        marca: marcaPublica(config.mercado),
       }
       const r = await enviarEncarteAoSite(dados)
       const local = publicarEncarte(dados)

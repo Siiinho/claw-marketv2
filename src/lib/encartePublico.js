@@ -53,7 +53,9 @@ const soPublico = (item) => {
 
 // Template de cada setor, tamanho do logo e fundos por template também vão para o site:
 // sem isso cada aba de setor caía no template padrão.
-const extrasDoJornal = ({ temasSetor, temasV, escalaLogo, fundos, mostrarGeral, mostrarMercado, pausados, periodosSetor }) => ({
+const extrasDoJornal = ({ temasSetor, temasV, escalaLogo, fundos, mostrarGeral, mostrarMercado, pausados, periodosSetor, marca }) => ({
+  // Cadastro do mercado (logo, lojas, pagamentos): o site do cliente mostra a marca dele.
+  marca: marca && typeof marca === 'object' ? marca : null,
   // Setor publicado com datas próprias: { padaria: { de, ate } }. Sem isso, vale o período do jornal.
   periodosSetor: periodosSetor && typeof periodosSetor === 'object' ? periodosSetor : {},
   // Setores desligados para ajuste: a aba fica no site com o aviso "Ajustando ofertas".

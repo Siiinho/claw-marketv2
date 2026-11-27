@@ -10,6 +10,7 @@ import { Escalado } from '../components/PaginaTemplate'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina, ehFormatoJornal, alturaDaPagina } from '../components/JornalMercado'
 import PrecoArte from '../components/PrecoArte'
 import { LOJAS } from '../data/seed'
+import { MarcaContexto } from '../lib/marca'
 
 // Encarte digital público: a página que a tag NFC abre.
 // Feita para celular primeiro, com alto contraste e letras grandes.
@@ -659,6 +660,7 @@ export default function EncarteDigital() {
       : { id: setorFiltro, nome: setorById(setorFiltro).nome, detalhe: plural(visiveis.length, 'oferta', 'ofertas') }
 
   return (
+    <MarcaContexto.Provider value={encarte?.marca || null}>
     <div className="min-h-screen bg-cream pb-[calc(4.5rem+env(safe-area-inset-bottom))] text-ink md:pb-0">
       {/* Topo: a grande ideia da campanha da semana, o período e as duas ações da loja */}
       <header className="relative overflow-hidden text-white" style={{ background: carregando ? 'linear-gradient(160deg,#082b4f,#123f6b)' : temaGeral.fundo }}>
@@ -888,5 +890,6 @@ export default function EncarteDigital() {
 
       <PreviewProduto produto={aberto} lista={listaPreview} onTrocar={abrir} onFechar={fechar} tema={tema} encarte={aberto ? (noMercadoEncarte(aberto, hoje) && (ehMercado || aberto.soMercado) ? { ...encarte, periodoDe: aberto.encarteMercadoDia, periodoAte: aberto.encarteMercadoDia } : comPeriodo(encarte, aberto.setor)) : encarte} loja={loja} compras={compras} />
     </div>
+    </MarcaContexto.Provider>
   )
 }

@@ -7,6 +7,8 @@ import { PaginaEncarte, paginarEncarte, tamanhoPagina } from '../components/Jorn
 import { ContextoEncarte } from '../components/ImagemProduto'
 import { semFundo } from '../lib/semFundo'
 import { LOJAS } from '../data/seed'
+import { MarcaContexto, useMarca, LogoOuNome } from '../lib/marca'
+import logoPadrao from '../assets/logo.png'
 import { useListaCompras } from './EncarteDigital'
 
 // Protótipo: o encarte publicado para folhear como um jornal de verdade. As páginas são as mesmas do
@@ -45,6 +47,11 @@ function Folha({ children, k, largura, altura, lado = 'direita' }) {
 }
 
 // ---------- a nota (lista de compras) ----------
+function LogoNota() {
+  const marca = useMarca()
+  if (marca && !marca.logo && !/bengala/i.test(marca.nome || '')) return null
+  return <div className="mb-1 flex justify-center"><LogoOuNome marca={marca} padrao={logoPadrao} className="block h-20 w-auto max-w-[75%] object-contain" style={{ filter: "grayscale(1) contrast(1.25)" }} /></div>
+}
 const linha = (n = 32) => '-'.repeat(n)
 const semRS = (v) => formatBRL(v).replace('R$', '').trim()
 function Nota({ compras, loja, aberta, setAberta, ultimo, largura }) {
@@ -59,6 +66,7 @@ function Nota({ compras, loja, aberta, setAberta, ultimo, largura }) {
         {aberta && (
           <div className="cm-nota-sai absolute bottom-full left-1/2 mb-[-4px] max-h-[70vh] w-[min(380px,calc(100vw-24px))] -translate-x-1/2 overflow-y-auto bg-[#fdfdf8] px-4 pb-7 pt-4 text-[#222] shadow-[0_10px_30px_rgba(0,0,0,.35)]"
             style={{ fontFamily: fonte, clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 8px), 95% 100%, 90% calc(100% - 8px), 85% 100%, 80% calc(100% - 8px), 75% 100%, 70% calc(100% - 8px), 65% 100%, 60% calc(100% - 8px), 55% 100%, 50% calc(100% - 8px), 45% 100%, 40% calc(100% - 8px), 35% 100%, 30% calc(100% - 8px), 25% 100%, 20% calc(100% - 8px), 15% 100%, 10% calc(100% - 8px), 5% 100%, 0 calc(100% - 8px))' }}>
+            <LogoNota />
             <p className="text-center text-[15px] font-bold uppercase">{loja.nome}</p>
             {loja.endereco && <p className="text-center text-[12px] leading-tight">{loja.endereco}</p>}
             <p className="mt-1 text-center text-[12px]">{new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>
@@ -313,6 +321,7 @@ export default function FolhearEncarte() {
   useEffect(() => { if (virada > 0) setDica(false) }, [virada])
 
   return (
+    <MarcaContexto.Provider value={encarte?.marca || null}>
     <ContextoEncarte.Provider value={contexto}>
       <div className="fixed inset-0 select-none overflow-hidden text-white" style={{ background: tema.fundo }}>
         <style>{`
@@ -385,5 +394,6 @@ export default function FolhearEncarte() {
         )}
       </div>
     </ContextoEncarte.Provider>
+    </MarcaContexto.Provider>
   )
 }

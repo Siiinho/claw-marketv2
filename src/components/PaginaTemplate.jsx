@@ -1,4 +1,6 @@
 import ImagemProduto, { MarcaLista, useContextoEncarte } from './ImagemProduto'
+import { useMarca, linkWhatsapp, ehBengala, LogoOuNome } from '../lib/marca'
+import { QrCode } from './cartazes/QrJornal'
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './ui'
 import { formatBRL, formatData, setorById } from '../lib/utils'
@@ -10,7 +12,8 @@ import logoTransparente from '../assets/logo-bengala-transparente.png'
 // Logo do mercado direto sobre a arte do tema, sem caixa branca (arquivo PNG transparente).
 // `escala` (0,4 a 1,3) vem do controle "Tamanho do logo" de cada jornal.
 export function LogoEncarte({ h = 110, escala = 1 }) {
-  return <img src={logoTransparente} alt="Bengala Supermercado" className="block w-auto object-contain" style={{ height: h * escala }} />
+  const marca = useMarca()
+  return <LogoOuNome marca={marca} padrao={logoTransparente} className="block w-auto max-w-full object-contain" style={{ height: h * escala, fontSize: h * escala * 0.34 }} nomeClassName="text-[#d81e29]" />
 }
 
 // Ajuste de cada produto na arte (feito no editor, como no Canva): posição em fração da
@@ -175,6 +178,57 @@ export function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
   )
 }
 
+// Rodapé montado com o cadastro do mercado: logo, WhatsApp de ofertas (QR), lojas e pagamentos.
+function RodapeGerado({ altura, marca }) {
+  const h = altura
+  const lojas = (marca.lojas || []).slice(0, 3)
+  const fonte = h / (lojas.length > 2 ? 15 : 13)
+  const link = linkWhatsapp(marca.whatsappOfertas)
+  const cartoes = [...(marca.pagamentos?.credito || []), ...(marca.pagamentos?.outros || [])]
+  const vales = marca.pagamentos?.alimentacao || []
+  const insta = marca.instagram ? `@${String(marca.instagram).replace(/^@/, '')}` : ''
+  const linha = 'block overflow-hidden text-ellipsis whitespace-nowrap'
+  const chip = (t) => <span key={t} style={{ display: 'inline-block', margin: `0 ${h * 0.02}px ${h * 0.025}px 0`, padding: `0 ${h * 0.03}px`, border: '1px solid #c9ced6', borderRadius: h * 0.03, fontSize: fonte * 0.8, fontWeight: 800, color: '#1f2937', lineHeight: 1.35 }}>{t}</span>
+  const titulo = (t) => <div style={{ fontSize: fonte * 0.78, fontWeight: 900, textTransform: 'uppercase', color: '#b91c1c', lineHeight: 1.3 }}>{t}</div>
+  return (
+    <div className="absolute inset-x-0 bottom-0 bg-white" style={{ height: h, zIndex: 1, fontFamily: 'Arial, sans-serif', color: '#111', borderTop: `${Math.max(2, h * 0.025)}px solid #d81e29` }}>
+      <div className="flex items-stretch" style={{ height: h * 0.84, padding: `${h * 0.06}px ${h * 0.06}px 0`, gap: h * 0.06 }}>
+        <div className="flex shrink-0 items-center justify-center" style={{ width: '17%' }}>
+          <LogoOuNome marca={marca} padrao={logoTransparente} className="max-h-full max-w-full object-contain" style={{ maxHeight: h * 0.7, fontSize: fonte * 1.3, color: '#d81e29', textAlign: 'center' }} />
+        </div>
+        {link && (
+          <div className="flex shrink-0 flex-col items-center justify-center" style={{ width: '11%', gap: h * 0.015 }}>
+            <QrCode texto={link} tamanho={h * 0.5} />
+            <span className="text-center" style={{ fontSize: fonte * 0.62, fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.1 }}>WhatsApp de ofertas</span>
+          </div>
+        )}
+        <div className="grid min-w-0 flex-1 content-center" style={{ gridTemplateColumns: `repeat(${Math.max(1, lojas.length)}, minmax(0,1fr))`, gap: h * 0.05 }}>
+          {lojas.map((l) => (
+            <div key={`${l.nome}-${l.endereco}`} className="min-w-0" style={{ borderLeft: '2px solid #e5e7eb', paddingLeft: h * 0.04, lineHeight: 1.3, fontSize: fonte * 0.85 }}>
+              <span className={linha} style={{ fontSize: fonte, fontWeight: 900 }}>{l.nome || marca.nome}</span>
+              {l.endereco && <span className={linha}>{l.endereco}</span>}
+              {l.cidade && <span className={linha}>{l.cidade}</span>}
+              {l.whatsapp && <span className={linha} style={{ fontWeight: 800, color: '#15803d' }}>WhatsApp {l.whatsapp}</span>}
+              {l.telefone && <span className={linha}>Tel. {l.telefone}</span>}
+              {l.horario && <span className={linha} style={{ color: '#4b5563' }}>{l.horario}</span>}
+            </div>
+          ))}
+          {!lojas.length && insta && <span style={{ fontSize: fonte, fontWeight: 800 }}>Instagram {insta}</span>}
+        </div>
+        {(cartoes.length > 0 || vales.length > 0) && (
+          <div className="flex shrink-0 flex-col justify-center overflow-hidden" style={{ width: '27%' }}>
+            {cartoes.length > 0 && <>{titulo('Aceitamos')}<div>{cartoes.map(chip)}</div></>}
+            {vales.length > 0 && <>{titulo('Vale alimentação e refeição')}<div>{vales.map(chip)}</div></>}
+          </div>
+        )}
+      </div>
+      <div className="absolute inset-x-0 bottom-0 overflow-hidden text-ellipsis whitespace-nowrap text-center" style={{ fontSize: fonte * 0.66, padding: `0 ${h * 0.06}px ${h * 0.03}px`, color: '#4b5563' }}>
+        {marca.avisos || 'Ofertas válidas enquanto durarem os estoques. Imagens ilustrativas.'}{insta && lojas.length ? ` · Instagram ${insta}` : ''}
+      </div>
+    </div>
+  )
+}
+
 // Rodapé oficial do Bengala (o mesmo do jornal impresso): QR, WhatsApp, lojas, cartões e avisos.
 export const RODAPE_OFICIAL = `${import.meta.env.BASE_URL}templates/rodape-oficial-bengala.webp`
 const RODAPE_RAZAO = 2160 / 384
@@ -182,6 +236,16 @@ const RODAPE_RAZAO = 2160 / 384
 export const alturaRodape = (f) => Math.round(Math.min(f.largura / RODAPE_RAZAO, f.altura * 0.18))
 
 export function RodapeOficial({ altura }) {
+  const marca = useMarca()
+  // Mercado cadastrado: o rodapé sai montado com os dados dele, ou com a imagem que ele enviou.
+  if (marca?.rodapeModo === 'gerado' || (!ehBengala(marca) && !marca.rodapeImagem)) return <RodapeGerado altura={altura} marca={marca} />
+  if (marca?.rodapeModo === 'imagem' && marca.rodapeImagem) {
+    return (
+      <div className="absolute inset-x-0 bottom-0 flex justify-center bg-white" style={{ height: altura, zIndex: 1 }}>
+        <img src={marca.rodapeImagem} alt={`Lojas e contatos do ${marca.nome}`} className="block h-full max-w-full object-contain" />
+      </div>
+    )
+  }
   return (
     <div className="absolute inset-x-0 bottom-0 flex justify-center bg-white" style={{ height: altura, zIndex: 1 }}>
       <img src={RODAPE_OFICIAL} alt="Lojas, WhatsApp, redes sociais e cartões aceitos do Bengala" className="block h-full max-w-full object-contain" />

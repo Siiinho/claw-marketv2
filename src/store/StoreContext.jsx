@@ -42,6 +42,7 @@ export const NAV = [
   { key: 'esg', label: 'Sustentabilidade', path: '/sustentabilidade', icone: 'Leaf' },
   { key: 'scanner', label: 'Conferir validade', path: '/scanner', icone: 'ScanBarcode' },
   { key: 'usuarios', label: 'Usuários', path: '/usuarios', icone: 'Users' },
+  { key: 'mercado', label: 'Meu mercado', path: '/mercado', icone: 'Store' },
   { key: 'config', label: 'Configurações', path: '/config', icone: 'Settings' },
 ]
 

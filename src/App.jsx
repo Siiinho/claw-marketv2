@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useStore, podeVer } from './store/StoreContext'
+import { MarcaContexto, marcaPublica } from './lib/marca'
 import { Icon, Toasts } from './components/ui'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -17,6 +18,7 @@ const Scanner = lazy(() => import('./pages/Scanner'))
 const Usuarios = lazy(() => import('./pages/Usuarios'))
 const Config = lazy(() => import('./pages/Config'))
 const EncarteDigital = lazy(() => import('./pages/EncarteDigital'))
+const Mercado = lazy(() => import('./pages/Mercado'))
 const JornalPapel = lazy(() => import('./pages/FolhearEncarte'))
 
 function Carregando() {
@@ -72,9 +74,9 @@ function TrocarSenhaObrigatoria() {
 }
 
 export default function App() {
-  const { usuario, carregandoSessao } = useStore()
+  const { usuario, carregandoSessao, config } = useStore()
   return (
-    <>
+    <MarcaContexto.Provider value={marcaPublica(config?.mercado)}>
       <Suspense fallback={<Carregando />}>
         <Routes>
           {/* público: o link da tag NFC abre aqui, sem login */}
@@ -94,11 +96,12 @@ export default function App() {
             <Route path="scanner" element={<Protegida chave="scanner"><Scanner /></Protegida>} />
             <Route path="usuarios" element={<Protegida chave="usuarios"><Usuarios /></Protegida>} />
             <Route path="config" element={<Protegida chave="config"><Config /></Protegida>} />
+            <Route path="mercado" element={<Protegida chave="mercado"><Mercado /></Protegida>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
       <Toasts />
-    </>
+    </MarcaContexto.Provider>
   )
 }
