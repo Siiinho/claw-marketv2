@@ -85,6 +85,9 @@ export default function Jornal() {
   const destinoTocado = useRef(false)
   const setDestino = (id) => { destinoTocado.current = true; setDestinoEstado(id) }
   const [trocarTudo, setTrocarTudo] = useState(false)
+  // ofertas do mesmo setor que já estão no site: ficam, a não ser que a pessoa retire
+  const [noArDoDestino, setNoArDoDestino] = useState([])
+  const [retirarIds, setRetirarIds] = useState(() => new Set())
   const [jornalVendo, setJornalVendo] = useState(null)
   const [jornalApagar, setJornalApagar] = useState(null)
   const [retirando, setRetirando] = useState(null)
@@ -283,6 +286,7 @@ export default function Jornal() {
     destinoTocado.current = false
     setDestinoEstado('geral')
     setTrocarTudo(false)
+    setRetirarIds(new Set())
     setTitulo(TITULO_PADRAO)
     setPeriodoDe(dataISOmaisDias(0))
     setPeriodoAte(dataISOmaisDias(6))
@@ -335,7 +339,7 @@ export default function Jornal() {
     setPublicando(true)
     try {
       const noAr = await lerEncarteNoAr()
-      const montado = montarPublicacao({ noAr, itens: itensArte, destino, tema: temaId, fundo, periodoDe: validadeDe, periodoAte: validadeAte, layout, escalaLogo, trocarTudo })
+      const montado = montarPublicacao({ noAr, itens: itensArte, destino, tema: temaId, fundo, periodoDe: validadeDe, periodoAte: validadeAte, layout, escalaLogo, trocarTudo, retirar: [...retirarIds] })
       const dados = {
         ...montado,
         titulo: destino === 'geral' ? titulo : noAr?.titulo || titulo,
@@ -361,6 +365,7 @@ export default function Jornal() {
       if (editandoId.current) { excluirJornal(editandoId.current); editandoId.current = null }
       salvarJornal(criarSnapshot())
       setNoArIds(new Set((montado.itens || []).map((p) => `${p.setor}:${p.id}`)))
+      setRetirarIds(new Set())
       setAcabouDePublicar(true)
       toast(`${nomeDestino} no ar com ${plural(itensJornal.length, 'produto', 'produtos')}.`)
     } catch (erro) {
@@ -542,11 +547,24 @@ export default function Jornal() {
   }
 
   const textoDestino = destino === 'geral'
-    ? (trocarTudo ? 'Começa do zero: tira do site os setores que não estão aqui. O jornal da estrela continua.' : 'Troca só os setores destes produtos. Os outros setores que já estão no site continuam.')
+    ? (trocarTudo ? 'Começa do zero: tira do site os setores que não estão aqui. O jornal da estrela continua.' : 'Soma estes produtos ao site. O que já está no ar continua, menos o que você retirar.')
     : ehMercado
       ? 'Troca só o jornal da estrela. O geral e os setores continuam.'
-      : `Troca só ${nomeDestino}. Os outros setores continuam.`
+      : `Soma estes produtos a ${nomeDestino}. O que já está no ar continua, menos o que você retirar.`
   const jornalVazio = itensJornal.length === 0
+  const idsRemessa = remessa.map((p) => p.id).join(',')
+  useEffect(() => {
+    if (tela !== 'montar' || passo !== 3 || ehMercado || trocarTudo) { setNoArDoDestino([]); return undefined }
+    let ativo = true
+    const setores = new Set(destino === 'geral' ? itensJornal.map((p) => p.setor) : [destino])
+    const ids = new Set(itensJornal.map((p) => p.id))
+    lerEncarteNoAr()
+      .then((noAr) => { if (ativo) setNoArDoDestino((noAr?.itens || []).filter((p) => !p.soMercado && setores.has(p.setor) && !ids.has(p.id))) })
+      .catch(() => { if (ativo) setNoArDoDestino([]) })
+    return () => { ativo = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tela, passo, destino, ehMercado, trocarTudo, idsRemessa])
+  const alternarRetirar = (id) => setRetirarIds((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
   const previa = (paginas) => paginas.map((itens, indice) => (
     <div key={indice} className="mx-auto w-full max-w-[680px] space-y-1.5">
@@ -793,6 +811,31 @@ export default function Jornal() {
                   <Resumo rotulo="Campanha" valor={temaArte.nome} onMudar={() => irPara(2)} />
                 </dl>
                 <p className="mt-2 text-sm text-ink-soft">{textoDestino}</p>
+
+                {noArDoDestino.length > 0 && (
+                  <div className="mt-4 rounded-xl border border-navy/15 bg-cream-200/40 p-3">
+                    <p className="font-bold text-navy">Já está no site ({noArDoDestino.length})</p>
+                    <p className="text-sm text-ink-soft">Estas ofertas continuam no jornal. Toque em Retirar para tirar alguma.</p>
+                    <ul className="mt-2 divide-y divide-ink-soft/10">
+                      {noArDoDestino.map((p) => {
+                        const sai = retirarIds.has(p.id)
+                        return (
+                          <li key={p.id} className={`flex items-center gap-2 py-2 ${sai ? 'opacity-55' : ''}`}>
+                            <ProdutoThumb produto={p} size={36} />
+                            <span className="min-w-0 flex-1">
+                              <span className={`block truncate text-sm font-semibold text-ink ${sai ? 'line-through' : ''}`}>{p.nome}</span>
+                              <span className="block text-xs text-ink-soft">{formatBRL(Number(p.precoJornal) || 0)} · {setorById(p.setor).nome}</span>
+                            </span>
+                            <div role="group" aria-label={`Manter ou retirar ${p.nome}`} className="flex shrink-0 overflow-hidden rounded-lg border-2 border-navy/25 text-sm font-bold">
+                              <button type="button" aria-pressed={!sai} onClick={() => sai && alternarRetirar(p.id)} className={`min-h-10 px-3 ${!sai ? 'bg-navy text-white' : 'bg-white text-navy'}`}>Manter</button>
+                              <button type="button" aria-pressed={sai} onClick={() => !sai && alternarRetirar(p.id)} className={`min-h-10 px-3 ${sai ? 'bg-critical text-white' : 'bg-white text-navy'}`}>Retirar</button>
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                )}
 
                 {ehMercado ? (
                   <p className="mt-4 text-base font-bold text-ink">Vale só em {rotuloDia(diaEstrela)}.</p>
