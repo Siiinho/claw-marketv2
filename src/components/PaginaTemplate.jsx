@@ -1,6 +1,7 @@
 import ImagemProduto, { MarcaLista, useContextoEncarte } from './ImagemProduto'
 import { useMarca, linkWhatsapp, ehBengala, LogoOuNome } from '../lib/marca'
 import { QrCode } from './cartazes/QrJornal'
+import RodapeModelo from './RodapeModelo'
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './ui'
 import { formatBRL, formatData, setorById } from '../lib/utils'
@@ -238,7 +239,9 @@ export const alturaRodape = (f) => Math.round(Math.min(f.largura / RODAPE_RAZAO,
 export function RodapeOficial({ altura }) {
   const marca = useMarca()
   // Mercado cadastrado: o rodapé sai montado com os dados dele, ou com a imagem que ele enviou.
-  if (marca?.rodapeModo === 'gerado' || (!ehBengala(marca) && !marca.rodapeImagem)) return <RodapeGerado altura={altura} marca={marca} />
+  if (marca?.rodapeModo === 'modelo') return <RodapeModelo altura={altura} marca={marca} />
+  if (marca?.rodapeModo === 'gerado') return <RodapeGerado altura={altura} marca={marca} />
+  if (!ehBengala(marca) && !marca.rodapeImagem) return <RodapeModelo altura={altura} marca={marca} />
   if (marca?.rodapeModo === 'imagem' && marca.rodapeImagem) {
     return (
       <div className="absolute inset-x-0 bottom-0 flex justify-center bg-white" style={{ height: altura, zIndex: 1 }}>

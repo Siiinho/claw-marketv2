@@ -71,11 +71,13 @@ async function limparMarca(m) {
   if (!m || typeof m !== 'object') return null
   const lista = (v, n = 20) => (Array.isArray(v) ? v.slice(0, n).map((x) => texto(x, 60)).filter(Boolean) : [])
   return {
-    ...Object.fromEntries(['nome', 'whatsappOfertas', 'instagram', 'facebook', 'avisos', 'encarteModo'].map((c) => [c, texto(m[c], 300)]).filter(([, v]) => v)),
-    rodapeModo: ['gerado', 'imagem'].includes(m.rodapeModo) ? m.rodapeModo : undefined,
+    ...Object.fromEntries(['nome', 'whatsappOfertas', 'instagram', 'facebook', 'avisos', 'encarteModo', 'whatsTitulo', 'whatsSubtitulo', 'avisoLimite', 'avisoValidade'].map((c) => [c, texto(m[c], 300)]).filter(([, v]) => v)),
+    ...Object.fromEntries(['redesLink', 'whatsLink'].map((c) => [c, /^https:\/\/[^\s"'<>]{3,300}$/.test(String(m[c] || '')) ? m[c] : undefined]).filter(([, v]) => v)),
+    legal: texto(m.legal, 900) || undefined,
+    rodapeModo: ['gerado', 'imagem', 'modelo'].includes(m.rodapeModo) ? m.rodapeModo : undefined,
     logo: m.logo ? await guardarImagem(m.logo) : null,
     rodapeImagem: m.rodapeImagem ? await guardarImagem(m.rodapeImagem) : null,
-    lojas: (Array.isArray(m.lojas) ? m.lojas.slice(0, 10) : []).map((l) => Object.fromEntries(['nome', 'endereco', 'cidade', 'whatsapp', 'telefone', 'horario'].map((c) => [c, texto(l?.[c], 200)]).filter(([, v]) => v))),
+    lojas: (Array.isArray(m.lojas) ? m.lojas.slice(0, 10) : []).map((l) => ({ ...Object.fromEntries(['nome', 'endereco', 'cidade', 'whatsapp', 'telefone', 'horario', 'horario2'].map((c) => [c, texto(l?.[c], 200)]).filter(([, v]) => v)), estacionamento: l?.estacionamento === true })),
     pagamentos: { credito: lista(m.pagamentos?.credito), alimentacao: lista(m.pagamentos?.alimentacao), outros: lista(m.pagamentos?.outros) },
   }
 }

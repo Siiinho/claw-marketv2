@@ -10,15 +10,36 @@ export const PAGAMENTOS = {
   outros: ['Pix', 'Dinheiro'],
 }
 
-export const lojaVazia = () => ({ id: `loja-${Date.now().toString(36)}`, nome: '', endereco: '', cidade: '', whatsapp: '', telefone: '', horario: '' })
+export const CAMPOS_LOJA = ['nome', 'endereco', 'cidade', 'whatsapp', 'telefone', 'estacionamento', 'horario', 'horario2']
+export const lojaVazia = () => ({ id: `loja-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, nome: '', endereco: '', cidade: '', whatsapp: '', telefone: '', estacionamento: false, horario: '', horario2: '' })
+
+// Rodapé já validado do jornal impresso do Bengala: é a base do modelo, e o Bengala começa com ele preenchido.
+export const BENGALA_PADRAO = {
+  nome: 'Bengala Supermercado',
+  whatsappOfertas: '(11) 96607-2187',
+  redesLink: 'https://linktr.ee/bengalasupermercado',
+  whatsLink: 'https://comunidadedeofertasbengala.my.canva.site/lojas',
+  whatsTitulo: 'WhatsApp Bengala',
+  lojas: [
+    { nome: 'Loja 2', endereco: 'Avenida Líder, nº 1721', cidade: 'Cidade Líder', telefone: '2741-1233', estacionamento: true, whatsapp: '(11) 93349-6381', horario: 'De segunda a sábado das 07h00 às 21h00', horario2: 'Aos domingos e feriados das 08h00 às 14h00' },
+    { nome: 'Loja 3', endereco: 'Rua Serra do Navio, nº 355', cidade: 'Pq. Santa Madalena', telefone: '2719-7195', estacionamento: true, whatsapp: '(11) 96607-2187', horario: 'De segunda a sábado das 07h00 às 20h00', horario2: 'Aos domingos e feriados das 08h00 às 14h00' },
+    { nome: 'Loja 6', endereco: 'Rua Comendador Gil Pinheiro, 137', cidade: 'Chác. Calif. - SP', telefone: '(11) 2093-0017', estacionamento: true, whatsapp: '(11) 97077-7406', horario: 'De segunda a sábado das 07h00 às 21h00', horario2: 'Aos domingos e feriados das 08h00 às 20h00' },
+  ],
+  pagamentos: {
+    credito: ['Visa', 'Mastercard', 'Elo', 'American Express', 'Mais!', 'Sorocred', 'Hipercard', 'Cabal'],
+    alimentacao: ['Alelo', 'Ben', 'Pluxee (Sodexo)', 'Good Card', 'Ticket', 'VR', 'Up', 'VeroCard'],
+    outros: [],
+  },
+}
 
 // Campos que podem sair para o site do cliente (nada de dados internos).
-const CAMPOS = ['nome', 'logo', 'whatsappOfertas', 'instagram', 'facebook', 'avisos', 'rodapeModo', 'rodapeImagem', 'encarteModo']
+export const CAMPOS_TEXTO = ['nome', 'whatsappOfertas', 'instagram', 'facebook', 'avisos', 'rodapeModo', 'encarteModo', 'redesLink', 'whatsLink', 'whatsTitulo', 'whatsSubtitulo', 'avisoLimite', 'avisoValidade', 'legal']
+const CAMPOS = [...CAMPOS_TEXTO, 'logo', 'rodapeImagem']
 export function marcaPublica(mercado) {
   if (!mercado || !mercado.nome) return null
   const m = {}
   for (const c of CAMPOS) if (mercado[c]) m[c] = mercado[c]
-  m.lojas = (mercado.lojas || []).filter((l) => l.nome || l.endereco).map(({ nome, endereco, cidade, whatsapp, telefone, horario }) => ({ nome, endereco, cidade, whatsapp, telefone, horario }))
+  m.lojas = (mercado.lojas || []).filter((l) => l.nome || l.endereco).map((l) => Object.fromEntries(CAMPOS_LOJA.map((c) => [c, l[c]])))
   m.pagamentos = {
     credito: (mercado.pagamentos?.credito || []).filter((x) => PAGAMENTOS.credito.includes(x)),
     alimentacao: (mercado.pagamentos?.alimentacao || []).filter((x) => PAGAMENTOS.alimentacao.includes(x)),

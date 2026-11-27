@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useStore } from '../store/StoreContext'
-import { Icon, Botao, Campo, inputCls, Secao, Escolha } from '../components/ui'
+import { Icon, Botao, Campo, inputCls, Secao, Escolha, Abas } from '../components/ui'
 import { arquivoParaDataURL } from '../lib/utils'
 import { LOJAS } from '../data/seed'
-import { PAGAMENTOS, lojaVazia, marcaPublica, MarcaContexto, ehBengala } from '../lib/marca'
+import { PAGAMENTOS, lojaVazia, marcaPublica, MarcaContexto, ehBengala, BENGALA_PADRAO } from '../lib/marca'
+import RodapeModelo, { RODAPE_W, RODAPE_H, TEXTOS_PADRAO } from '../components/RodapeModelo'
 import logoBengala from '../assets/logo.png'
 import { RodapeOficial } from '../components/PaginaTemplate'
 
@@ -31,21 +32,55 @@ function logoParaDataURL(file, max = 640) {
 
 const inicial = (config) => {
   const m = config?.mercado || {}
+  const bengala = /bengala/i.test(m.nome || config?.nomeMercado || '') || !(m.nome || config?.nomeMercado)
+  const p = bengala ? BENGALA_PADRAO : {}
+  const lojas = (m.lojas?.length ? m.lojas : p.lojas || LOJAS).map((l) => ({ ...lojaVazia(), ...l }))
   return {
-    nome: m.nome || config?.nomeMercado || '',
+    nome: m.nome || config?.nomeMercado || p.nome || '',
     logo: m.logo || '',
-    lojas: m.lojas?.length ? m.lojas : LOJAS.map((l) => ({ ...lojaVazia(), ...l, id: l.id })),
-    whatsappOfertas: m.whatsappOfertas || LOJAS[0]?.whatsapp || '',
+    lojas,
+    whatsappOfertas: m.whatsappOfertas || p.whatsappOfertas || LOJAS[0]?.whatsapp || '',
     instagram: m.instagram || '',
     facebook: m.facebook || '',
     avisos: m.avisos || '',
-    pagamentos: { credito: [], alimentacao: [], outros: ['Pix', 'Dinheiro'], ...(m.pagamentos || {}) },
-    // o Bengala já tem a faixa oficial do jornal impresso; mercado novo começa com a montada
-    rodapeModo: m.rodapeModo || (/bengala/i.test(m.nome || config?.nomeMercado || '') ? 'imagem' : 'gerado'),
+    redesLink: m.redesLink ?? p.redesLink ?? '',
+    whatsLink: m.whatsLink ?? p.whatsLink ?? '',
+    whatsTitulo: m.whatsTitulo ?? p.whatsTitulo ?? '',
+    whatsSubtitulo: m.whatsSubtitulo ?? TEXTOS_PADRAO.whatsSubtitulo,
+    avisoLimite: m.avisoLimite ?? TEXTOS_PADRAO.avisoLimite,
+    avisoValidade: m.avisoValidade ?? TEXTOS_PADRAO.avisoValidade,
+    legal: m.legal ?? TEXTOS_PADRAO.legal,
+    pagamentos: { credito: [], alimentacao: [], outros: [], ...(p.pagamentos || { outros: ['Pix', 'Dinheiro'] }), ...(m.pagamentos || {}) },
+    // o Bengala continua com a faixa oficial até escolher o modelo editável; mercado novo já começa no modelo
+    rodapeModo: m.rodapeModo || (bengala ? 'imagem' : 'modelo'),
     rodapeImagem: m.rodapeImagem || '',
     encarteModo: m.encarteModo || 'nosso',
     encarteProprio: { fotos: [], observacao: '', ...(m.encarteProprio || {}) },
   }
+}
+
+// Prévia do rodapé do tamanho da tela (a faixa é bem larga: 2000×356).
+function PreviaRodape({ marca }) {
+  const ref = useRef(null)
+  const [w, setW] = useState(0)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return undefined
+    const ro = new ResizeObserver(() => setW(el.clientWidth))
+    ro.observe(el)
+    setW(el.clientWidth)
+    return () => ro.disconnect()
+  }, [])
+  const altura = (w * RODAPE_H) / RODAPE_W
+  return (
+    <div ref={ref} className="relative w-full overflow-hidden rounded-xl border border-navy/15 bg-white" style={{ height: altura || 120 }}>
+      {w > 0 && (
+        <MarcaContexto.Provider value={marca}>
+          {marca?.rodapeModo === 'modelo' ? <RodapeModelo marca={marca} altura={altura} /> : <RodapeOficial altura={altura} />}
+        </MarcaContexto.Provider>
+      )}
+    </div>
+  )
 }
 
 function Marcar({ grupo, f, setF }) {
@@ -69,6 +104,7 @@ function Marcar({ grupo, f, setF }) {
 export default function Mercado() {
   const { config, salvarConfig, toast } = useStore()
   const [f, setF] = useState(() => inicial(config))
+  const [aba, setAba] = useState('dados')
   const set = (campo, valor) => setF((v) => ({ ...v, [campo]: valor }))
   const setLoja = (i, campo, valor) => setF((v) => ({ ...v, lojas: v.lojas.map((l, k) => (k === i ? { ...l, [campo]: valor } : l)) }))
 
@@ -102,6 +138,11 @@ export default function Mercado() {
 
   return (
     <div className="space-y-5 pb-24">
+      <Abas rotulo="Partes do cadastro" valor={aba} onChange={setAba} itens={[
+        { id: 'dados', rotulo: 'Dados do mercado', rotuloCurto: 'Dados', icone: 'Store' },
+        { id: 'rodape', rotulo: 'Rodapé do jornal', rotuloCurto: 'Rodapé', icone: 'PanelBottom' },
+      ]} />
+      {aba === 'dados' && <>
       <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
         <Secao numero={1} titulo="Marca" descricao="Nome e logo que aparecem no jornal, na nota de compras e no app.">
           <div className="space-y-3">
@@ -132,7 +173,7 @@ export default function Mercado() {
         </Secao>
       </div>
 
-      <Secao numero={3} titulo="Lojas" descricao="Endereço, telefone e horário de cada loja. Até 3 aparecem no rodapé do jornal."
+      <Secao numero={3} titulo="Lojas" descricao="Endereço, telefone e horário de cada loja. As 3 primeiras aparecem no rodapé do jornal."
         acao={<Botao variante="contorno" onClick={() => set('lojas', [...f.lojas, lojaVazia()])}><Icon name="Plus" size={16} /> Adicionar loja</Botao>}>
         <div className="grid gap-3 lg:grid-cols-2">
           {f.lojas.map((l, i) => (
@@ -147,7 +188,11 @@ export default function Mercado() {
                 <div className="sm:col-span-2"><Campo label="Endereço"><input className={inputCls} value={l.endereco} onChange={(e) => setLoja(i, 'endereco', e.target.value)} /></Campo></div>
                 <Campo label="WhatsApp"><input className={inputCls} inputMode="tel" value={l.whatsapp} onChange={(e) => setLoja(i, 'whatsapp', e.target.value)} /></Campo>
                 <Campo label="Telefone"><input className={inputCls} inputMode="tel" value={l.telefone} onChange={(e) => setLoja(i, 'telefone', e.target.value)} /></Campo>
-                <div className="sm:col-span-2"><Campo label="Horário"><input className={inputCls} value={l.horario} onChange={(e) => setLoja(i, 'horario', e.target.value)} placeholder="Seg a sáb 7h às 22h · Dom 7h às 14h" /></Campo></div>
+                <Campo label="Horário (dias de semana)"><input className={inputCls} value={l.horario} onChange={(e) => setLoja(i, 'horario', e.target.value)} placeholder="De segunda a sábado das 07h00 às 21h00" /></Campo>
+                <Campo label="Horário (domingos e feriados)"><input className={inputCls} value={l.horario2 || ''} onChange={(e) => setLoja(i, 'horario2', e.target.value)} placeholder="Aos domingos e feriados das 08h00 às 14h00" /></Campo>
+                <label className="flex min-h-11 items-center gap-2 font-semibold text-ink sm:col-span-2">
+                  <input type="checkbox" className="h-5 w-5 accent-[var(--color-navy)]" checked={!!l.estacionamento} onChange={(e) => setLoja(i, 'estacionamento', e.target.checked)} /> Tem estacionamento no local
+                </label>
               </div>
             </div>
           ))}
@@ -193,26 +238,52 @@ export default function Mercado() {
         )}
       </Secao>
 
-      <Secao numero={6} titulo="Rodapé do jornal" descricao="Faixa com lojas, contatos e pagamentos no pé de cada página.">
-        <div className="grid gap-3 md:grid-cols-2">
-          <Escolha ativo={f.rodapeModo === 'gerado'} onClick={() => set('rodapeModo', 'gerado')} icone="LayoutTemplate" titulo="Montar com o cadastro" descricao="Logo, QR do WhatsApp, lojas e pagamentos." />
-          <Escolha ativo={f.rodapeModo === 'imagem'} onClick={() => set('rodapeModo', 'imagem')} icone="Image" titulo="Usar a imagem do rodapé do mercado" descricao="Envie a faixa pronta, como no jornal impresso. No Bengala, já vale a faixa oficial." />
-        </div>
-        {f.rodapeModo === 'imagem' && (
-          <label className="mt-3 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-navy px-4 font-bold text-white">
-            <Icon name="Upload" size={16} /> {f.rodapeImagem ? 'Trocar imagem do rodapé' : 'Enviar imagem do rodapé'}
-            <input type="file" accept="image/*" className="hidden" onChange={lerRodape} />
-          </label>
-        )}
-        <p className="mb-1.5 mt-4 text-sm font-bold text-ink-soft">Como fica no jornal</p>
-        <div className="overflow-hidden rounded-xl border border-navy/15">
-          <div className="relative w-full bg-white" style={{ height: 150 }}>
-            <MarcaContexto.Provider value={previa}>
-              <RodapeOficial altura={150} />
-            </MarcaContexto.Provider>
-          </div>
-        </div>
-      </Secao>
+      </>}
+
+      {aba === 'rodape' && (
+        <>
+          <Secao titulo="Como fica no jornal" descricao="Esta faixa sai no pé de cada página do jornal e do site. Muda na hora enquanto você digita.">
+            <PreviaRodape marca={previa} />
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <Escolha ativo={f.rodapeModo === 'modelo'} onClick={() => set('rodapeModo', 'modelo')} icone="LayoutTemplate" titulo="Modelo do jornal (editável)" descricao="O rodapé validado do Bengala, com as informações deste mercado." />
+              <Escolha ativo={f.rodapeModo === 'imagem'} onClick={() => set('rodapeModo', 'imagem')} icone="Image" titulo="Imagem pronta" descricao={ehBengala(f) ? 'A faixa oficial do Bengala, ou uma que você enviar.' : 'Envie a faixa pronta do mercado.'} />
+              <Escolha ativo={f.rodapeModo === 'gerado'} onClick={() => set('rodapeModo', 'gerado')} icone="Rows3" titulo="Simples" descricao="Logo, QR, lojas e pagamentos numa faixa limpa." />
+            </div>
+            {f.rodapeModo === 'imagem' && (
+              <label className="mt-3 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-navy px-4 font-bold text-white">
+                <Icon name="Upload" size={16} /> {f.rodapeImagem ? 'Trocar imagem do rodapé' : 'Enviar imagem do rodapé'}
+                <input type="file" accept="image/*" className="hidden" onChange={lerRodape} />
+              </label>
+            )}
+          </Secao>
+
+          {f.rodapeModo === 'modelo' && (
+            <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+              <Secao numero={1} titulo="Faixas de aviso" descricao="A cinza (em cima, à esquerda) e a amarela (em cima, à direita).">
+                <div className="space-y-3">
+                  <Campo label="Faixa cinza"><input className={inputCls} value={f.avisoLimite} onChange={(e) => set('avisoLimite', e.target.value)} /></Campo>
+                  <Campo label="Faixa amarela"><input className={inputCls} value={f.avisoValidade} onChange={(e) => set('avisoValidade', e.target.value)} /></Campo>
+                </div>
+              </Secao>
+              <Secao numero={2} titulo="Redes e WhatsApp" descricao="Os dois QR Codes do rodapé.">
+                <div className="space-y-3">
+                  <Campo label="Link do QR das redes sociais"><input className={inputCls} inputMode="url" value={f.redesLink} onChange={(e) => set('redesLink', e.target.value)} placeholder="https://linktr.ee/seumercado" /></Campo>
+                  <Campo label="Título da faixa verde"><input className={inputCls} value={f.whatsTitulo} onChange={(e) => set('whatsTitulo', e.target.value)} placeholder={`WhatsApp ${f.nome}`} /></Campo>
+                  <Campo label="Frase da faixa verde"><input className={inputCls} value={f.whatsSubtitulo} onChange={(e) => set('whatsSubtitulo', e.target.value)} /></Campo>
+                  <Campo label="Link do QR do WhatsApp"><input className={inputCls} inputMode="url" value={f.whatsLink} onChange={(e) => set('whatsLink', e.target.value)} placeholder="Vazio = abre o WhatsApp de ofertas" /></Campo>
+                </div>
+              </Secao>
+              <Secao numero={3} titulo="Lojas e pagamentos" descricao="Vêm da aba Dados do mercado.">
+                <p className="text-ink-soft">{f.lojas.filter((l) => l.nome || l.endereco).length} loja(s) e {['credito', 'alimentacao', 'outros'].reduce((s, g) => s + (f.pagamentos[g] || []).length, 0)} forma(s) de pagamento cadastradas.</p>
+                <Botao variante="contorno" className="mt-3" onClick={() => setAba('dados')}><Icon name="Pencil" size={16} /> Editar lojas e pagamentos</Botao>
+              </Secao>
+              <Secao numero={4} titulo="Texto legal" descricao="As letras miúdas embaixo dos cartões.">
+                <textarea className={inputCls} rows={5} value={f.legal} onChange={(e) => set('legal', e.target.value)} />
+              </Secao>
+            </div>
+          )}
+        </>
+      )}
 
       <div className="z-20 flex justify-end md:sticky md:bottom-4">
         <Botao onClick={salvar} className="w-full shadow-lg md:w-auto"><Icon name="Save" size={16} /> Salvar cadastro</Botao>
