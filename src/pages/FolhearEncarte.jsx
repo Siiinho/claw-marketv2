@@ -5,7 +5,6 @@ import { carregarEncartePublicado, assinarEncarte } from '../lib/encartePublico'
 import { temaCampanhaById, temasDoSetor } from '../lib/temasCampanha'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina } from '../components/JornalMercado'
 import { ContextoEncarte } from '../components/ImagemProduto'
-import { semFundo } from '../lib/semFundo'
 import { LOJAS } from '../data/seed'
 import { MarcaContexto, useMarca, LogoOuNome } from '../lib/marca'
 import logoPadrao from '../assets/logo.png'
@@ -46,6 +45,41 @@ function Folha({ children, k, largura, altura, lado = 'direita' }) {
   )
 }
 
+// ---------- prévia do produto (antes de anotar) ----------
+function PreviaProduto({ produto: p, naNota, onAnotar, onFechar }) {
+  const preco = paraNumero(p.precoJornal) || paraNumero(p.precoNormal)
+  const de = paraNumero(p.precoNormal)
+  const temDe = de > preco + 0.009
+  useEffect(() => {
+    const esc = (e) => { if (e.key === 'Escape') onFechar() }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [onFechar])
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={p.nome}>
+      <button type="button" aria-label="Fechar" onClick={onFechar} className="cm-previa-fundo absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="cm-previa relative w-full max-w-[400px] rounded-t-3xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-[#111] shadow-2xl sm:rounded-3xl">
+        <button type="button" onClick={onFechar} aria-label="Fechar" className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/5 text-[#333]"><Icon name="X" size={20} /></button>
+        <div className="flex h-56 items-center justify-center rounded-2xl bg-white">
+          {p.imagem ? <img src={p.imagem} alt={p.nome} className="max-h-full max-w-full object-contain" /> : <Icon name="Package" size={64} className="text-[#999]" />}
+        </div>
+        <p className="mt-3 text-[17px] font-extrabold uppercase leading-tight">{p.nome}</p>
+        {p.gramagem && <p className="text-[14px] text-[#555]">{p.gramagem}</p>}
+        <div className="mt-2 flex items-end gap-2">
+          {temDe && <span className="pb-1 text-[15px] text-[#777] line-through">{formatBRL(de)}</span>}
+          <span className="text-[34px] font-black leading-none text-[#d81e29]">{formatBRL(preco)}</span>
+          {p.unidade && <span className="pb-1 text-[14px] text-[#555]">/{p.unidade}</span>}
+        </div>
+        <button type="button" onClick={onAnotar}
+          className={`mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl text-[17px] font-bold ${naNota ? 'border-2 border-[#d81e29] text-[#d81e29]' : 'bg-[#1f2937] text-white'}`}>
+          <Icon name={naNota ? 'X' : 'ReceiptText'} size={20} className={naNota ? '' : 'text-[#ffd23f]'} />
+          {naNota ? 'Tirar da nota' : 'Anotar na nota'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ---------- a nota (lista de compras) ----------
 function LogoNota() {
   const marca = useMarca()
@@ -54,7 +88,7 @@ function LogoNota() {
 }
 const linha = (n = 32) => '-'.repeat(n)
 const semRS = (v) => formatBRL(v).replace('R$', '').trim()
-function Nota({ compras, loja, aberta, setAberta, ultimo, largura }) {
+function Nota({ compras, loja, aberta, setAberta, ultimo, largura, barraRef, pulo }) {
   const total = compras.lista.reduce((s, i) => s + (Number(i.preco) || 0) * (Number(i.qtd) || 1), 0)
   const unidades = compras.lista.reduce((s, i) => s + (Number(i.qtd) || 1), 0)
   const fonte = '"Courier New", ui-monospace, monospace'
@@ -103,8 +137,8 @@ function Nota({ compras, loja, aberta, setAberta, ultimo, largura }) {
           </div>
         )}
         {/* a "impressora": sempre à mão, com o total */}
-        <button type="button" onClick={() => setAberta((v) => !v)} aria-expanded={aberta}
-          className="relative flex min-h-14 w-full items-center gap-3 rounded-b-2xl bg-[#1f2937] px-4 text-left text-white shadow-[0_8px_20px_rgba(0,0,0,.35)]">
+        <button key={pulo} ref={barraRef} type="button" onClick={() => setAberta((v) => !v)} aria-expanded={aberta}
+          className={`${pulo ? 'cm-nota-pula ' : ''}relative flex min-h-14 w-full items-center gap-3 rounded-b-2xl bg-[#1f2937] px-4 text-left text-white shadow-[0_8px_20px_rgba(0,0,0,.35)]`}>
           <span aria-hidden="true" className="absolute inset-x-6 top-1.5 h-1 rounded-full bg-black/70" />
           <Icon name="ReceiptText" size={24} className="shrink-0 text-[#ffd23f]" />
           <span className="min-w-0 flex-1">
@@ -174,19 +208,36 @@ export default function FolhearEncarte() {
   const tamanho = tamanhoPagina(layout)
   const n = paginas.length
 
-  // fotos sem fundo: prepara antes, para a página já abrir limpa
-  useEffect(() => { itens.slice(0, 60).forEach((p) => p.imagem && semFundo(p.imagem)) }, [itens])
 
   // ---- nota ----
   const [notaAberta, setNotaAberta] = useState(false)
   const [ultimo, setUltimo] = useState(null)
   const marcados = useMemo(() => new Set(compras.lista.map((i) => i.id)), [compras.lista])
-  const contexto = useMemo(() => ({ semFundo: true, marcados }), [marcados])
-  const tocarProduto = useCallback((p) => {
+  const contexto = useMemo(() => ({ semFundo: false, marcados }), [marcados])
+  // Tocar no produto abre a prévia; "Anotar" circula o produto na página e ele voa até a nota.
+  const [previa, setPrevia] = useState(null)
+  const [voo, setVoo] = useState(null)
+  const [notaPulo, setNotaPulo] = useState(0)
+  const toque = useRef({ x: 0, y: 0 })
+  const notaRef = useRef(null)
+  const tocarProduto = useCallback((p) => setPrevia({ produto: p, x: toque.current.x, y: toque.current.y }), [])
+  const anotar = useCallback(() => {
+    if (!previa) return
+    const p = previa.produto
     const tinha = compras.tem(p.id)
     compras.alternar({ ...p, precoJornal: paraNumero(p.precoJornal) || paraNumero(p.precoNormal) })
-    if (!tinha) { setUltimo(String(p.id)); try { navigator.vibrate?.(30) } catch (_) { /* sem vibrar */ } }
-  }, [compras])
+    setPrevia(null)
+    if (tinha) return
+    setUltimo(String(p.id))
+    try { navigator.vibrate?.(30) } catch (_) { /* sem vibrar */ }
+    const alvo = notaRef.current?.getBoundingClientRect()
+    const reduzido = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (!alvo || reduzido) { setNotaPulo((v) => v + 1); return }
+    // primeiro a caneta circula (0,5 s), depois a foto voa para a nota
+    const id = Date.now()
+    setTimeout(() => setVoo({ id, img: p.imagem, de: { x: previa.x, y: previa.y }, para: { x: alvo.left + 34, y: alvo.top + alvo.height / 2 } }), 450)
+    setTimeout(() => { setVoo((v) => (v?.id === id ? null : v)); setNotaPulo((v) => v + 1) }, 450 + 700)
+  }, [previa, compras])
 
   // ---- tamanho: uma página no celular, duas abertas no PC ----
   const palcoRef = useRef(null)
@@ -329,7 +380,15 @@ export default function FolhearEncarte() {
           @keyframes cm-nota-sai { from { transform: translateY(40px) scaleY(.6); opacity: 0 } to { transform: none; opacity: 1 } }
           .cm-nota-linha { animation: cm-nota-linha .7s ease-out both }
           @keyframes cm-nota-linha { from { background: #fff3b0; clip-path: inset(0 0 100% 0) } to { background: transparent; clip-path: inset(0) } }
-          @media (prefers-reduced-motion: reduce) { .cm-nota-sai, .cm-nota-linha { animation: none } }
+          .cm-nota-pula { animation: cm-nota-pula .45s cubic-bezier(.3,1.6,.5,1) }
+          @keyframes cm-nota-pula { 0% { transform: scale(1) } 35% { transform: scale(1.05) } 100% { transform: scale(1) } }
+          .cm-previa-fundo { animation: cm-aparece .2s ease-out both }
+          .cm-previa { animation: cm-previa .28s cubic-bezier(.2,.9,.25,1) both }
+          @keyframes cm-aparece { from { opacity: 0 } }
+          @keyframes cm-previa { from { opacity: 0; transform: translateY(24px) scale(.96) } }
+          .cm-voo { position: fixed; z-index: 70; width: 84px; height: 84px; pointer-events: none; border-radius: 16px; background: #fff; padding: 6px; box-shadow: 0 10px 24px rgba(0,0,0,.35); offset-rotate: 0deg; animation: cm-voo .7s cubic-bezier(.55,0,.75,.4) forwards }
+          @keyframes cm-voo { 0% { offset-distance: 0%; transform: scale(1) } 100% { offset-distance: 100%; transform: scale(.25); opacity: .6 } }
+          @media (prefers-reduced-motion: reduce) { .cm-nota-sai, .cm-nota-linha, .cm-nota-pula, .cm-previa, .cm-previa-fundo, .cm-voo { animation: none } }
         `}</style>
         {/* a campanha ao fundo, escurecida, para o jornal saltar */}
         <div className="pointer-events-none absolute inset-0 bg-black/55" />
@@ -339,16 +398,17 @@ export default function FolhearEncarte() {
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
             {/* abas presas no topo do jornal: layout (protótipo) e a página */}
-            <div className="flex h-10 items-end gap-1 overflow-x-auto transition-[width] duration-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ width: larguraAberta }}>
+            <div className="flex h-11 items-end gap-1.5 overflow-x-auto px-0.5 transition-[width] duration-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ width: larguraAberta }}>
               {abas.map((a) => (
                 <button key={a.id} type="button" onClick={(e) => { setAba(a.id); e.currentTarget.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }) }} aria-pressed={aba === a.id}
-                  className={`h-9 shrink-0 whitespace-nowrap rounded-t-xl px-3 text-[13px] font-bold ${aba === a.id ? 'h-10 bg-white text-[#111]' : 'bg-black/45 text-white hover:bg-black/60'}`}>
-                  {a.id === MERCADO_ENCARTE.id && <span aria-hidden="true" className="mr-1 text-[#d81e29]">★</span>}{a.nome} <span className={aba === a.id ? 'text-[#666]' : 'text-white/70'}>{a.n}</span>
+                  className={`shrink-0 whitespace-nowrap rounded-t-2xl border border-b-0 px-3.5 text-[13px] font-bold backdrop-blur-xl backdrop-saturate-150 transition-[background-color,height,color] duration-200 ${aba === a.id ? 'h-10 border-white/70 bg-white/80 text-[#111] shadow-[inset_0_1px_0_rgba(255,255,255,.9)]' : 'h-9 border-white/25 bg-white/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.35)] hover:bg-white/25'}`}>
+                  {a.id === MERCADO_ENCARTE.id && <span aria-hidden="true" className="mr-1 text-[#d81e29]">★</span>}{a.nome} <span className={aba === a.id ? 'text-[#555]' : 'text-white/75'}>{a.n}</span>
                 </button>
               ))}
             </div>
             <div
               ref={palcoRef}
+              onPointerDownCapture={(e) => { toque.current = { x: e.clientX, y: e.clientY } }}
               onPointerDown={aoTocar}
               onPointerMove={aoMover}
               onPointerUp={aoSoltar}
@@ -389,8 +449,13 @@ export default function FolhearEncarte() {
               {atualizado && <span className="pointer-events-none absolute right-2 top-2 z-20 rounded-full bg-[#ffd23f] px-2.5 py-1 text-[12px] font-bold text-[#222]">Atualizado agora</span>}
             </div>
             {/* a nota presa embaixo do jornal */}
-            <Nota compras={compras} loja={loja} aberta={notaAberta} setAberta={setNotaAberta} ultimo={ultimo} largura={larguraAberta} />
+            <Nota compras={compras} loja={loja} aberta={notaAberta} setAberta={setNotaAberta} ultimo={ultimo} largura={larguraAberta} barraRef={notaRef} pulo={notaPulo} />
           </div>
+        )}
+        {previa && <PreviaProduto produto={previa.produto} naNota={compras.tem(previa.produto.id)} onAnotar={anotar} onFechar={() => setPrevia(null)} />}
+        {voo && (
+          <img key={voo.id} src={voo.img} alt="" aria-hidden="true" className="cm-voo object-contain"
+            style={{ left: 0, top: 0, offsetPath: `path("M ${voo.de.x} ${voo.de.y} Q ${(voo.de.x + voo.para.x) / 2} ${Math.min(voo.de.y, voo.para.y) - 120} ${voo.para.x} ${voo.para.y}")` }} />
         )}
       </div>
     </ContextoEncarte.Provider>
