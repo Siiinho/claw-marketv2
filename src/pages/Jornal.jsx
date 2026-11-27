@@ -46,7 +46,7 @@ const rotuloDia = (iso) => {
   const [a, m, d] = String(iso).split('-').map(Number)
   return `${NOMES_DIA[new Date(Date.UTC(a, m - 1, d)).getUTCDay()]} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
 }
-const TITULO_PADRAO = 'Jornal de Ofertas - Bengala Supermercado'
+const TITULO_BENGALA = 'Jornal de Ofertas - Bengala Supermercado'
 
 // Escolhas do jornal que está sendo montado, guardadas neste aparelho para não se perderem ao
 // recarregar. Os produtos não ficam aqui: ficam na remessa (ver lib/remessa.js).
@@ -97,7 +97,8 @@ export default function Jornal() {
   const ehSetor = destino !== 'geral' && !ehMercado
   const nomeDestino = ehMercado ? 'Jornal da estrela' : ehSetor ? setorById(destino).nome : 'Jornal geral'
   const [temaId, setTemaId] = useState(() => rascunho.tema || publicado.tema || 'ofertao')
-  const [titulo, setTitulo] = useState(() => rascunho.titulo || TITULO_PADRAO)
+  const TITULO_PADRAO = config.mercado?.nome ? `Jornal de Ofertas - ${config.mercado.nome}` : TITULO_BENGALA
+  const [titulo, setTitulo] = useState(() => (rascunho.titulo && !(config.mercado?.nome && rascunho.titulo === TITULO_BENGALA) ? rascunho.titulo : TITULO_PADRAO))
   const [periodoDe, setPeriodoDe] = useState(() => dataValida(rascunho.periodoDe, dataISOmaisDias(0)))
   const [periodoAte, setPeriodoAte] = useState(() => dataValida(rascunho.periodoAte, dataISOmaisDias(6)))
   const [diaEstrela, setDiaEstrela] = useState(() => dataValida(rascunho.diaEstrela, dataISOmaisDias(0)))
@@ -231,7 +232,11 @@ export default function Jornal() {
   const validadeDe = ehMercado ? diaEstrela : periodoDe
   const validadeAte = ehMercado ? diaEstrela : periodoAte && periodoAte >= periodoDe ? periodoAte : periodoDe
   const encarteArte = { periodoDe: validadeDe, periodoAte: validadeAte }
-  const lojaAtual = (store.lojas || []).find((l) => l.id === store.lojaAtiva) || (store.lojas || [])[0]
+  // Mercado cadastrado em "Meu mercado": a 1ª loja dele vai no topo do jornal (endereço e WhatsApp)
+  const lojaCadastro = config.mercado?.nome && !/bengala/i.test(config.mercado.nome) && (config.mercado.lojas || []).find((l) => l.nome || l.endereco)
+  const lojaAtual = lojaCadastro
+    ? { id: 'cadastro', nome: lojaCadastro.nome || config.mercado.nome, endereco: lojaCadastro.endereco, cidade: lojaCadastro.cidade, telefone: lojaCadastro.telefone, whatsapp: config.mercado.whatsappOfertas || lojaCadastro.whatsapp }
+    : (store.lojas || []).find((l) => l.id === store.lojaAtiva) || (store.lojas || [])[0]
   const contagemSetor = (id) => remessa.filter((p) => p.setor === id).length
   const proximosDias = Array.from({ length: 7 }, (_, i) => dataISOmaisDias(i))
 

@@ -85,7 +85,11 @@ function PreviaRodape({ marca }) {
 
 function Marcar({ grupo, f, setF }) {
   const marcados = f.pagamentos[grupo] || []
-  const trocar = (x) => setF({ ...f, pagamentos: { ...f.pagamentos, [grupo]: marcados.includes(x) ? marcados.filter((y) => y !== x) : [...marcados, x] } })
+  // atualização em função do estado atual: dois toques rápidos não se perdem
+  const trocar = (x) => setF((v) => {
+    const atual = v.pagamentos[grupo] || []
+    return { ...v, pagamentos: { ...v.pagamentos, [grupo]: atual.includes(x) ? atual.filter((y) => y !== x) : [...atual, x] } }
+  })
   return (
     <div className="flex flex-wrap gap-1.5">
       {PAGAMENTOS[grupo].map((x) => {

@@ -28,6 +28,7 @@ function Balao({ marca }) {
 export default function WhatsappOfertas() {
   const [encarte, setEncarte] = useState(null)
   const [carregou, setCarregou] = useState(false)
+  useEffect(() => { if (encarte?.marca?.nome) document.title = `Ofertas · ${encarte.marca.nome}` }, [encarte])
   useEffect(() => { registrarVisita('whatsapp') }, [])
   useEffect(() => {
     let ativo = true
