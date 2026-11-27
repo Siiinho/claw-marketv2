@@ -779,6 +779,7 @@ export default function Jornal() {
                 <div className="mt-5 grid gap-2">
                   <Botao onClick={imprimir} disabled={exportando} className="min-h-12 w-full text-base"><Icon name={exportando ? 'LoaderCircle' : 'Printer'} size={18} className={exportando ? 'animate-spin' : ''} /> {exportando ? 'Preparando…' : impresso ? 'Imprimir de novo' : 'Imprimir jornal'}</Botao>
                   <a href="#/encarte" target="_blank" rel="noreferrer" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border-2 border-navy/40 bg-white text-sm font-bold text-navy hover:bg-cream"><Icon name="ExternalLink" size={17} /> Ver como o cliente vê</a>
+                  <Botao variante="contorno" className="min-h-12" onClick={() => setTela('historico')}><Icon name="History" size={17} /> Ver jornais salvos ({jornais.length})</Botao>
                   <Botao variante="contorno" className="min-h-12" onClick={() => setTela('artes')}><Icon name="Images" size={17} /> Artes para redes sociais</Botao>
                   <Botao variante="escuro" className="min-h-12" onClick={comecarOutro}><Icon name="FilePlus2" size={17} /> Começar outro jornal</Botao>
                   <button type="button" onClick={() => setAcabouDePublicar(false)} className="min-h-10 text-sm font-semibold text-navy hover:underline">Corrigir e publicar de novo</button>
