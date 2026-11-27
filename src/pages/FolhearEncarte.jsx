@@ -236,7 +236,8 @@ export default function FolhearEncarte() {
   const semOfertas = Boolean(encarte) && !abas.length
   const emAjuste = semOfertas || abas.find((a) => a.id === aba)?.ajuste || (!abas.some((a) => !a.ajuste) && pausadosSet.size > 0)
   const itens = ehHoje ? doDia : aba === 'todas' ? daSemana : daSemana.filter((p) => p.setor === aba)
-  const layout = ehHoje ? 'jornal' : LAYOUTS_VALIDOS.includes(encarte?.layout) ? encarte.layout : 'grade'
+  const layoutProprio = encarte?.layoutsSetor?.[aba]
+  const layout = LAYOUTS_VALIDOS.includes(layoutProprio) ? layoutProprio : ehHoje ? 'jornal' : LAYOUTS_VALIDOS.includes(encarte?.layout) ? encarte.layout : 'grade'
   const temaGeral = temaCampanhaById(encarte?.tema)
   const tema = aba && aba !== 'todas'
     ? temaCampanhaById(encarte?.temasSetor?.[aba] || (encarte?.temasV === 2 ? encarte?.tema : temasDoSetor(aba)[0]?.id) || encarte?.tema)

@@ -37,6 +37,8 @@ export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe,
     fundos: { ...(noAr?.fundos || {}), ...(fundo ? { [tema]: fundo } : {}) },
     temasSetor: temasResolvidos(noAr),
     periodosSetor: { ...(noAr?.periodosSetor || {}) },
+    // layout de cada jornal (setor ou estrela); quem não tem segue o layout do geral
+    layoutsSetor: { ...(noAr?.layoutsSetor || {}) },
     temasV: 2,
   }
   if (destino === 'geral' && !trocarTudo) {
@@ -45,7 +47,10 @@ export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe,
     const ficam = antigos.filter((p) => !novos.has(p.id) && !setoresNovos.has(p.setor) && !p.soMercado)
     const temasSetor = { ...base.temasSetor }
     const periodosSetor = { ...base.periodosSetor }
-    for (const s of setoresNovos) { delete temasSetor[s]; delete periodosSetor[s] }
+    const layoutsSetor = { ...base.layoutsSetor }
+    for (const s of setoresNovos) { delete temasSetor[s]; delete periodosSetor[s]; delete layoutsSetor[s] }
+    // os setores que ficam guardam o layout que já mostram
+    for (const s of new Set(antigos.filter((p) => !setoresNovos.has(p.setor)).map((p) => p.setor).filter(Boolean))) if (!layoutsSetor[s] && noAr?.layout) layoutsSetor[s] = noAr.layout
     for (const s of new Set(ficam.map((p) => p.setor).filter(Boolean))) {
       if (!temasSetor[s]) temasSetor[s] = noAr?.tema || tema
       if (!periodosSetor[s] && noAr?.periodoDe) periodosSetor[s] = { de: noAr.periodoDe, ate: noAr.periodoAte || noAr.periodoDe }
@@ -60,6 +65,7 @@ export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe,
       fundo: fundo || null,
       temasSetor,
       periodosSetor,
+      layoutsSetor,
       itens: [
         ...ficam,
         // da estrela que não veio agora: continua só na estrela
@@ -81,6 +87,7 @@ export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe,
       fundo: fundo || null,
       temasSetor: doMercado ? { [MERCADO_ENCARTE.id]: doMercado } : {},
       periodosSetor: {},
+      layoutsSetor: base.layoutsSetor[MERCADO_ENCARTE.id] ? { [MERCADO_ENCARTE.id]: base.layoutsSetor[MERCADO_ENCARTE.id] } : {},
       itens: [
         ...itens.map((p) => {
           const antes = estrelaAtual.find((a) => a.id === p.id)
@@ -94,6 +101,7 @@ export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe,
     return {
       ...base,
       temasSetor: { ...base.temasSetor, [destino]: tema },
+      layoutsSetor: { ...base.layoutsSetor, [destino]: layout || 'jornal' },
       itens: [
         // fora da estrela nova: o que só existia nela sai; o resto continua na sua aba
         ...antigos.filter((p) => !novos.has(p.id) && !p.soMercado).map((p) => semEstrela(p)),
@@ -107,6 +115,7 @@ export function montarPublicacao({ noAr, itens, destino, tema, fundo, periodoDe,
     // sem nada no ar, a capa usa o template deste setor
     temasSetor: { ...base.temasSetor, [destino]: tema },
     periodosSetor: { ...base.periodosSetor, [destino]: { de: periodoDe, ate: periodoAte } },
+    layoutsSetor: { ...base.layoutsSetor, [destino]: layout || base.layout },
     itens: [
       ...antigos.filter((p) => !novos.has(p.id)).flatMap((p) => (
         p.setor !== destino || p.soMercado ? [p] : noMercadoEncarte(p) ? [{ ...p, soMercado: true }] : []

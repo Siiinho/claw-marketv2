@@ -221,7 +221,7 @@ export default function Jornal() {
   })
   const itensArte = itensJornal.map(paraArte)
   // O jornal da estrela sai sempre no formato jornal da semana.
-  const layoutAtual = ehMercado ? 'jornal' : layout
+  const layoutAtual = layout
   const paginasJornal = paginarEncarte(itensArte, layoutAtual)
   const tamanho = tamanhoPagina(layoutAtual)
   const temaArte = temaCampanhaById(temaId)
@@ -709,8 +709,8 @@ export default function Jornal() {
             </Secao>
 
             <details className="card-bengala p-4">
-              <summary className="cursor-pointer text-base font-bold text-navy">Mais ajustes (opcional)</summary>
-              {destino === 'geral' && (
+              <summary className="cursor-pointer text-base font-bold text-navy">Layout do jornal e mais ajustes</summary>
+              {(
                 <>
                   <Rotulo className="mt-4">Disposição dos produtos</Rotulo>
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -860,7 +860,7 @@ export default function Jornal() {
             {jornalVazio
               ? <p className="rounded-xl border-2 border-dashed border-ink-soft/25 bg-white p-5 text-center text-sm text-ink-soft">Nenhum produto deste jornal é de {nomeDestino}. Volte e escolha outro destino.</p>
               : <><p className="text-sm font-semibold text-ink-soft">Toque num produto para ajustar foto, preço e selo.</p>{previa(paginasJornal)}</>}
-            {!ehMercado && itensJornal.length > 18 && !ehFormatoJornal(layoutAtual) && destino === 'geral' && (
+            {itensJornal.length > 18 && !ehFormatoJornal(layoutAtual) && (
               <div className="flex items-center gap-3 rounded-xl bg-offer/20 p-3 text-sm">
                 <span className="flex-1 font-semibold text-navy">São muitos produtos. O jornal da semana põe todos em menos folhas.</span>
                 <Botao variante="escuro" className="min-h-10 shrink-0 px-3" onClick={() => setLayout('jornal')}>Usar</Botao>
