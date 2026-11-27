@@ -49,6 +49,25 @@ export function tirarFundo(d, w, h) {
     if (i >= w) vai(i, i - w)
     if (i < n - w) vai(i, i + w)
   }
+  // Silhueta: o branco da embalagem que encosta no fundo sem contorno (caixa de leite, tampa) fica.
+  // Fica todo pixel entre o topo e o pé do produto naquela coluna, e os buracos curtos de uma linha
+  // (até 10% da largura). O vão largo entre duas garrafas continua saindo.
+  const prod = new Uint8Array(n)
+  for (let i = 0; i < n; i++) prod[i] = distFundo(i) > 14 ? 1 : 0
+  const topo = new Int32Array(w).fill(h), pe = new Int32Array(w).fill(-1)
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (prod[y * w + x]) { if (y < topo[x]) topo[x] = y; pe[x] = y }
+  const lim = Math.max(3, Math.round(w * 0.1))
+  for (let y = 0; y < h; y++) {
+    let ultimo = -1
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x
+      if (fora[i] && y >= topo[x] && y <= pe[x]) fora[i] = 0
+      if (prod[i]) {
+        if (ultimo >= 0 && x - ultimo > 1 && x - ultimo <= lim) for (let z = ultimo + 1; z < x; z++) fora[y * w + z] = 0
+        ultimo = x
+      }
+    }
+  }
   // sobrou quase nada (ou nada saiu): melhor não arriscar
   let saiu = 0
   for (let i = 0; i < n; i++) saiu += fora[i]
