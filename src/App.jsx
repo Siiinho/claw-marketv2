@@ -20,6 +20,7 @@ const Config = lazy(() => import('./pages/Config'))
 const EncarteDigital = lazy(() => import('./pages/EncarteDigital'))
 const Mercado = lazy(() => import('./pages/Mercado'))
 const JornalPapel = lazy(() => import('./pages/FolhearEncarte'))
+const WhatsappOfertas = lazy(() => import('./pages/WhatsappOfertas'))
 
 function Carregando() {
   return (
@@ -83,6 +84,8 @@ export default function App() {
           <Route path="/encarte" element={<EncarteDigital />} />
           {/* protótipo: o mesmo encarte com cara de jornal impresso */}
           <Route path="/folhear" element={<JornalPapel />} />
+          {/* público: o QR verde do rodapé abre aqui (escolher a loja e entrar no grupo de ofertas) */}
+          <Route path="/whatsapp" element={<WhatsappOfertas />} />
           <Route path="/login" element={carregandoSessao ? <Carregando /> : usuario ? <Navigate to="/" replace /> : <Login />} />
           <Route element={<Protegida><Layout /></Protegida>}>
             <Route index element={<Dashboard />} />

@@ -182,7 +182,7 @@ export function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
 // Rodapé montado com o cadastro do mercado: logo, WhatsApp de ofertas (QR), lojas e pagamentos.
 function RodapeGerado({ altura, marca }) {
   const h = altura
-  const lojas = (marca.lojas || []).slice(0, 3)
+  const lojas = (marca.lojas || []).filter((l) => !l.foraDoRodape).slice(0, 3)
   const fonte = h / (lojas.length > 2 ? 15 : 13)
   const link = linkWhatsapp(marca.whatsappOfertas)
   const cartoes = [...(marca.pagamentos?.credito || []), ...(marca.pagamentos?.outros || [])]

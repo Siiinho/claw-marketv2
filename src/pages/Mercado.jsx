@@ -3,7 +3,7 @@ import { useStore } from '../store/StoreContext'
 import { Icon, Botao, Campo, inputCls, Secao, Escolha, Abas } from '../components/ui'
 import { arquivoParaDataURL } from '../lib/utils'
 import { LOJAS } from '../data/seed'
-import { PAGAMENTOS, lojaVazia, marcaPublica, MarcaContexto, ehBengala, BENGALA_PADRAO } from '../lib/marca'
+import { PAGAMENTOS, lojaVazia, marcaPublica, MarcaContexto, ehBengala, BENGALA_PADRAO, paginaWhatsapp } from '../lib/marca'
 import RodapeModelo, { RODAPE_W, RODAPE_H, TEXTOS_PADRAO } from '../components/RodapeModelo'
 import logoBengala from '../assets/logo.png'
 import { RodapeOficial } from '../components/PaginaTemplate'
@@ -163,7 +163,13 @@ export default function Mercado() {
           </div>
         </Secao>
 
-        <Secao numero={2} titulo="Contato e redes" descricao="O WhatsApp de ofertas vira um QR Code no rodapé do jornal.">
+        <Secao numero={2} titulo="Contato e redes" descricao="O QR verde do rodapé abre a página de ofertas no WhatsApp, onde o cliente escolhe a loja.">
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-[#e8f8ec] p-3">
+            <Icon name="MessageCircle" size={18} className="text-[#15803d]" />
+            <span className="min-w-0 flex-1 font-semibold text-ink">Página de ofertas no WhatsApp</span>
+            <a href="#/whatsapp" target="_blank" rel="noopener" className="inline-flex min-h-10 items-center gap-1 rounded-lg bg-[#15803d] px-3 font-bold text-white"><Icon name="ExternalLink" size={15} /> Abrir</a>
+            <button type="button" className="inline-flex min-h-10 items-center gap-1 rounded-lg border-2 border-[#15803d] px-3 font-bold text-[#15803d]" onClick={() => { navigator.clipboard?.writeText(paginaWhatsapp()); toast('Link copiado!') }}><Icon name="Copy" size={15} /> Copiar link</button>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Campo label="WhatsApp de ofertas"><input className={inputCls} inputMode="tel" value={f.whatsappOfertas} onChange={(e) => set('whatsappOfertas', e.target.value)} placeholder="(11) 90000-0000" /></Campo>
             <Campo label="Instagram"><input className={inputCls} value={f.instagram} onChange={(e) => set('instagram', e.target.value)} placeholder="@seumercado" /></Campo>
@@ -190,8 +196,12 @@ export default function Mercado() {
                 <Campo label="Telefone"><input className={inputCls} inputMode="tel" value={l.telefone} onChange={(e) => setLoja(i, 'telefone', e.target.value)} /></Campo>
                 <Campo label="Horário (dias de semana)"><input className={inputCls} value={l.horario} onChange={(e) => setLoja(i, 'horario', e.target.value)} placeholder="De segunda a sábado das 07h00 às 21h00" /></Campo>
                 <Campo label="Horário (domingos e feriados)"><input className={inputCls} value={l.horario2 || ''} onChange={(e) => setLoja(i, 'horario2', e.target.value)} placeholder="Aos domingos e feriados das 08h00 às 14h00" /></Campo>
-                <label className="flex min-h-11 items-center gap-2 font-semibold text-ink sm:col-span-2">
+                <div className="sm:col-span-2"><Campo label="Link do grupo ou comunidade de WhatsApp"><input className={inputCls} inputMode="url" value={l.linkGrupo || ''} onChange={(e) => setLoja(i, 'linkGrupo', e.target.value.trim())} placeholder="https://chat.whatsapp.com/..." /></Campo></div>
+                <label className="flex min-h-11 items-center gap-2 font-semibold text-ink">
                   <input type="checkbox" className="h-5 w-5 accent-[var(--color-navy)]" checked={!!l.estacionamento} onChange={(e) => setLoja(i, 'estacionamento', e.target.checked)} /> Tem estacionamento no local
+                </label>
+                <label className="flex min-h-11 items-center gap-2 font-semibold text-ink">
+                  <input type="checkbox" className="h-5 w-5 accent-[var(--color-navy)]" checked={!l.foraDoRodape} onChange={(e) => setLoja(i, 'foraDoRodape', !e.target.checked)} /> Aparece no rodapé do jornal
                 </label>
               </div>
             </div>
@@ -270,7 +280,7 @@ export default function Mercado() {
                   <Campo label="Link do QR das redes sociais"><input className={inputCls} inputMode="url" value={f.redesLink} onChange={(e) => set('redesLink', e.target.value)} placeholder="https://linktr.ee/seumercado" /></Campo>
                   <Campo label="Título da faixa verde"><input className={inputCls} value={f.whatsTitulo} onChange={(e) => set('whatsTitulo', e.target.value)} placeholder={`WhatsApp ${f.nome}`} /></Campo>
                   <Campo label="Frase da faixa verde"><input className={inputCls} value={f.whatsSubtitulo} onChange={(e) => set('whatsSubtitulo', e.target.value)} /></Campo>
-                  <Campo label="Link do QR do WhatsApp"><input className={inputCls} inputMode="url" value={f.whatsLink} onChange={(e) => set('whatsLink', e.target.value)} placeholder="Vazio = abre o WhatsApp de ofertas" /></Campo>
+                  <Campo label="Link do QR do WhatsApp"><input className={inputCls} inputMode="url" value={f.whatsLink} onChange={(e) => set('whatsLink', e.target.value)} placeholder="Vazio = abre a página de ofertas do ClawMarket" /></Campo>
                 </div>
               </Secao>
               <Secao numero={3} titulo="Lojas e pagamentos" descricao="Vêm da aba Dados do mercado.">

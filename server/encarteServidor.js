@@ -77,7 +77,7 @@ async function limparMarca(m) {
     rodapeModo: ['gerado', 'imagem', 'modelo'].includes(m.rodapeModo) ? m.rodapeModo : undefined,
     logo: m.logo ? await guardarImagem(m.logo) : null,
     rodapeImagem: m.rodapeImagem ? await guardarImagem(m.rodapeImagem) : null,
-    lojas: (Array.isArray(m.lojas) ? m.lojas.slice(0, 10) : []).map((l) => ({ ...Object.fromEntries(['nome', 'endereco', 'cidade', 'whatsapp', 'telefone', 'horario', 'horario2'].map((c) => [c, texto(l?.[c], 200)]).filter(([, v]) => v)), estacionamento: l?.estacionamento === true })),
+    lojas: (Array.isArray(m.lojas) ? m.lojas.slice(0, 10) : []).map((l) => ({ ...Object.fromEntries(['nome', 'endereco', 'cidade', 'whatsapp', 'telefone', 'horario', 'horario2'].map((c) => [c, texto(l?.[c], 200)]).filter(([, v]) => v)), estacionamento: l?.estacionamento === true, foraDoRodape: l?.foraDoRodape === true, ...(/^https:\/\/[^\s"'<>]{3,300}$/.test(String(l?.linkGrupo || '')) ? { linkGrupo: l.linkGrupo } : {}) })),
     pagamentos: { credito: lista(m.pagamentos?.credito), alimentacao: lista(m.pagamentos?.alimentacao), outros: lista(m.pagamentos?.outros) },
   }
 }

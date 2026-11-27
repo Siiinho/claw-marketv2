@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from 'react'
 import { QrCode } from './cartazes/QrJornal'
-import { linkWhatsapp, ehBengala } from '../lib/marca'
+import { ehBengala, paginaWhatsapp } from '../lib/marca'
 import logoBengala from '../assets/logo-bengala-transparente.png'
 
 // Rodapé no modelo do jornal impresso do Bengala (o já validado), montado com o cadastro do mercado.
@@ -98,10 +98,11 @@ function CaixaPagamentos({ nomes, style }) {
 
 export function RodapeModeloCorpo({ marca }) {
   const t = { ...TEXTOS_PADRAO, ...Object.fromEntries(Object.entries(marca || {}).filter(([, v]) => v)) }
-  const lojas = (marca?.lojas || []).filter((l) => l.nome || l.endereco).slice(0, 3)
+  const lojas = (marca?.lojas || []).filter((l) => (l.nome || l.endereco) && !l.foraDoRodape).slice(0, 3)
   const n = Math.max(1, lojas.length)
   const linkRedes = marca?.redesLink || (marca?.instagram ? `https://instagram.com/${String(marca.instagram).replace(/^@/, '')}` : null)
-  const linkWhats = marca?.whatsLink || linkWhatsapp(marca?.whatsappOfertas)
+  // o QR verde abre a página de ofertas no WhatsApp do ClawMarket (escolher a loja), se não tiver outro link
+  const linkWhats = marca?.whatsLink || paginaWhatsapp()
   const nomeCurto = (marca?.nome || '').replace(/\s*supermercados?\s*/i, ' ').trim().toUpperCase()
   const credito = [...(marca?.pagamentos?.credito || []), ...(marca?.pagamentos?.outros || [])]
   const vales = marca?.pagamentos?.alimentacao || []

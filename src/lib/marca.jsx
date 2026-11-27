@@ -10,8 +10,11 @@ export const PAGAMENTOS = {
   outros: ['Pix', 'Dinheiro'],
 }
 
-export const CAMPOS_LOJA = ['nome', 'endereco', 'cidade', 'whatsapp', 'telefone', 'estacionamento', 'horario', 'horario2']
-export const lojaVazia = () => ({ id: `loja-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, nome: '', endereco: '', cidade: '', whatsapp: '', telefone: '', estacionamento: false, horario: '', horario2: '' })
+export const CAMPOS_LOJA = ['nome', 'endereco', 'cidade', 'whatsapp', 'telefone', 'estacionamento', 'horario', 'horario2', 'linkGrupo', 'foraDoRodape']
+
+// Página pública do QR de ofertas (o cliente escolhe a loja e entra no grupo dela).
+export const paginaWhatsapp = () => (typeof window === 'undefined' ? '' : `${window.location.origin}${import.meta.env.BASE_URL}#/whatsapp`)
+export const lojaVazia = () => ({ id: `loja-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, nome: '', endereco: '', cidade: '', whatsapp: '', telefone: '', estacionamento: false, horario: '', horario2: '', linkGrupo: '', foraDoRodape: false })
 
 // Rodapé já validado do jornal impresso do Bengala: é a base do modelo, e o Bengala começa com ele preenchido.
 export const BENGALA_PADRAO = {
@@ -21,9 +24,10 @@ export const BENGALA_PADRAO = {
   whatsLink: 'https://comunidadedeofertasbengala.my.canva.site/lojas',
   whatsTitulo: 'WhatsApp Bengala',
   lojas: [
-    { nome: 'Loja 2', endereco: 'Avenida Líder, nº 1721', cidade: 'Cidade Líder', telefone: '2741-1233', estacionamento: true, whatsapp: '(11) 93349-6381', horario: 'De segunda a sábado das 07h00 às 21h00', horario2: 'Aos domingos e feriados das 08h00 às 14h00' },
-    { nome: 'Loja 3', endereco: 'Rua Serra do Navio, nº 355', cidade: 'Pq. Santa Madalena', telefone: '2719-7195', estacionamento: true, whatsapp: '(11) 96607-2187', horario: 'De segunda a sábado das 07h00 às 20h00', horario2: 'Aos domingos e feriados das 08h00 às 14h00' },
-    { nome: 'Loja 6', endereco: 'Rua Comendador Gil Pinheiro, 137', cidade: 'Chác. Calif. - SP', telefone: '(11) 2093-0017', estacionamento: true, whatsapp: '(11) 97077-7406', horario: 'De segunda a sábado das 07h00 às 21h00', horario2: 'Aos domingos e feriados das 08h00 às 20h00' },
+    { nome: 'Loja 2', endereco: 'Avenida Líder, nº 1721', cidade: 'Cidade Líder', telefone: '2741-1233', estacionamento: true, whatsapp: '(11) 93349-6381', horario: 'De segunda a sábado das 07h00 às 21h00', horario2: 'Aos domingos e feriados das 08h00 às 14h00', linkGrupo: 'https://wpp.community/2BwwyU' },
+    { nome: 'Loja 3', endereco: 'Rua Serra do Navio, nº 355', cidade: 'Pq. Santa Madalena', telefone: '2719-7195', estacionamento: true, whatsapp: '(11) 96607-2187', horario: 'De segunda a sábado das 07h00 às 20h00', horario2: 'Aos domingos e feriados das 08h00 às 14h00', linkGrupo: 'https://chat.whatsapp.com/Gloihy9DIV2DooIyn29Id1' },
+    { nome: 'Loja 5', cidade: 'Jardim Tango', linkGrupo: 'https://wpp.community/uF5UNH', foraDoRodape: true },
+    { nome: 'Loja 6', endereco: 'Rua Comendador Gil Pinheiro, 137', cidade: 'Chác. Calif. - SP', telefone: '(11) 2093-0017', estacionamento: true, whatsapp: '(11) 97077-7406', horario: 'De segunda a sábado das 07h00 às 21h00', horario2: 'Aos domingos e feriados das 08h00 às 20h00', linkGrupo: 'https://chat.whatsapp.com/L6cOrM3Eifw1bjnpLE8PkC' },
   ],
   pagamentos: {
     credito: ['Visa', 'Mastercard', 'Elo', 'American Express', 'Mais!', 'Sorocred', 'Hipercard', 'Cabal'],
