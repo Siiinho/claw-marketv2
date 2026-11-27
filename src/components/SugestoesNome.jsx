@@ -22,9 +22,9 @@ export default function SugestoesNome({ codigo, busca, onEscolher, onCadastrar, 
                   className={`flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left ${i === destaque ? 'bg-cream-200' : 'bg-white'} ${carregando !== null && !girando ? 'opacity-50' : ''}`}>
                   {item.produto ? <ProdutoThumb produto={item.produto} size={34} /> : <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-lg bg-cream-200 text-ink-soft"><Icon name="Package" size={17} /></span>}
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold text-ink">{item.nome}</span>
+                    <span className="block break-words text-sm font-bold leading-snug text-ink">{item.nome}</span>
                     <span className="block truncate text-xs text-ink-soft">
-                      {[item.origem === 'cadastrado' ? (item.produto?.naFila ? 'Já na fila' : 'Cadastrado no app') : item.origem === 'loja' ? 'Mercadologia da loja' : 'Base de produtos (sem preço)', item.setor && setorById(item.setor)?.nome, item.codigoBarras].filter(Boolean).join(' · ')}
+                      {[item.origem === 'cadastrado' ? 'Cadastrado' : item.origem === 'loja' ? 'Mercadologia da loja' : 'Base de produtos (sem preço)', item.setor && setorById(item.setor)?.nome, item.codigoBarras].filter(Boolean).join(' · ')}
                     </span>
                   </span>
                   {Number(item.precoNormal) > 0 && <span className="num-tab shrink-0 text-sm font-bold text-ink">{formatBRL(Number(item.precoNormal))}</span>}

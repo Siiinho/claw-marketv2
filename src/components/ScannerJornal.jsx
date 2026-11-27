@@ -1,19 +1,13 @@
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useStore } from '../store/StoreContext'
 import { buscarProdutoBengala } from '../lib/catalogoBengala'
 import { ehBuscaPorNome, useBuscaNome } from '../lib/useBuscaNome'
 import { buscarImagemProduto, buscarProdutoAutomatizado } from '../lib/produtoApi'
-import { dataISOmaisDias, noMercadoEncarte } from '../lib/utils'
+import { naRemessa } from '../lib/remessa'
 import { useLeitorCamera } from '../lib/useLeitorCamera'
-import { Botao, Icon, ProdutoThumb, inputCls } from './ui'
-import EstrelaMercado, { BotaoEstrela } from './EstrelaMercado'
+import { Botao, Icon, inputCls } from './ui'
 import CadastroProdutoNovo from './CadastroProdutoNovo'
 import SugestoesNome from './SugestoesNome'
-
-const CHAVE_ESTRELA = 'clawmarket.scanner.estrela'
-function lerEstrela() {
-  try { return localStorage.getItem(CHAVE_ESTRELA) === '1' } catch { return false }
-}
 
 const rascunhoVazio = (codigo = '') => ({
   codigoBarras: codigo,
@@ -21,7 +15,6 @@ const rascunhoVazio = (codigo = '') => ({
   marca: '',
   gramagem: '',
   setor: 'mercearia',
-  validade: dataISOmaisDias(7),
   estoque: 1,
   precoNormal: '',
   imagem: null,
@@ -30,64 +23,30 @@ const rascunhoVazio = (codigo = '') => ({
 function codigoLimpo(valor) {
   return String(valor || '').replace(/\D/g, '')
 }
-// `embutido`: vai dentro de um passo do gerador (sem card, sem título e sem a lista de recentes,
-// porque a lista do próprio passo já mostra a fila).
-export default function ScannerJornal({ embutido = false } = {}) {
-  const {
-    produtos,
-    fila,
-    salvarProduto,
-    salvarProdutoNaFila,
-    registrarLote,
-    removerDaFila,
-    toast,
-  } = useStore()
+
+// Passo 1 do gerador: bipa, digita o código ou procura pelo nome. O produto entra na remessa do jornal
+// que está sendo montado. Validade e vencimento são de outra aba (Conferir validade e Produtos).
+export default function ScannerJornal() {
+  const { produtos, usuario, salvarProdutoNaFila, toast } = useStore()
   const [codigo, setCodigo] = useState('')
   const [buscando, setBuscando] = useState(false)
   const [rascunho, setRascunho] = useState(null)
-  const [expandido, setExpandido] = useState(false)
   const inputRef = useRef(null)
   const busca = useBuscaNome(codigo, produtos)
   const { porNome, sugestoes, procurandoNome, destaque, setDestaque } = busca
   const [abrindo, setAbrindo] = useState(null) // código escolhido na lista, até o produto abrir
-  // A estrela fica ligada entre um bipe e outro, para mandar vários produtos seguidos ao Mercado Encarte.
-  const [estrela, setEstrelaEstado] = useState(lerEstrela)
-  const setEstrela = (valor) => {
-    setEstrelaEstado(valor)
-    try { localStorage.setItem(CHAVE_ESTRELA, valor ? '1' : '0') } catch { /* sem armazenamento */ }
-  }
-  const comEstrela = (produto) => (estrela ? { ...produto, encarteMercadoDia: dataISOmaisDias(0) } : produto)
-  const alternarEstrela = (produto) => {
-    const ligar = !noMercadoEncarte(produto)
-    salvarProduto({ id: produto.id, encarteMercadoDia: ligar ? dataISOmaisDias(0) : null })
-    toast(ligar ? `${produto.nome} entrou nos estrelados (Mercado Encarte de hoje).` : `${produto.nome} saiu dos estrelados.`, 'info')
-  }
 
-  const recentes = useMemo(() => [...fila].sort((a, b) =>
-    new Date(b.adicionadoFilaEm || 0).getTime() - new Date(a.adicionadoFilaEm || 0).getTime()
-  ), [fila])
-  const visiveis = expandido ? recentes : recentes.slice(0, 4)
-  const restantes = Math.max(0, recentes.length - 4)
-
-  const adicionarConhecido = (produto) => {
-    const jaEstava = Boolean(produto.naFila)
-    salvarProdutoNaFila(comEstrela(produto), 'scanner-jornal')
-    if (produto.validade) {
-      registrarLote({
-        produtoId: produto.id,
-        loja: produto.loja || 'loja3',
-        validade: produto.validade,
-        quantidade: Math.max(1, Number(produto.estoque) || 1),
-      })
-    }
-    const extra = estrela ? ' Com estrela no Mercado Encarte.' : ''
-    toast(jaEstava ? `${produto.nome} já está na fila do jornal.${extra}` : `${produto.nome} adicionado à fila do jornal!${extra}`, jaEstava ? 'info' : 'sucesso')
+  const adicionar = (produto) => {
+    const jaEstava = naRemessa(produto, usuario?.id)
+    if (!jaEstava) salvarProdutoNaFila({ ...produto, remessaPor: usuario?.id, remessaEm: new Date().toISOString() }, 'scanner-jornal')
+    toast(jaEstava ? `${produto.nome} já está neste jornal.` : `${produto.nome} entrou no jornal.`, jaEstava ? 'info' : 'sucesso')
+    setRascunho(null)
     setCodigo('')
     inputRef.current?.focus()
   }
 
   const escolherSugestao = async (item) => {
-    if (item.produto) { adicionarConhecido(item.produto); return }
+    if (item.produto) { adicionar(item.produto); return }
     if (buscando) return
     setAbrindo(item.codigoBarras)
     await buscar(item.codigoBarras)
@@ -109,7 +68,7 @@ export default function ScannerJornal({ embutido = false } = {}) {
     try {
       const existente = produtos.find((produto) => codigoLimpo(produto.codigoBarras) === c)
       if (existente) {
-        adicionarConhecido(existente)
+        adicionar(existente)
         return
       }
 
@@ -138,20 +97,10 @@ export default function ScannerJornal({ embutido = false } = {}) {
       if (!base) toast('Código não cadastrado. Complete os dados abaixo.', 'info')
     } catch (_) {
       setRascunho(rascunhoVazio(c))
-      toast('Complete o cadastro para adicionar à fila.', 'info')
+      toast('Complete o cadastro para pôr no jornal.', 'info')
     } finally {
       setBuscando(false)
     }
-  }
-
-  const confirmarNovo = (novo) => {
-    const produto = comEstrela(novo)
-    salvarProdutoNaFila(produto, 'scanner-jornal')
-    if (produto.validade) registrarLote({ produtoId: produto.id, loja: produto.loja, validade: produto.validade, quantidade: produto.estoque })
-    toast(`${produto.nome} cadastrado e adicionado à fila do jornal!${estrela ? ' Com estrela no Mercado Encarte.' : ''}`)
-    setRascunho(null)
-    setCodigo('')
-    inputRef.current?.focus()
   }
 
   const camera = useLeitorCamera(
@@ -162,20 +111,10 @@ export default function ScannerJornal({ embutido = false } = {}) {
   const abrirCamera = () => (camera.ativo ? camera.parar() : camera.abrir())
 
   return (
-    <section id="scanner-jornal" className={embutido ? 'scroll-mt-4' : 'card-bengala scroll-mt-4 p-4'}>
-      {!embutido && (
-        <div className="mb-3 flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-bengala text-white"><Icon name="ScanBarcode" size={21} /></span>
-          <div>
-            <h3 className="font-bold text-ink">Scanner do Gerador de Jornal</h3>
-            <p className="text-xs text-ink-soft">Bipe ou digite sem sair desta tela. Produtos conhecidos entram direto na fila.</p>
-          </div>
-        </div>
-      )}
-
+    <section id="scanner-jornal" className="scroll-mt-4">
       <div className="flex gap-2">
         <div className="relative min-w-0 flex-1">
-          <Icon name={porNome ? 'Search' : 'Barcode'} size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-soft" />
+          <Icon name={porNome ? 'Search' : 'Barcode'} size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft" />
           <input
             ref={inputRef}
             value={codigo}
@@ -194,22 +133,20 @@ export default function ScannerJornal({ embutido = false } = {}) {
             aria-controls="sugestoes-nome"
             aria-activedescendant={sugestoes.length ? `sugestao-${destaque}` : undefined}
             aria-label="Código de barras ou nome do produto"
-            placeholder="Código de barras ou nome"
-            className={`${inputCls} pl-9`}
+            placeholder="Código ou nome"
+            className={`${inputCls} min-h-14 pl-10 text-base`}
           />
         </div>
-        <Botao onClick={() => buscar()} disabled={buscando} className="px-3">
+        <Botao onClick={() => buscar()} disabled={buscando} className="min-h-14 px-4">
           <Icon name={buscando ? 'LoaderCircle' : 'Search'} size={17} className={buscando ? 'animate-spin' : ''} />
           <span className="hidden sm:inline">Adicionar</span>
         </Botao>
-        <button type="button" onClick={abrirCamera} aria-label={scanning ? 'Parar câmera' : 'Abrir câmera'} className={`flex min-h-10 shrink-0 items-center justify-center rounded-lg border px-3 ${scanning ? 'border-critical bg-critical text-white' : 'border-ink-soft/25 bg-white text-ink hover:bg-cream-200'}`}>
+        <button type="button" onClick={abrirCamera} aria-label={scanning ? 'Parar câmera' : 'Abrir câmera'} className={`flex min-h-14 shrink-0 items-center justify-center rounded-lg border-2 px-4 ${scanning ? 'border-critical bg-critical text-white' : 'border-navy/40 bg-white text-navy hover:bg-cream'}`}>
           <Icon name={scanning ? 'CameraOff' : 'Camera'} size={19} />
         </button>
       </div>
 
       {porNome && <SugestoesNome codigo={codigo} busca={busca} onEscolher={escolherSugestao} carregando={abrindo} onCadastrar={(nome) => { setRascunho({ ...rascunhoVazio(''), nome }); setCodigo('') }} />}
-
-      <EstrelaMercado ativo={estrela} onChange={setEstrela} className="mt-2 w-full" texto="Estrela ao adicionar: entra também no Mercado Encarte de hoje" />
 
       {scanning ? (
         <div className="relative mt-3 overflow-hidden rounded-xl bg-black">
@@ -223,36 +160,12 @@ export default function ScannerJornal({ embutido = false } = {}) {
         <CadastroProdutoNovo
           key={`${rascunho.codigoBarras}|${rascunho.nome}`}
           inicial={rascunho}
-          comLote
           titulo={rascunho.nome ? 'Complete o produto' : 'Produto não encontrado. Cadastre agora'}
-          textoSalvar="Confirmar e adicionar ao jornal"
+          textoSalvar="Cadastrar e pôr no jornal"
           toast={toast}
           onCancelar={() => { setRascunho(null); inputRef.current?.focus() }}
-          onSalvar={confirmarNovo}
+          onSalvar={adicionar}
         />
-      ) : null}
-
-      {!embutido && recentes.length ? (
-        <div className="mt-4 border-t border-ink-soft/10 pt-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-semibold text-ink">Adicionados agora há pouco</span>
-            {!expandido && restantes > 0 ? <button onClick={() => setExpandido(true)} className="rounded-full bg-bengala px-2 py-0.5 text-xs font-bold text-white">+{restantes}</button> : null}
-            {expandido && recentes.length > 4 ? <button onClick={() => setExpandido(false)} className="text-xs font-bold text-bengala">Mostrar 4</button> : null}
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {visiveis.map((produto) => (
-              <div key={produto.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-ink-soft/10 bg-white p-2">
-                <ProdutoThumb produto={produto} size={38} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-bold text-ink">{produto.nome}</div>
-                  <div className="truncate text-xs text-ink-soft">{[produto.marca, produto.gramagem].filter(Boolean).join(' · ') || 'Na fila do jornal'}</div>
-                </div>
-                <BotaoEstrela ativo={noMercadoEncarte(produto)} onClick={() => alternarEstrela(produto)} nome={produto.nome} />
-                <button onClick={() => { removerDaFila(produto.id); toast(`${produto.nome} removido da fila.`, 'info') }} aria-label={`Remover ${produto.nome} da fila`} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-soft/70 hover:bg-critical/10 hover:text-critical"><Icon name="X" size={16} /></button>
-              </div>
-            ))}
-          </div>
-        </div>
       ) : null}
     </section>
   )

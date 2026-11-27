@@ -149,10 +149,10 @@ export default function Cartazes() {
       <EmptyState
         icon="Image"
         titulo="Nenhum produto em oferta"
-        descricao="Bipe um produto e coloque na fila do jornal ou numa oferta para criar o cartaz."
+        descricao="Bipe os produtos no Jornal ou crie uma oferta para fazer o cartaz."
         acao={
           <div className="flex flex-wrap justify-center gap-2">
-            <Botao onClick={() => navigate('/scanner')}><Icon name="ScanLine" size={16} /> Escanear produto</Botao>
+            <Botao onClick={() => navigate('/jornal')}><Icon name="ScanLine" size={16} /> Bipar no Jornal</Botao>
             <Botao variante="contorno" onClick={() => navigate('/ofertas')}><Icon name="Tag" size={16} /> Ver ofertas</Botao>
           </div>
         }
@@ -173,7 +173,7 @@ export default function Cartazes() {
         encarte={encarte}
         loja={loja}
         toast={toast}
-        onBipar={() => navigate('/scanner')}
+        onBipar={() => navigate('/jornal')}
         cartaz={{
           modelo: modeloPadrao,
           onModelo: (id) => salvarConfig({ cartazModelo: id }),

@@ -3,9 +3,10 @@ import { Check } from 'lucide-react'
 import { GRUPOS_TEMA, TEMAS_CAMPANHA, caminhoArte } from '../lib/temasCampanha'
 
 // Escolha do tema da campanha com miniatura da arte, separada por seção/ocasião.
-export default function SeletorTema({ value, onChange, compacto = false }) {
+// `todos`: começa mostrando todos os templates (gerador de jornal), sem rolagem própria.
+export default function SeletorTema({ value, onChange, compacto = false, todos = false }) {
   const atual = TEMAS_CAMPANHA.find((t) => t.id === value)
-  const [grupo, setGrupo] = useState(atual?.grupo || 'Todos')
+  const [grupo, setGrupo] = useState(todos ? 'Todos' : atual?.grupo || 'Todos')
   const lista = grupo === 'Todos' ? TEMAS_CAMPANHA : TEMAS_CAMPANHA.filter((t) => t.grupo === grupo)
   return (
     <div className="min-w-0">
@@ -17,7 +18,7 @@ export default function SeletorTema({ value, onChange, compacto = false }) {
           </button>
         ))}
       </div>
-      <div className={`grid gap-2 p-1 ${compacto ? 'max-h-80 grid-cols-2 overflow-y-auto' : 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-6'}`}>
+      <div className={`grid gap-2 p-1 ${compacto ? 'max-h-80 grid-cols-2 overflow-y-auto' : todos ? 'grid-cols-2 sm:grid-cols-3 lg:max-h-[520px] lg:overflow-y-auto xl:grid-cols-4' : 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-6'}`}>
         {lista.map((t) => {
           const mini = caminhoArte(t, 'miniatura')
           const ativo = value === t.id

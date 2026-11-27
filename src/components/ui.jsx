@@ -2,6 +2,7 @@ import * as Lucide from 'lucide-react'
 import { useEffect } from 'react'
 import { useStore } from '../store/StoreContext'
 import { partesPreco, statusValidade, labelDias, setorById, ilustracaoSetor } from '../lib/utils'
+import { useMarca, LogoOuNome } from '../lib/marca'
 import logoBengala from '../assets/logo.png'
 
 // ---- ícone dinâmico (lucide) — traço 1.75 p/ um visual mais fino e elegante ----
@@ -11,7 +12,8 @@ export function Icon({ name, strokeWidth = 1.75, ...props }) {
 }
 
 export function Logo({ h = 36, chip = false, className = '' }) {
-  const img = <img src={logoBengala} alt="Bengala Supermercado" style={{ height: h }} className={`block w-auto object-contain ${className}`} />
+  const marca = useMarca()
+  const img = <LogoOuNome marca={marca} padrao={logoBengala} style={{ height: h, fontSize: h * 0.42 }} className={`block w-auto max-w-[40vw] object-contain ${className}`} nomeClassName={`text-navy ${className}`} />
   return chip ? <span className="inline-flex items-center justify-center rounded-xl bg-white p-1">{img}</span> : img
 }
 
@@ -81,7 +83,12 @@ export function ProdutoThumb({ produto, size = 44 }) {
 // ---- ícone 3D das abas (decorativo: o rótulo da aba vem sempre ao lado) ----
 const ICONE_ABA = { dashboard: 'inicio', compras: 'lista', encarte: 'jornal', lista: 'produtos' }
 export function ImagemAba({ id, size = 24, className = '', style }) {
+  const marca = useMarca()
   const nome = ICONE_ABA[id] || id
+  // "Meu mercado" usa a própria logo do mercado como ícone
+  if (id === 'mercado') {
+    return <img src={marca?.logo || logoBengala} alt="" aria-hidden="true" draggable={false} className={`shrink-0 select-none rounded-md bg-white object-contain p-px ${className}`} style={{ width: size, height: size, ...style }} />
+  }
   return (
     <img
       src={`${import.meta.env.BASE_URL}abas/${nome}.webp`}

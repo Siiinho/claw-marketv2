@@ -25,7 +25,7 @@ const ARQ = () => path.join(DIR(), 'encarte.json')
 const DIR_IMG = () => path.join(DIR(), 'img')
 const LIMITE_CORPO = 40 * 1024 * 1024
 
-const CAMPOS_ITEM = ['id', 'nome', 'marca', 'gramagem', 'setor', 'codigoBarras', 'seloOferta', 'unidade', 'precoNormal', 'precoJornal', 'descontoJornal', 'origemFila', 'imagem', 'encarteMercadoDia']
+const CAMPOS_ITEM = ['id', 'nome', 'marca', 'gramagem', 'setor', 'codigoBarras', 'seloOferta', 'unidade', 'precoNormal', 'precoJornal', 'descontoJornal', 'origemFila', 'imagem', 'encarteMercadoDia', 'soMercado']
 const CAMPOS_LOJA = ['nome', 'endereco', 'cidade', 'whatsapp']
 const TIPOS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
 const MIME = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }
@@ -66,6 +66,22 @@ function limparAjuste(ajuste) {
 
 const idValido = (v) => typeof v === 'string' && /^[a-z0-9-]{1,40}$/.test(v)
 
+// Cadastro do mercado que vai para o site: só textos curtos, lojas e as imagens guardadas em arquivo.
+async function limparMarca(m) {
+  if (!m || typeof m !== 'object') return null
+  const lista = (v, n = 20) => (Array.isArray(v) ? v.slice(0, n).map((x) => texto(x, 60)).filter(Boolean) : [])
+  return {
+    ...Object.fromEntries(['nome', 'whatsappOfertas', 'instagram', 'facebook', 'avisos', 'encarteModo', 'whatsTitulo', 'whatsSubtitulo', 'avisoLimite', 'avisoValidade'].map((c) => [c, texto(m[c], 300)]).filter(([, v]) => v)),
+    ...Object.fromEntries(['redesLink', 'whatsLink'].map((c) => [c, /^https:\/\/[^\s"'<>]{3,300}$/.test(String(m[c] || '')) ? m[c] : undefined]).filter(([, v]) => v)),
+    legal: texto(m.legal, 900) || undefined,
+    rodapeModo: ['gerado', 'imagem', 'modelo'].includes(m.rodapeModo) ? m.rodapeModo : undefined,
+    logo: m.logo ? await guardarImagem(m.logo) : null,
+    rodapeImagem: m.rodapeImagem ? await guardarImagem(m.rodapeImagem) : null,
+    lojas: (Array.isArray(m.lojas) ? m.lojas.slice(0, 10) : []).map((l) => ({ ...Object.fromEntries(['nome', 'endereco', 'cidade', 'whatsapp', 'telefone', 'horario', 'horario2'].map((c) => [c, texto(l?.[c], 200)]).filter(([, v]) => v)), estacionamento: l?.estacionamento === true, foraDoRodape: l?.foraDoRodape === true, ...(/^https:\/\/[^\s"'<>]{3,300}$/.test(String(l?.linkGrupo || '')) ? { linkGrupo: l.linkGrupo } : {}) })),
+    pagamentos: { credito: lista(m.pagamentos?.credito), alimentacao: lista(m.pagamentos?.alimentacao), outros: lista(m.pagamentos?.outros) },
+  }
+}
+
 async function limparEncarte(corpo) {
   const itens = Array.isArray(corpo?.itens) ? corpo.itens.slice(0, 600) : []
   const limpos = []
@@ -75,6 +91,7 @@ async function limparEncarte(corpo) {
       if (item?.[campo] === undefined) continue
       novo[campo] = ['precoNormal', 'precoJornal', 'descontoJornal'].includes(campo) ? numero(item[campo]) : texto(item[campo], campo === 'imagem' ? 12_000_000 : 300)
     }
+    if (novo.soMercado !== undefined) novo.soMercado = item.soMercado === true
     novo.imagem = item?.imagem ? await guardarImagem(item.imagem) : null
     const ajuste = limparAjuste(item?.ajusteArte)
     if (ajuste) novo.ajusteArte = ajuste
@@ -89,10 +106,12 @@ async function limparEncarte(corpo) {
     periodoDe: texto(corpo?.periodoDe, 10),
     periodoAte: texto(corpo?.periodoAte, 10),
     tema: texto(corpo?.tema, 60),
-    layout: corpo?.layout === 'destaque' ? 'destaque' : 'grade',
+    layout: ['destaque', 'jornal', 'ancorado'].includes(corpo?.layout) ? corpo.layout : 'grade',
     fundo: corpo?.fundo ? await guardarImagem(corpo.fundo) : null,
     temasSetor: Object.fromEntries(Object.entries(corpo?.temasSetor || {}).filter(([k, v]) => idValido(k) && idValido(v)).slice(0, 40)),
     temasV: corpo?.temasV === 2 ? 2 : 1,
+    periodosSetor: Object.fromEntries(Object.entries(corpo?.periodosSetor || {}).filter(([k]) => idValido(k)).slice(0, 40)
+      .map(([k, v]) => [k, { de: texto(v?.de, 10), ate: texto(v?.ate, 10) }])),
     escalaLogo: Math.min(1.3, Math.max(0.4, Number(corpo?.escalaLogo) || 1)),
     // Abas que a loja esconde e setores em ajuste ("Ajustando ofertas" no site).
     mostrarGeral: corpo?.mostrarGeral !== false,
@@ -101,6 +120,7 @@ async function limparEncarte(corpo) {
     fundos: Object.fromEntries((await Promise.all(Object.entries(corpo?.fundos || {}).filter(([k]) => idValido(k)).slice(0, 20)
       .map(async ([k, v]) => [k, await guardarImagem(v)]))).filter(([, v]) => v)),
     loja,
+    marca: await limparMarca(corpo?.marca),
     itens: limpos,
   }
 }

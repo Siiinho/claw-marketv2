@@ -7,9 +7,10 @@ import { temaCampanhaById, temasDoSetor, caminhoArte } from '../lib/temasCampanh
 import SeloArte from '../components/SeloArte'
 import { SimboloClawMarket } from '../components/MarcaClawMarket'
 import { Escalado } from '../components/PaginaTemplate'
-import { PaginaEncarte, paginarEncarte, tamanhoPagina, ehFormatoJornal, alturaUsada } from '../components/JornalMercado'
+import { PaginaEncarte, paginarEncarte, tamanhoPagina, ehFormatoJornal, alturaDaPagina } from '../components/JornalMercado'
 import PrecoArte from '../components/PrecoArte'
 import { LOJAS } from '../data/seed'
+import { MarcaContexto } from '../lib/marca'
 
 // Encarte digital público: a página que a tag NFC abre.
 // Feita para celular primeiro, com alto contraste e letras grandes.
@@ -116,7 +117,7 @@ const CHAVE_LISTA = 'clawmarket:lista-compras:v1'
 function lerLista() {
   try { const l = JSON.parse(localStorage.getItem(CHAVE_LISTA) || '[]'); return Array.isArray(l) ? l : [] } catch (_) { return [] }
 }
-function useListaCompras() {
+export function useListaCompras() {
   const [lista, setLista] = useState(lerLista)
   const gravar = useCallback((fn) => setLista((atual) => {
     const nova = fn(atual)
@@ -523,6 +524,12 @@ function TituloSecao({ id, nome, detalhe, idTitulo }) {
   )
 }
 
+// Setor publicado com datas próprias mostra as dele; os outros, as do jornal.
+const comPeriodo = (encarte, setor) => {
+  const p = encarte?.periodosSetor?.[setor]
+  return p?.de ? { ...encarte, periodoDe: p.de, periodoAte: p.ate || p.de } : encarte
+}
+
 export default function EncarteDigital() {
   const [encarte, setEncarte] = useState(null)
   const [carregando, setCarregando] = useState(true)
@@ -563,6 +570,8 @@ export default function EncarteDigital() {
   const todosItens = encarte?.itens || []
   const pausados = useMemo(() => new Set(Array.isArray(encarte?.pausados) ? encarte.pausados : []), [encarte])
   const itens = useMemo(() => (pausados.size ? todosItens.filter((p) => !pausados.has(p.setor)) : todosItens), [todosItens, pausados])
+  // Produto publicado só no jornal da estrela não entra no Geral nem na aba do setor.
+  const itensDoJornal = useMemo(() => itens.filter((p) => !p.soMercado), [itens])
   const temaGeral = temaCampanhaById(encarte?.tema)
   // Cada setor tem o seu jornal, com o template escolhido para ele no Jornal.
   const temaDoSetor = (id) => temaCampanhaById(encarte?.temasSetor?.[id] || (encarte?.temasV === 2 ? encarte?.tema : temasDoSetor(id)[0]?.id) || encarte?.tema)
@@ -578,20 +587,20 @@ export default function EncarteDigital() {
   // Fundo enviado no Jornal vale só para o template dele.
   const fundoDoTema = encarte?.fundos?.[tema.id] || (tema.id === encarte?.tema ? encarte?.fundo || null : null)
   const setoresPresentes = useMemo(
-    () => SETORES.filter((s) => todosItens.some((p) => p.setor === s.id)),
+    () => SETORES.filter((s) => todosItens.some((p) => p.setor === s.id && !p.soMercado)),
     [todosItens]
   )
   const setorEmAjuste = pausados.has(setorFiltro)
-  const visiveis = ehMercado ? ofertasDoDia : setorFiltro === 'todos' || setorFiltro === 'compras' ? itens : itens.filter((p) => p.setor === setorFiltro)
+  const visiveis = ehMercado ? ofertasDoDia : setorFiltro === 'todos' || setorFiltro === 'compras' ? itensDoJornal : itensDoJornal.filter((p) => p.setor === setorFiltro)
   const grupos = setorFiltro === 'todos' || setorFiltro === 'compras'
-    ? setoresPresentes.filter((s) => !pausados.has(s.id)).map((s) => ({ setor: s, itens: itens.filter((p) => p.setor === s.id) }))
+    ? setoresPresentes.filter((s) => !pausados.has(s.id)).map((s) => ({ setor: s, itens: itensDoJornal.filter((p) => p.setor === s.id) }))
     : [{ setor: ehMercado ? MERCADO_ENCARTE : setorById(setorFiltro), itens: visiveis }]
   // Mercado Encarte sempre no formato jornal da semana (um bloco por dia).
   const layout = ehMercado ? 'jornal' : encarte?.layout || 'grade'
   const paginas = paginarEncarte(visiveis, layout)
   const tamanho = tamanhoPagina(layout)
   const diasMercado = ofertasDoDia.map((p) => p.encarteMercadoDia).sort()
-  const encarteDaAba = ehMercado && diasMercado.length ? { ...encarte, periodoDe: diasMercado[0], periodoAte: diasMercado[diasMercado.length - 1] } : encarte
+  const encarteDaAba = ehMercado && diasMercado.length ? { ...encarte, periodoDe: diasMercado[0], periodoAte: diasMercado[diasMercado.length - 1] } : comPeriodo(encarte, setorFiltro)
   const loja = encarte?.loja || LOJAS[0]
 
   // produto aberto fica no endereço (#/encarte?p=<id>): dá para compartilhar e o botão voltar fecha
@@ -630,8 +639,8 @@ export default function EncarteDigital() {
   })
   const abas = [
     ...(ofertasDoDia.length ? [{ id: MERCADO_ENCARTE.id, nome: 'Ofertas de hoje', cor: MERCADO_ENCARTE.cor, n: ofertasDoDia.length }] : []),
-    ...(geralNoSite ? [{ id: 'todos', nome: 'Todas', cor: '#082b4f', n: itens.length }] : []),
-    ...setoresPresentes.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor, n: itens.filter((p) => p.setor === s.id).length, ajuste: pausados.has(s.id) })),
+    ...(geralNoSite && itensDoJornal.length ? [{ id: 'todos', nome: 'Todas', cor: '#082b4f', n: itensDoJornal.length }] : []),
+    ...setoresPresentes.map((s) => ({ id: s.id, nome: s.nome, cor: s.cor, n: itensDoJornal.filter((p) => p.setor === s.id).length, ajuste: pausados.has(s.id) })),
   ]
   const abaAtual = abas.find((a) => a.id === setorFiltro)
   // Aba escondida pela loja (ou que sumiu): abre a primeira que existe.
@@ -639,7 +648,7 @@ export default function EncarteDigital() {
     if (!encarte || setorFiltro === 'compras' || !abas.length || abas.some((a) => a.id === setorFiltro)) return
     setSetorFiltro(abas[0].id)
   }, [encarte, setorFiltro, abas])
-  const periodo = encarte?.periodoDe ? `${formatDataCurta(encarte.periodoDe)} a ${formatDataCurta(encarte.periodoAte)}` : ''
+  const periodo = encarteDaAba?.periodoDe ? `${formatDataCurta(encarteDaAba.periodoDe)} a ${formatDataCurta(encarteDaAba.periodoAte)}` : ''
   const arteTitulo = caminhoArte(temaGeral, 'titulo')
   const whats = soDigitos(loja?.whatsapp)
   const linkWhats = whats ? `https://wa.me/${whats.length <= 11 ? `55${whats}` : whats}?text=${encodeURIComponent('Olá! Vi o encarte digital e quero saber mais.')}` : null
@@ -647,10 +656,11 @@ export default function EncarteDigital() {
   const tituloConteudo = vista === 'compras' ? null : ehMercado
     ? { id: 'mercado-encarte', nome: 'Ofertas de hoje', detalhe: diasMercado.length ? `Escolhidas pela loja para ${formatDataCurta(diasMercado[0])}${diasMercado.length > 1 && diasMercado[diasMercado.length - 1] !== diasMercado[0] ? ` a ${formatDataCurta(diasMercado[diasMercado.length - 1])}` : ''}` : '' }
     : setorFiltro === 'todos'
-      ? { id: 'todos', nome: 'Todas as ofertas', detalhe: plural(itens.length, 'oferta', 'ofertas') }
+      ? { id: 'todos', nome: 'Todas as ofertas', detalhe: plural(itensDoJornal.length, 'oferta', 'ofertas') }
       : { id: setorFiltro, nome: setorById(setorFiltro).nome, detalhe: plural(visiveis.length, 'oferta', 'ofertas') }
 
   return (
+    <MarcaContexto.Provider value={encarte?.marca || null}>
     <div className="min-h-screen bg-cream pb-[calc(4.5rem+env(safe-area-inset-bottom))] text-ink md:pb-0">
       {/* Topo: a grande ideia da campanha da semana, o período e as duas ações da loja */}
       <header className="relative overflow-hidden text-white" style={{ background: carregando ? 'linear-gradient(160deg,#082b4f,#123f6b)' : temaGeral.fundo }}>
@@ -770,13 +780,13 @@ export default function EncarteDigital() {
               </div>
             ))}
           </div>
-        ) : vista !== 'compras' && (setorEmAjuste || (!itens.length && todosItens.length > 0)) ? (
+        ) : vista !== 'compras' && (setorEmAjuste || (!itensDoJornal.length && !ofertasDoDia.length && pausados.size > 0 && todosItens.length > 0)) ? (
           <AjustandoOfertas
             setor={setorEmAjuste ? setorById(setorFiltro) : null}
             outras={abas.filter((a) => !a.ajuste && a.id !== setorFiltro)}
             onEscolher={(id) => mudar(() => setSetorFiltro(id))}
           />
-        ) : !itens.length ? (
+        ) : !itensDoJornal.length && !ofertasDoDia.length ? (
           <div className="mx-auto max-w-md rounded-3xl bg-white px-6 py-14 text-center ring-1 ring-black/[0.06]">
             <ImagemSetor id="geral" size={88} className="mx-auto" />
             <p className="mt-4 text-xl font-black text-navy">Nenhuma oferta publicada ainda</p>
@@ -791,7 +801,7 @@ export default function EncarteDigital() {
               {paginas.map((pagina, i) => (
                 <div key={`${encarte.versao}-${setorFiltro}-${i}`} className="min-w-0 overflow-hidden rounded-2xl shadow-[0_10px_30px_-12px_rgba(8,43,79,0.35)] ring-1 ring-black/[0.06]">
                   <PaginaViva>
-                    <Escalado largura={tamanho.largura} altura={ehFormatoJornal(layout) ? alturaUsada(pagina) : tamanho.altura}>
+                    <Escalado largura={tamanho.largura} altura={ehFormatoJornal(layout) ? alturaDaPagina(pagina, layout) : tamanho.altura}>
                       <PaginaEncarte animado compacto tema={tema} pagina={pagina} encarte={encarteDaAba} loja={loja} fundo={fundoDoTema} layout={layout} numero={i + 1} total={paginas.length} onAbrir={abrir} />
                     </Escalado>
                   </PaginaViva>
@@ -878,7 +888,8 @@ export default function EncarteDigital() {
         </div>
       )}
 
-      <PreviewProduto produto={aberto} lista={listaPreview} onTrocar={abrir} onFechar={fechar} tema={tema} encarte={encarte} loja={loja} compras={compras} />
+      <PreviewProduto produto={aberto} lista={listaPreview} onTrocar={abrir} onFechar={fechar} tema={tema} encarte={aberto ? (noMercadoEncarte(aberto, hoje) && (ehMercado || aberto.soMercado) ? { ...encarte, periodoDe: aberto.encarteMercadoDia, periodoAte: aberto.encarteMercadoDia } : comPeriodo(encarte, aberto.setor)) : encarte} loja={loja} compras={compras} />
     </div>
+    </MarcaContexto.Provider>
   )
 }

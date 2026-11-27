@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useStore, podeVer } from './store/StoreContext'
+import { MarcaContexto, marcaPublica } from './lib/marca'
 import { Icon, Toasts } from './components/ui'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -17,6 +18,9 @@ const Scanner = lazy(() => import('./pages/Scanner'))
 const Usuarios = lazy(() => import('./pages/Usuarios'))
 const Config = lazy(() => import('./pages/Config'))
 const EncarteDigital = lazy(() => import('./pages/EncarteDigital'))
+const Mercado = lazy(() => import('./pages/Mercado'))
+const JornalPapel = lazy(() => import('./pages/FolhearEncarte'))
+const WhatsappOfertas = lazy(() => import('./pages/WhatsappOfertas'))
 
 function Carregando() {
   return (
@@ -71,13 +75,19 @@ function TrocarSenhaObrigatoria() {
 }
 
 export default function App() {
-  const { usuario, carregandoSessao } = useStore()
+  const { usuario, carregandoSessao, config } = useStore()
   return (
-    <>
+    <MarcaContexto.Provider value={marcaPublica(config?.mercado)}>
       <Suspense fallback={<Carregando />}>
         <Routes>
           {/* público: o link da tag NFC abre aqui, sem login */}
-          <Route path="/encarte" element={<EncarteDigital />} />
+          <Route path="/encarte" element={<JornalPapel />} />
+          {/* a versão em lista, para comparar */}
+          <Route path="/encarte-lista" element={<EncarteDigital />} />
+          {/* protótipo: o mesmo encarte com cara de jornal impresso */}
+          <Route path="/folhear" element={<JornalPapel />} />
+          {/* público: o QR verde do rodapé abre aqui (escolher a loja e entrar no grupo de ofertas) */}
+          <Route path="/whatsapp" element={<WhatsappOfertas />} />
           <Route path="/login" element={carregandoSessao ? <Carregando /> : usuario ? <Navigate to="/" replace /> : <Login />} />
           <Route element={<Protegida><Layout /></Protegida>}>
             <Route index element={<Dashboard />} />
@@ -91,11 +101,12 @@ export default function App() {
             <Route path="scanner" element={<Protegida chave="scanner"><Scanner /></Protegida>} />
             <Route path="usuarios" element={<Protegida chave="usuarios"><Usuarios /></Protegida>} />
             <Route path="config" element={<Protegida chave="config"><Config /></Protegida>} />
+            <Route path="mercado" element={<Protegida chave="mercado"><Mercado /></Protegida>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
       <Toasts />
-    </>
+    </MarcaContexto.Provider>
   )
 }

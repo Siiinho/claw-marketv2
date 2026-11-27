@@ -40,8 +40,9 @@ export const NAV = [
   { key: 'jornal', label: 'Jornal de Ofertas', path: '/jornal', icone: 'Newspaper' },
   { key: 'relatorios', label: 'Relatórios', path: '/relatorios', icone: 'BarChart3' },
   { key: 'esg', label: 'Sustentabilidade', path: '/sustentabilidade', icone: 'Leaf' },
-  { key: 'scanner', label: 'Bipar produto', path: '/scanner', icone: 'ScanBarcode' },
+  { key: 'scanner', label: 'Conferir validade', path: '/scanner', icone: 'ScanBarcode' },
   { key: 'usuarios', label: 'Usuários', path: '/usuarios', icone: 'Users' },
+  { key: 'mercado', label: 'Meu mercado', path: '/mercado', icone: 'Store' },
   { key: 'config', label: 'Configurações', path: '/config', icone: 'Settings' },
 ]
 

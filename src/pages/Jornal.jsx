@@ -1,25 +1,23 @@
-import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useStore } from '../store/StoreContext'
-import { Icon, ProdutoThumb, EmptyState, Botao, Campo, inputCls, Modal, Secao, Rotulo, Abas, Escolha, ImagemSetor } from '../components/ui'
-import { BotaoEstrela } from '../components/EstrelaMercado'
+import { Icon, ProdutoThumb, EmptyState, Botao, Campo, inputCls, Modal, Secao, Rotulo, Escolha, ImagemSetor } from '../components/ui'
 import ScannerJornal from '../components/ScannerJornal'
 import CentralArtes from '../components/CentralArtes'
 import {
-  SETORES, setorById, formatBRL, MERCADO_ENCARTE, noMercadoEncarte,
-  percentDesc, dataISOmaisDias, SELOS_OFERTA, plural, formatDataCurta, paraNumero,
+  SETORES, setorById, formatBRL, MERCADO_ENCARTE,
+  percentDesc, dataISOmaisDias, SELOS_OFERTA, plural, paraNumero,
 } from '../lib/utils'
-import { publicarEncarte, lerEncartePublicado, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, atualizarPausadosNoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
+import { publicarEncarte, lerEncartePublicado, lerEncarteNoAr, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, atualizarPausadosNoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
+import { remessaDe, precoNoJornal, itensDoDestino, montarPublicacao } from '../lib/remessa'
+import { marcaPublica } from '../lib/marca'
 import SeletorTema from '../components/SeletorTema'
 import SeletorSelo, { BotaoAplicarTodos } from '../components/SeletorSelo'
 import PrecoArte, { ESTILOS_PRECO, estiloPrecoById } from '../components/PrecoArte'
 import EditorCelula from '../components/EditorCelula'
 import { Escalado } from '../components/PaginaTemplate'
 import FotoGoogle from '../components/FotoGoogle'
-import SugestaoPreco from '../components/SugestaoPreco'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina, itensDaPagina, ehFormatoJornal } from '../components/JornalMercado'
-import { temaCampanhaById, temasDoSetor, caminhoArte } from '../lib/temasCampanha'
-import { temaDoJornal, temasPropriosSalvos } from '../lib/temasJornal'
+import { temaCampanhaById } from '../lib/temasCampanha'
 import { imprimirPaginas } from '../lib/exportar'
 import { imagemProdutoPrecisaTratamento, fotoRuimParaJornal, prepararProdutoParaJornal } from '../lib/produtoApi'
 
@@ -43,97 +41,100 @@ function paginasDoHistorico(jornal) {
   return paginarEncarte(itens, jornal?.layoutArte || 'grade')
 }
 
-// Escolhas do painel (jornal aberto e template de cada jornal) guardadas neste aparelho,
-// para não se perderem ao recarregar antes de publicar.
-// Próximos 7 dias para escolher o dia da oferta no Mercado Encarte.
 const NOMES_DIA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const rotuloDia = (iso) => {
   const [a, m, d] = String(iso).split('-').map(Number)
   return `${NOMES_DIA[new Date(Date.UTC(a, m - 1, d)).getUTCDay()]} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`
 }
+const TITULO_PADRAO = 'Jornal de Ofertas - Bengala Supermercado'
 
-const CHAVE_RASCUNHO = 'clawmarket:jornal-rascunho:v1'
+// Escolhas do jornal que está sendo montado, guardadas neste aparelho para não se perderem ao
+// recarregar. Os produtos não ficam aqui: ficam na remessa (ver lib/remessa.js).
+const CHAVE_RASCUNHO = 'clawmarket:jornal-rascunho:v2'
 function lerRascunho() {
   try { return JSON.parse(localStorage.getItem(CHAVE_RASCUNHO) || '{}') || {} } catch (_) { return {} }
 }
 function salvarRascunho(dados) {
   try { localStorage.setItem(CHAVE_RASCUNHO, JSON.stringify(dados)) } catch (_) { /* sem espaço: segue sem guardar */ }
 }
+const destinoValido = (id) => (id === 'geral' || id === MERCADO_ENCARTE.id || SETORES.some((s) => s.id === id) ? id : 'geral')
+// Data guardada de um jornal antigo não volta: o período começa hoje.
+const dataValida = (iso, padrao) => (iso && iso >= dataISOmaisDias(0) ? iso : padrao)
+
+const PASSOS = [
+  { titulo: 'Bipar', ajuda: 'Bipe ou procure pelo nome. Só os produtos desta lista entram no jornal.' },
+  { titulo: 'Preço e selo', ajuda: 'Confira o preço de cada produto. O que estiver escrito aqui sai no jornal.' },
+  { titulo: 'Campanha', ajuda: 'Escolha a campanha e depois onde o jornal vai aparecer.' },
+  { titulo: 'Publicar', ajuda: 'Confira, publique no site do cliente e imprima.' },
+]
 
 export default function Jornal() {
-  const navigate = useNavigate()
   const store = useStore()
-  const { fila, config, jornais, ofertaDoProduto, salvarProduto, salvarJornal, excluirJornal, removerDaFila, limparFila, toast } = store
-  const [aba, setAba] = useState('gerar')
-  // Passo do gerador: 0 jornal, 1 produtos, 2 visual, 3 publicar. Fila vazia começa nos produtos.
-  const [passo, setPasso] = useState(() => (fila.length ? 0 : 1))
+  const { produtos, usuario, config, jornais, salvarProduto, salvarJornal, excluirJornal, removerDaFila, limparFila, toast } = store
+  const [tela, setTela] = useState('montar') // montar | artes | historico
+  const [passo, setPasso] = useState(0)
   const passosRef = useRef(null)
-  // Link do encarte (tag NFC), status do site e última publicação: só o admin vê.
-  const ehAdmin = store.usuario?.papel === 'admin'
+  const ehAdmin = usuario?.papel === 'admin'
+  const inicial = useRef(null)
+  if (!inicial.current) inicial.current = { rascunho: lerRascunho(), publicado: lerEncartePublicado() || {} }
+  const { rascunho, publicado } = inicial.current
 
-  // ---- config de geração ----
-  // Jornal aberto no painel: 'geral' (todos os produtos) ou o id de um setor (só os dele).
-  const [jornalSel, setJornalSel] = useState(() => lerRascunho().jornal || 'geral')
-  const ehSetor = jornalSel !== 'geral'
-  const ehMercado = jornalSel === MERCADO_ENCARTE.id
-  const [titulo, setTitulo] = useState('Jornal de Ofertas - Bengala Supermercado')
-  const [excluidos, setExcluidos] = useState(() => new Set())
+  // ---- o jornal que está sendo montado ----
+  const remessa = remessaDe(produtos, usuario?.id)
+  const [destino, setDestinoEstado] = useState(() => destinoValido(rascunho.destino))
+  const destinoTocado = useRef(false)
+  const setDestino = (id) => { destinoTocado.current = true; setDestinoEstado(id) }
+  const [trocarTudo, setTrocarTudo] = useState(false)
+  const [jornalVendo, setJornalVendo] = useState(null)
+  const [jornalApagar, setJornalApagar] = useState(null)
+  const [retirando, setRetirando] = useState(null)
+  const ehMercado = destino === MERCADO_ENCARTE.id
+  const ehSetor = destino !== 'geral' && !ehMercado
+  const nomeDestino = ehMercado ? 'Jornal da estrela' : ehSetor ? setorById(destino).nome : 'Jornal geral'
+  const [temaId, setTemaId] = useState(() => rascunho.tema || publicado.tema || 'ofertao')
+  const [titulo, setTitulo] = useState(() => rascunho.titulo || TITULO_PADRAO)
+  const [periodoDe, setPeriodoDe] = useState(() => dataValida(rascunho.periodoDe, dataISOmaisDias(0)))
+  const [periodoAte, setPeriodoAte] = useState(() => dataValida(rascunho.periodoAte, dataISOmaisDias(6)))
+  const [diaEstrela, setDiaEstrela] = useState(() => dataValida(rascunho.diaEstrela, dataISOmaisDias(0)))
+  const [layout, setLayout] = useState(() => rascunho.layout || publicado.layout || 'grade')
+  const [escalaLogo, setEscalaLogo] = useState(() => Number(rascunho.escalaLogo) || Number(publicado.escalaLogo) || 1)
+  useEffect(() => {
+    salvarRascunho({ destino, tema: temaId, titulo, periodoDe, periodoAte, diaEstrela, layout, escalaLogo })
+  }, [destino, temaId, titulo, periodoDe, periodoAte, diaEstrela, layout, escalaLogo])
+
   const [exportando, setExportando] = useState(false)
-  const [pdfPronto, setPdfPronto] = useState(null)
+  const [impresso, setImpresso] = useState(false)
   const [mostrarRevisao, setMostrarRevisao] = useState(false)
-  // Jornal novo: confirmação para esvaziar a fila (toda, ou só o setor aberto).
   const [confirmarNovo, setConfirmarNovo] = useState(false)
-  // Setores desligados para ajuste: no site do cliente a aba mostra "Ajustando ofertas".
+  // Aviso do caixa: o ClawMarket não muda o preço do sistema do mercado.
+  const [caixaConferido, setCaixaConferido] = useState(false)
   const pausados = Array.isArray(config.setoresPausados) ? config.setoresPausados : []
   const [mudandoAjuste, setMudandoAjuste] = useState(null)
   const [acabouDePublicar, setAcabouDePublicar] = useState(false)
   const pageRefs = useRef([])
   const historicoRefs = useRef([])
   const revisaoRef = useRef(null)
-  const ref = useRef(null)
   const [historicoParaAbrir, setHistoricoParaAbrir] = useState(null)
-  const [produtoEditandoGerador, setProdutoEditandoGerador] = useState(null)
+  const [produtoEditando, setProdutoEditando] = useState(null)
   const [seloEditando, setSeloEditando] = useState(null)
-  // Preço editado no mesmo painel do selo (toque no produto da prévia).
   const [precoEditando, setPrecoEditando] = useState({ normal: '', promo: '' })
   const [ajusteEditando, setAjusteEditando] = useState(null)
   // Ajuste predefinido (foto, preço, nome e etiqueta): vale para todo produto que não tem ajuste próprio.
   const ajustePadrao = config.ajustePadraoArte || null
-  // Estilo do preço predefinido: vale para todo produto que não escolheu o seu.
   const estiloPrecoPadrao = config.estiloPrecoPadrao || null
   const comEstiloPadrao = (p) => (p.estiloPreco || !estiloPrecoPadrao ? p : { ...p, estiloPreco: estiloPrecoPadrao })
   const comAjustePadrao = (p) => comEstiloPadrao(p.ajusteArte || !ajustePadrao ? p : { ...p, ajusteArte: ajustePadrao })
   const [usarComoPadrao, setUsarComoPadrao] = useState(false)
+  const produtoAtual = (p) => remessa.find((f) => f.id === p.id) || p
   const abrirProdutoDaPrevia = (produto) => {
-    const atual = fila.find((f) => f.id === produto.id) || produto
+    const atual = produtoAtual(produto)
     setPrecoEditando({ normal: atual.precoNormal ?? '', promo: atual.precoPromo ?? '' })
     setAjusteEditando(atual.ajusteArte || ajustePadrao)
     setUsarComoPadrao(!atual.ajusteArte && Boolean(ajustePadrao))
     setSeloEditando(atual)
   }
-  // Período da campanha: definido pelo operador, nunca calculado pela validade dos produtos.
-  const [periodoDe, setPeriodoDe] = useState(() => dataISOmaisDias(0))
-  const [periodoAte, setPeriodoAte] = useState(() => dataISOmaisDias(6))
-  const [publicadoEm, setPublicadoEm] = useState(() => lerEncartePublicado()?.publicadoEm || null)
-  const [temaDigital, setTemaDigital] = useState(() => lerRascunho().tema || lerEncartePublicado()?.tema || 'ofertao')
-  const [layoutDigital, setLayoutDigital] = useState(() => lerEncartePublicado()?.layout || 'grade')
-  // Tamanho do logo no jornal (0,4 a 1,3) e o template de cada setor (jornal de cada setor).
-  const [escalaLogo, setEscalaLogo] = useState(() => Number(lerEncartePublicado()?.escalaLogo) || 1)
-  const [temasSetor, setTemasSetor] = useState(() => temasPropriosSalvos({
-    rascunho: lerRascunho(), publicado: lerEncartePublicado() || {}, padraoDoSetor: (id) => temasDoSetor(id)[0]?.id, mercadoId: MERCADO_ENCARTE.id,
-  }))
-  const temaDoSetor = (id) => temaDoJornal(id, { geral: temaDigital, proprios: temasSetor, mercadoId: MERCADO_ENCARTE.id, padraoMercado: temasDoSetor(MERCADO_ENCARTE.id)[0]?.id || 'mercado' })
-  // Setor com template próprio deixa de seguir o Geral; "seguir o Geral" apaga só a escolha dele.
-  const temaProprio = ehSetor && !ehMercado && Boolean(temasSetor[jornalSel])
-  const seguirGeral = (id) => setTemasSetor((atual) => { const n = { ...atual }; delete n[id]; return n })
-  const setoresComTemaProprio = SETORES.filter((s) => temasSetor[s.id])
-  // Template do jornal aberto: no Geral vale para todos que não têm o seu; num setor, só para ele.
-  const temaAtualId = ehSetor ? temaDoSetor(jornalSel) : temaDigital
-  const escolherTema = (id) => {
-    if (ehSetor) setTemasSetor((atual) => ({ ...atual, [jornalSel]: id }))
-    else setTemaDigital(id)
-  }
-  useEffect(() => { salvarRascunho({ jornal: jornalSel, tema: temaDigital, temasSetor, temasV: 2 }) }, [jornalSel, temaDigital, temasSetor])
+
+  const [publicadoEm, setPublicadoEm] = useState(publicado.publicadoEm || null)
   const [publicando, setPublicando] = useState(false)
   const [site, setSite] = useState({ online: null, protegido: false, erro: null })
   const [senhaPublicacao, setSenhaPublicacao] = useState(lerSenhaPublicacao)
@@ -143,19 +144,19 @@ export default function Jornal() {
     return () => { ativo = false }
   }, [])
   const linkEncarte = linkDoEncarte(site.enderecos)
-  const [linkCopiado, setLinkCopiado] = useState(false)
-  const copiarLink = async () => {
-    try { await navigator.clipboard.writeText(linkEncarte); setLinkCopiado(true); setTimeout(() => setLinkCopiado(false), 2500) } catch (_) { window.prompt('Copie o link da tag NFC:', linkEncarte) }
+  const [copiado, setCopiado] = useState(null) // 'link' | 'precos'
+  const copiar = async (qual, texto) => {
+    try { await navigator.clipboard.writeText(texto); setCopiado(qual); setTimeout(() => setCopiado(null), 2500) } catch (_) { window.prompt('Copie:', texto) }
   }
-  const [fundoDigital, setFundoDigital] = useState(null)
-  useEffect(() => { setFundoDigital(lerFundoTemplate(temaAtualId)) }, [temaAtualId])
+  const [fundo, setFundo] = useState(null)
+  useEffect(() => { setFundo(lerFundoTemplate(temaId)) }, [temaId])
   const trocarFundo = async (arquivo) => {
     if (!arquivo) return
     try {
       const dataUrl = await prepararFundoTemplate(arquivo)
-      if (!salvarFundoTemplate(temaAtualId, dataUrl)) return toast('Imagem grande demais para guardar neste aparelho.', 'erro')
-      setFundoDigital(dataUrl)
-      toast('Fundo do template salvo para este tema.')
+      if (!salvarFundoTemplate(temaId, dataUrl)) return toast('Imagem grande demais para guardar neste aparelho.', 'erro')
+      setFundo(dataUrl)
+      toast('Fundo salvo para esta campanha.')
     } catch (erro) {
       toast(erro.message, 'erro')
     }
@@ -168,7 +169,7 @@ export default function Jornal() {
   useEffect(() => {
     let ativo = true
     const chaveFoto = (p) => `${p.id}|${String(p.imagem || '').slice(-64)}|${p.imagemFonteUrl || ''}`
-    const pendentes = fila.filter((p) => (imagemProdutoPrecisaTratamento(p) || fotoRuimParaJornal(p)) && !fotosTentadas.current.has(chaveFoto(p)))
+    const pendentes = remessaDe(produtos, usuario?.id).filter((p) => (imagemProdutoPrecisaTratamento(p) || fotoRuimParaJornal(p)) && !fotosTentadas.current.has(chaveFoto(p)))
     if (!pendentes.length) return () => { ativo = false }
     ;(async () => {
       for (const produto of pendentes) {
@@ -176,11 +177,14 @@ export default function Jornal() {
         const preparado = await prepararProdutoParaJornal(produto)
         if (!ativo) return
         const mudou = preparado !== produto && (preparado.imagem !== produto.imagem || preparado.imagemTratamento !== produto.imagemTratamento || preparado.imagemFonteUrl !== produto.imagemFonteUrl)
-        if (preparado.imagemTratada && mudou) salvarProduto(preparado)
+        if (preparado.imagemTratada && mudou) {
+          // só a foto: o preço pode ter mudado enquanto ela era preparada
+          salvarProduto({ id: produto.id, ...Object.fromEntries(Object.entries(preparado).filter(([k, v]) => k.startsWith('imagem') && v !== undefined)) })
+        }
       }
     })()
     return () => { ativo = false }
-  }, [fila, salvarProduto])
+  }, [produtos, usuario?.id, salvarProduto])
 
   useEffect(() => {
     if (!historicoParaAbrir) return
@@ -198,232 +202,233 @@ export default function Jornal() {
     return () => { ativo = false; cancelAnimationFrame(timer) }
   }, [historicoParaAbrir, toast])
 
-  // ---- preço para o jornal ----
-  const precoJornal = (p) => {
-    // Vale o preço que a pessoa escreveu; depois, a oferta que ela criou. Nada muda sozinho pela validade.
-    const promo = paraNumero(p.precoPromo)
-    if (promo) return promo
-    const o = ofertaDoProduto(p.id)
-    if (o) return p.precoNormal * (1 - o.desconto / 100)
-    return p.precoNormal
-  }
-  const descJornal = (p) => percentDesc(p.precoNormal, precoJornal(p))
-
-  const incluir = (id) => !excluidos.has(id)
-  const toggleIncluir = (id) =>
-    setExcluidos((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
-
   // ---- montagem do conteúdo ----
-  const ativos = fila.filter((p) => incluir(p.id))
-  const ativosDoModelo = ehMercado ? ativos.filter((p) => noMercadoEncarte(p)) : ehSetor ? ativos.filter((p) => p.setor === jornalSel) : ativos
-  const vencimento = ativosDoModelo.filter((p) => p.origemFila === 'vencimento')
-  const regulares = ativosDoModelo.filter((p) => p.origemFila !== 'vencimento')
-
-  // Ordem do encarte: ofertas internas primeiro, depois por setor (ordem de SETORES).
   const ordemSetor = (p) => Math.max(0, SETORES.findIndex((s) => s.id === p.setor))
-  const itensJornal = [
-    ...vencimento,
-    ...[...regulares].sort((a, b) => ordemSetor(a) - ordemSetor(b)),
-  ]
-  const itensArte = itensJornal.map((p) => comAjustePadrao({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
-  // O Mercado Encarte sai sempre no formato jornal da semana (um bloco por dia).
-  const layoutAtual = ehMercado ? 'jornal' : layoutDigital
+  // Remessa toda de um setor: já vai para o jornal daquele setor (o geral trocaria o site inteiro).
+  const setorUnico = remessa.length && remessa.every((p) => p.setor && p.setor === remessa[0].setor) ? remessa[0].setor : null
+  useEffect(() => {
+    if (setorUnico && !destinoTocado.current && destino === 'geral') setDestinoEstado(setorUnico)
+  }, [setorUnico, destino])
+  const itensJornal = [...itensDoDestino(remessa, destino)].sort((a, b) => ordemSetor(a) - ordemSetor(b))
+  const foraDoSetor = ehSetor ? remessa.filter((p) => p.setor !== destino) : []
+  const paraArte = (p) => comAjustePadrao({
+    ...p,
+    precoJornal: precoNoJornal(p),
+    descontoJornal: percentDesc(p.precoNormal, precoNoJornal(p)),
+    encarteMercadoDia: ehMercado ? diaEstrela : null,
+  })
+  const itensArte = itensJornal.map(paraArte)
+  // O jornal da estrela sai sempre no formato jornal da semana.
+  const layoutAtual = ehMercado ? 'jornal' : layout
   const paginasJornal = paginarEncarte(itensArte, layoutAtual)
   const tamanho = tamanhoPagina(layoutAtual)
-  const temaArte = temaCampanhaById(temaAtualId)
-  const nomeJornal = ehMercado ? MERCADO_ENCARTE.nome : ehSetor ? setorById(jornalSel).nome : 'Geral'
-  const contagemSetor = (id) => ativos.filter((p) => p.setor === id).length
-  // No Mercado Encarte a lista mostra a fila toda, para escolher na estrela o que entra hoje.
-  const filaDoPainel = ehSetor && !ehMercado ? fila.filter((p) => p.setor === jornalSel) : fila
-  const totalMercado = ativos.filter((p) => noMercadoEncarte(p)).length
-  const diaDoMercado = (produto, dia) => {
-    salvarProduto({ id: produto.id, encarteMercadoDia: dia })
-    toast(dia ? `${produto.nome}: oferta de ${rotuloDia(dia)} no Mercado Encarte.` : `${produto.nome} saiu do Mercado Encarte.`)
-  }
-  const alternarMercado = (produto) => diaDoMercado(produto, noMercadoEncarte(produto) ? null : dataISOmaisDias(0))
-  // Segunda lista: os produtos com estrela ficam separados da fila normal.
-  const estreladosPainel = filaDoPainel.filter((p) => noMercadoEncarte(p))
-    .sort((a, b) => String(a.encarteMercadoDia).localeCompare(String(b.encarteMercadoDia)))
-  const outrosPainel = filaDoPainel.filter((p) => !noMercadoEncarte(p))
-  const linhaPainel = (p) => {
-    const setorP = setorById(p.setor)
-    const estrelado = noMercadoEncarte(p)
-    const incluido = incluir(p.id)
-    return (
-      <li key={p.id} className="flex min-w-0 items-center gap-2.5 py-2">
-        <input type="checkbox" checked={incluido} onChange={() => toggleIncluir(p.id)} aria-label={`Incluir ${p.nome} neste jornal`} className="h-5 w-5 shrink-0 accent-navy" />
-        <span className={`flex min-w-0 flex-1 items-center gap-2.5 ${incluido ? '' : 'opacity-50'}`}>
-          <ProdutoThumb produto={p} size={36} />
-          <span className="min-w-0 flex-1">
-            <span className="block break-words text-sm font-semibold leading-snug text-ink">{p.nome}</span>
-            <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-ink-soft">
-              {(!ehSetor || ehMercado) && <span className="font-semibold" style={{ color: setorP.corTag || setorP.cor }}>{setorP.nome}</span>}
-              <span className="num-tab">{formatBRL(precoJornal(p))}</span>
-              {estrelado && <span className="rounded bg-bengala px-1 font-semibold text-white">{rotuloDia(p.encarteMercadoDia)}</span>}
-              {p.origemFila === 'vencimento' && <span className="font-semibold text-[#b4530f]">oferta interna</span>}
-            </span>
-          </span>
-        </span>
-        <BotaoEstrela ativo={estrelado} onClick={() => alternarMercado(p)} nome={p.nome} />
-        <button type="button" onClick={() => setProdutoEditandoGerador({ ...p })} aria-label={`Editar ${p.nome}`} className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border-2 border-navy/35 bg-white px-2.5 text-sm font-bold text-navy hover:bg-cream"><Icon name="Pencil" size={15} /> Editar</button>
-      </li>
-    )
-  }
+  const temaArte = temaCampanhaById(temaId)
+  const validadeDe = ehMercado ? diaEstrela : periodoDe
+  const validadeAte = ehMercado ? diaEstrela : periodoAte && periodoAte >= periodoDe ? periodoAte : periodoDe
+  const encarteArte = { periodoDe: validadeDe, periodoAte: validadeAte }
+  const lojaAtual = (store.lojas || []).find((l) => l.id === store.lojaAtiva) || (store.lojas || [])[0]
+  const contagemSetor = (id) => remessa.filter((p) => p.setor === id).length
   const proximosDias = Array.from({ length: 7 }, (_, i) => dataISOmaisDias(i))
-  // O site do cliente sempre recebe todos os produtos; cada setor vira uma aba com o template dele.
-  const ordenarParaJornal = (lista) => [
-    ...lista.filter((p) => p.origemFila === 'vencimento'),
-    ...lista.filter((p) => p.origemFila !== 'vencimento').sort((a, b) => ordemSetor(a) - ordemSetor(b)),
-  ].map((p) => comAjustePadrao({ ...p, precoJornal: precoJornal(p), descontoJornal: descJornal(p) }))
-  const bandas = []
-  const validadeDe = periodoDe
-  const validadeAte = periodoAte && periodoAte >= periodoDe ? periodoAte : periodoDe
-  const codigosRepetidos = new Set(
-    itensJornal
-      .map((p) => p.codigoBarras)
-      .filter((codigo, indice, lista) => codigo && lista.indexOf(codigo) !== indice)
-  )
-  const problemasPDF = [
+
+  const semPreco = remessa.filter((p) => !(precoNoJornal(p) > 0))
+  // Erros dos campos de preço do passo 2 (o que está escrito e ainda não foi gravado).
+  const [errosPreco, setErrosPreco] = useState({})
+  const marcarErro = useCallback((id, erro) => setErrosPreco((atual) => ((atual[id] || null) === erro ? atual : { ...atual, [id]: erro })), [])
+  const linhaComErro = remessa.find((p) => errosPreco[p.id])
+  const problemas = [
     ...itensJornal.filter((p) => !p.nome?.trim()).map(() => ({ nivel: 'erro', texto: 'Existe um produto sem nome.' })),
-    ...itensJornal.filter((p) => !(Number(p.precoNormal) > 0)).map((p) => ({ nivel: 'erro', texto: `${p.nome}: informe um preço válido.` })),
-    ...itensJornal.filter((p) => !p.imagem).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: será publicado sem imagem.` })),
-    ...itensJornal.filter((p) => p.imagem && !imagemCompativelComPDF(p.imagem)).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: a imagem pode não aparecer na impressão.` })),
-    ...itensJornal.filter((p) => p.imagem && imagemProdutoPrecisaTratamento(p)).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: imagem ainda não foi padronizada; a exportação está liberada.` })),
-    ...itensJornal.filter((p) => p.imagem && p.imagemAltaResolucao === false).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: imagem com resolução baixa; a exportação está liberada.` })),
-    ...[...codigosRepetidos].map((codigo) => ({ nivel: 'aviso', texto: `Código ${codigo} aparece mais de uma vez no jornal.` })),
+    ...itensJornal.filter((p) => !(precoNoJornal(p) > 0)).map((p) => ({ nivel: 'erro', texto: `${p.nome}: falta o preço.` })),
+    ...itensJornal.filter((p) => !p.imagem).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: está sem foto.` })),
+    ...itensJornal.filter((p) => p.imagem && !imagemCompativelComPDF(p.imagem)).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: a foto pode não sair na impressão.` })),
+    ...itensJornal.filter((p) => p.imagem && p.imagemAltaResolucao === false).map((p) => ({ nivel: 'aviso', texto: `${p.nome}: foto com resolução baixa.` })),
   ]
-  const bloqueiosPDF = problemasPDF.filter((p) => p.nivel === 'erro')
+  const bloqueios = problemas.filter((p) => p.nivel === 'erro')
+  const ofertas = itensJornal.filter((p) => paraNumero(p.precoPromo))
+  const listaDePrecos = itensJornal
+    .map((p) => `${p.codigoBarras ? `${p.codigoBarras}  ` : ''}${p.nome}: ${formatBRL(precoNoJornal(p))}`)
+    .join('\n')
 
+  // ---- passos ----
+  const irPara = (i) => {
+    setPasso(i)
+    requestAnimationFrame(() => passosRef.current?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }))
+  }
+  const focarBusca = () => setTimeout(() => document.querySelector('#scanner-jornal input')?.focus(), 80)
+  const irParaScanner = () => { setTela('montar'); irPara(0); focarBusca() }
+  const podeIr = (i) => i === 0 || remessa.length > 0
+  const avancar = () => {
+    if (!remessa.length) { focarBusca(); return toast('Bipe ao menos um produto para continuar.', 'erro') }
+    if (passo === 1 && linhaComErro) return toast(`${linhaComErro.nome}: ${errosPreco[linhaComErro.id]}`, 'erro')
+    if (passo === 1 && semPreco.length) return toast(`Falta o preço de ${semPreco[0].nome}.`, 'erro')
+    irPara(Math.min(PASSOS.length - 1, passo + 1))
+  }
+  // Remessa esvaziada por outro aparelho: volta para o bipe.
+  useEffect(() => { if (passo > 0 && !remessa.length) setPasso(0) }, [passo, remessa.length])
+  // O que está no ar muda de passo em diante: conferência do caixa vale só para esta lista.
+  const assinaturaPrecos = itensJornal.map((p) => `${p.id}:${precoNoJornal(p)}`).join('|')
+  useEffect(() => { setCaixaConferido(false) }, [assinaturaPrecos])
 
+  const tirarDoJornal = (p) => {
+    salvarProduto({ id: p.id, remessaPor: null, remessaEm: null })
+    removerDaFila(p.id)
+    toast(`${p.nome} saiu do jornal.`, 'info')
+  }
+  const comecarOutro = () => {
+    remessa.forEach((p) => salvarProduto({ id: p.id, remessaPor: null, remessaEm: null }))
+    setConfirmarNovo(false)
+    setAcabouDePublicar(false)
+    setImpresso(false)
+    destinoTocado.current = false
+    setDestinoEstado('geral')
+    setTrocarTudo(false)
+    setTitulo(TITULO_PADRAO)
+    setPeriodoDe(dataISOmaisDias(0))
+    setPeriodoAte(dataISOmaisDias(6))
+    setDiaEstrela(dataISOmaisDias(0))
+    setTela('montar')
+    irPara(0)
+    focarBusca()
+  }
+
+  // ---- imprimir e salvar ----
   const criarSnapshot = () => ({
     titulo,
-    tipo: ehSetor ? 'setor' : 'geral',
-    setor: ehSetor ? jornalSel : null,
+    tipo: ehSetor ? 'setor' : ehMercado ? 'estrela' : 'geral',
+    setor: ehSetor ? destino : null,
     validadeDe,
     validadeAte,
     totalItens: itensJornal.length,
     totalPaginas: paginasJornal.length,
-    temaArte: temaAtualId,
+    temaArte: temaId,
     escalaLogo,
     layoutArte: layoutAtual,
-    fundoArte: fundoDigital,
-    produtos: itensJornal.map((produto) => ({
-      ...produto,
-      precoJornalCalculado: precoJornal(produto),
-      descontoJornalCalculado: descJornal(produto),
-    })),
+    fundoArte: fundo,
+    produtos: itensArte.map((p) => ({ ...p, precoJornalCalculado: p.precoJornal, descontoJornalCalculado: p.descontoJornal })),
   })
 
-  const exportar = async () => {
-    setMostrarRevisao(true)
-    if (bloqueiosPDF.length) {
+  const imprimir = async () => {
+    if (bloqueios.length) {
+      setMostrarRevisao(true)
       requestAnimationFrame(() => revisaoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
-      const primeiraPendencia = bloqueiosPDF[0].texto
-      toast(`Impressão não aberta: ${primeiraPendencia} Corrija ou retire o produto da fila.`, 'erro')
-      return
+      return toast(`Antes de imprimir: ${bloqueios[0].texto}`, 'erro')
     }
     setExportando(true)
-    setPdfPronto(null)
     try {
       salvarJornal(criarSnapshot())
       await imprimirPaginas(pageRefs.current.slice(0, paginasJornal.length), titulo)
-      setPdfPronto({ titulo, paginas: paginasJornal.length })
-      toast('Jornal enviado para a impressão.', 'info')
+      setImpresso(true)
     } catch (e) {
-      console.error('Erro ao exportar o jornal:', e)
+      console.error('Erro ao imprimir o jornal:', e)
       toast(e?.message || 'Não foi possível imprimir. Recarregue a página e tente novamente.', 'erro')
     } finally {
       setExportando(false)
     }
   }
 
-  const lojaAtual = (store.lojas || []).find((l) => l.id === store.lojaAtiva) || (store.lojas || [])[0]
-  const itensParaArte = () => itensArte
-  // O Mercado Encarte vale do primeiro ao último dia marcado.
-  const diasMercado = ativosDoModelo.map((p) => p.encarteMercadoDia).filter(Boolean).sort()
-  const encarteArte = ehMercado && diasMercado.length ? { periodoDe: diasMercado[0], periodoAte: diasMercado[diasMercado.length - 1] } : { periodoDe: validadeDe, periodoAte: validadeAte }
-  const salvarPrecoDaPrevia = () => {
-    const normal = Number(String(precoEditando.normal).replace(',', '.'))
-    const promo = String(precoEditando.promo).trim() ? Number(String(precoEditando.promo).replace(',', '.')) : null
-    if (!(normal > 0)) return toast('Informe o preço normal.', 'erro')
-    if (promo !== null && !(promo > 0 && promo < normal)) return toast('O preço da oferta precisa ser menor que o normal.', 'erro')
-    if (usarComoPadrao) {
-      // Vira o ajuste de todos os produtos sem ajuste próprio; este produto passa a seguir o padrão.
-      store.salvarConfig({ ajustePadraoArte: ajusteEditando })
-      salvarProduto({ id: seloEditando.id, precoNormal: normal, precoPromo: promo, ajusteArte: null })
-    } else {
-      salvarProduto({ id: seloEditando.id, precoNormal: normal, precoPromo: promo, ajusteArte: ajusteEditando })
-    }
-    toast(`${seloEditando.nome}: ${promo ? `de ${formatBRL(normal)} por ${formatBRL(promo)}` : formatBRL(normal)}.`)
-    setSeloEditando(null)
-  }
-  const trocarSelo = (produto, seloOferta) => {
-    salvarProduto({ id: produto.id, seloOferta })
-    const selo = SELOS_OFERTA.find((s) => s.id === seloOferta)
-    toast(selo?.nenhum ? `${produto.nome}: sem selo.` : `${produto.nome}: selo "${selo?.texto}".`)
-  }
-  // Copia o selo para todos os produtos do jornal aberto.
-  const seloEmTodos = (seloOferta) => {
-    const id = seloOferta || 'nenhum'
-    ativosDoModelo.filter((p) => (p.seloOferta || 'nenhum') !== id).forEach((p) => salvarProduto({ id: p.id, seloOferta: id }))
-    const selo = SELOS_OFERTA.find((s) => s.id === id)
-    toast(selo?.nenhum ? `Todos os ${ativosDoModelo.length} produtos do jornal ficaram sem selo.` : `Selo "${selo?.texto}" em todos os ${ativosDoModelo.length} produtos do jornal.`)
-  }
-
-  // Estilo do preço no jornal todo: o predefinido vale para todos e os estilos próprios saem.
-  const estiloPrecoNoJornalTodo = (estiloPreco) => {
-    store.salvarConfig({ estiloPrecoPadrao: estiloPreco })
-    fila.filter((p) => p.estiloPreco).forEach((p) => salvarProduto({ id: p.id, estiloPreco: null }))
-  }
-  const trocarEstiloPreco = (produto, estiloPreco, noJornalTodo) => {
-    if (noJornalTodo) estiloPrecoNoJornalTodo(estiloPreco)
-    else salvarProduto({ id: produto.id, estiloPreco })
-    toast(noJornalTodo ? `Preço "${estiloPrecoById(estiloPreco).nome}" no jornal todo.` : `${produto.nome}: preço "${estiloPrecoById(estiloPreco).nome}".`)
-  }
-  const alternarEstiloNoJornalTodo = (produto, estilo, ligar) => {
-    if (ligar) estiloPrecoNoJornalTodo(estilo)
-    else salvarProduto({ id: produto.id, estiloPreco: estilo })
-    toast(ligar ? `Preço "${estiloPrecoById(estilo).nome}" no jornal todo.` : `O estilo do preço agora vale só para ${produto.nome}.`)
-  }
-
-  const publicarDigital = async () => {
-    if (!ativos.length) return toast('Adicione ao menos um produto ao jornal.', 'erro')
-    const todos = ordenarParaJornal(ativos)
-    const setoresDoJornal = [...new Set(todos.map((p) => p.setor).filter(Boolean)), ...(todos.some((p) => noMercadoEncarte(p)) ? [MERCADO_ENCARTE.id] : [])]
-    const dados = {
-      titulo,
-      mercado: config.nomeMercado,
-      periodoDe: validadeDe,
-      periodoAte: validadeAte,
-      tema: temaDigital,
-      // só os setores deste jornal, já resolvidos, mais as escolhas próprias dos outros
-      temasSetor: { ...temasSetor, ...Object.fromEntries(setoresDoJornal.map((id) => [id, temaDoSetor(id)])) },
-      temasV: 2,
-      // Fundo enviado só vale para o template dele (antes o fundo do Geral ia para todas as abas).
-      fundos: Object.fromEntries([temaDigital, ...setoresDoJornal.map(temaDoSetor)]
-        .map((id) => [id, lerFundoTemplate(id)]).filter(([, fundo]) => fundo)),
-      escalaLogo,
-      mostrarGeral: config.siteMostrarGeral !== false,
-      mostrarMercado: config.siteMostrarMercado !== false,
-      pausados,
-      layout: layoutDigital,
-      fundo: lerFundoTemplate(temaDigital),
-      loja: lojaAtual,
-      itens: todos.map(comEstiloPadrao),
-    }
-    const publicado = publicarEncarte(dados)
-    setPublicadoEm(publicado.publicadoEm)
+  // ---- publicar ----
+  const publicar = async () => {
+    if (!itensJornal.length) return toast('Este jornal está sem produtos.', 'erro')
+    if (bloqueios.length) { setMostrarRevisao(true); return toast(bloqueios[0].texto, 'erro') }
+    if (!caixaConferido) return toast('Antes, marque que os preços já estão no caixa.', 'erro')
     setPublicando(true)
     try {
+      const noAr = await lerEncarteNoAr()
+      const montado = montarPublicacao({ noAr, itens: itensArte, destino, tema: temaId, fundo, periodoDe: validadeDe, periodoAte: validadeAte, layout, escalaLogo, trocarTudo })
+      const dados = {
+        ...montado,
+        titulo: destino === 'geral' ? titulo : noAr?.titulo || titulo,
+        mercado: config.nomeMercado,
+        mostrarGeral: config.siteMostrarGeral !== false,
+        mostrarMercado: config.siteMostrarMercado !== false,
+        pausados,
+        loja: lojaAtual,
+        marca: marcaPublica(config.mercado),
+      }
       const r = await enviarEncarteAoSite(dados)
+      const local = publicarEncarte(dados)
+      setPublicadoEm(r.publicadoEm || local.publicadoEm)
       setSite((s) => ({ ...s, online: true, erro: null, publicadoEm: r.publicadoEm }))
+      // A fila acompanha o que está no ar (a aba Cartazes usa a mesma lista).
+      const ids = new Set(itensJornal.map((p) => p.id))
+      const saem = produtos.filter((p) => p.naFila && !ids.has(p.id) && (destino === 'geral' ? !p.remessaPor || p.remessaPor === usuario?.id : ehSetor && p.setor === destino))
+      if (saem.length) limparFila(saem.map((p) => p.id))
+      if (ehMercado) {
+        produtos.filter((p) => p.encarteMercadoDia && !ids.has(p.id)).forEach((p) => salvarProduto({ id: p.id, encarteMercadoDia: null }))
+        itensJornal.forEach((p) => salvarProduto({ id: p.id, encarteMercadoDia: diaEstrela }))
+      }
+      salvarJornal(criarSnapshot())
       setAcabouDePublicar(true)
-      toast(`Publicado no site: ${r.itens} produtos. Quem estiver com o link aberto já vê a nova versão.`)
+      toast(`${nomeDestino} no ar com ${plural(itensJornal.length, 'produto', 'produtos')}.`)
     } catch (erro) {
       setSite((s) => ({ ...s, online: erro.codigo !== 'offline', protegido: s.protegido || erro.codigo === 'senha', erro: erro.message }))
-      toast(`Salvo só neste aparelho. ${erro.message}`, 'erro')
+      toast(erro.message, 'erro')
     } finally {
       setPublicando(false)
+    }
+  }
+
+  // Setores de um jornal salvo: o do setor, ou os dos produtos (geral e estrela).
+  const setoresDoJornal = (jornal) => (jornal.tipo === 'setor' && jornal.setor ? [jornal.setor] : [...new Set((jornal.produtos || []).map((p) => p.setor).filter(Boolean))])
+  // Desativar: liga o "Ajustando ofertas" dos setores do jornal no site, na hora. Ativar desliga.
+  const desativarJornal = async (jornal, desativar) => {
+    const setores = setoresDoJornal(jornal)
+    const novos = desativar ? [...new Set([...pausados, ...setores])] : pausados.filter((id) => !setores.includes(id))
+    store.salvarConfig({ setoresPausados: novos })
+    setMudandoAjuste(setores[0])
+    try {
+      await atualizarPausadosNoSite(novos)
+      toast(desativar ? 'Desativado: o site mostra "Ajustando ofertas" nesse setor.' : 'Ativado: as ofertas voltaram ao site.', desativar ? 'info' : 'sucesso')
+    } catch (erro) {
+      toast(`${erro.message} Vale na próxima publicação.`, 'erro')
+    } finally {
+      setMudandoAjuste(null)
+    }
+  }
+  // Editar: volta ao gerador com os produtos, preços, campanha e período daquele jornal.
+  const editarJornal = (jornal) => {
+    remessa.forEach((p) => salvarProduto({ id: p.id, remessaPor: null, remessaEm: null }))
+    const base = Date.now()
+    const existentes = new Set(produtos.map((p) => p.id))
+    const lista = (jornal.produtos || []).filter((p) => existentes.has(p.id))
+    lista.forEach((p, i) => salvarProduto({
+      id: p.id,
+      remessaPor: usuario?.id,
+      remessaEm: new Date(base + i).toISOString(),
+      precoPromo: p.precoPromo ?? (p.precoJornalCalculado != null && Number(p.precoJornalCalculado) < Number(p.precoNormal) ? p.precoJornalCalculado : null),
+      seloOferta: p.seloOferta || null,
+    }))
+    destinoTocado.current = true
+    setDestinoEstado(jornal.tipo === 'setor' && jornal.setor ? jornal.setor : jornal.tipo === 'estrela' ? MERCADO_ENCARTE.id : 'geral')
+    if (jornal.temaArte) setTemaId(jornal.temaArte)
+    if (jornal.validadeDe) { setPeriodoDe(jornal.validadeDe); setDiaEstrela(jornal.validadeDe) }
+    if (jornal.validadeAte) setPeriodoAte(jornal.validadeAte)
+    if (jornal.layoutArte) setLayout(jornal.layoutArte)
+    if (jornal.escalaLogo) setEscalaLogo(jornal.escalaLogo)
+    setAcabouDePublicar(false)
+    setTela('montar')
+    irPara(1)
+    const faltam = (jornal.produtos || []).length - lista.length
+    toast(faltam > 0 ? `Jornal aberto para editar. ${plural(faltam, 'produto não existe', 'produtos não existem')} mais no cadastro.` : 'Jornal aberto para editar. Mude o que precisar e publique de novo.')
+  }
+
+  // Tira do site as ofertas de um jornal salvo (o resto do site continua). O jornal fica no histórico.
+  const retirarDoSite = async (jornal) => {
+    setRetirando(jornal.id)
+    try {
+      const noAr = await lerEncarteNoAr()
+      const ids = new Set((jornal.produtos || []).map((p) => p.id))
+      const antes = noAr?.itens || []
+      const tira = (p) => ids.has(p.id) && (jornal.tipo !== 'setor' || p.setor === jornal.setor)
+      const itens = antes.filter((p) => !tira(p))
+      if (!noAr || itens.length === antes.length) { toast('As ofertas deste jornal já não estão no site.', 'info'); return }
+      const ficam = new Set(itens.map((p) => p.setor))
+      const limpar = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([s]) => s === MERCADO_ENCARTE.id || ficam.has(s)))
+      await enviarEncarteAoSite({ ...noAr, itens, temasSetor: limpar(noAr.temasSetor), periodosSetor: limpar(noAr.periodosSetor) })
+      toast(`${plural(antes.length - itens.length, 'oferta saiu', 'ofertas saíram')} do site.`)
+    } catch (erro) {
+      toast(erro?.message || 'Não deu para retirar agora. Tente de novo.', 'erro')
+    } finally {
+      setRetirando(null)
     }
   }
 
@@ -445,48 +450,55 @@ export default function Jornal() {
     }
   }
 
-  // Produtos que saem da fila no "Começar jornal novo": no Geral, a fila toda; num setor, só os dele;
-  // no Mercado Encarte, só os com estrela.
-  const filaDoNovo = ehMercado ? fila.filter((p) => noMercadoEncarte(p)) : ehSetor ? fila.filter((p) => p.setor === jornalSel) : fila
-  const comecarJornalNovo = () => {
-    const n = filaDoNovo.length
-    limparFila(filaDoNovo.map((p) => p.id))
-    setExcluidos(new Set())
-    setPdfPronto(null)
-    setConfirmarNovo(false)
-    irPara(1)
-    toast(`Fila limpa: ${plural(n, 'produto saiu', 'produtos saíram')}. Bipe os produtos do jornal novo.`, 'sucesso')
-    setTimeout(() => document.querySelector('#scanner-jornal input')?.focus(), 80)
+  // ---- edição de produto ----
+  const trocarSelo = (produto, seloOferta) => salvarProduto({ id: produto.id, seloOferta })
+  const seloEmTodos = (seloOferta) => {
+    const id = seloOferta || 'nenhum'
+    remessa.filter((p) => (p.seloOferta || 'nenhum') !== id).forEach((p) => salvarProduto({ id: p.id, seloOferta: id }))
+    const selo = SELOS_OFERTA.find((s) => s.id === id)
+    toast(selo?.nenhum ? 'Todos os produtos ficaram sem selo.' : `Selo "${selo?.texto}" em todos os produtos.`)
   }
-
-  const salvar = () => {
-    if (!itensJornal.length) return toast('Adicione ao menos um produto ao jornal.', 'erro')
-    salvarJornal(criarSnapshot())
-    toast('Jornal salvo no histórico!')
+  const salvarPrecoDaPrevia = () => {
+    const normal = paraNumero(precoEditando.normal)
+    const promo = String(precoEditando.promo).trim() ? paraNumero(precoEditando.promo) : null
+    if (!(normal > 0)) return toast('Informe o preço normal.', 'erro')
+    if (promo !== null && !(promo > 0 && promo < normal)) return toast('O preço da oferta precisa ser menor que o normal.', 'erro')
+    if (usarComoPadrao) {
+      // Vira o ajuste de todos os produtos sem ajuste próprio; este produto passa a seguir o padrão.
+      store.salvarConfig({ ajustePadraoArte: ajusteEditando })
+      salvarProduto({ id: seloEditando.id, precoNormal: normal, precoPromo: promo, ajusteArte: null })
+    } else {
+      salvarProduto({ id: seloEditando.id, precoNormal: normal, precoPromo: promo, ajusteArte: ajusteEditando })
+    }
+    setSeloEditando(null)
   }
-
-  const abrirJornalSalvo = (jornal) => {
-    setHistoricoParaAbrir({ jornal })
+  const estiloPrecoNoJornalTodo = (estiloPreco) => {
+    store.salvarConfig({ estiloPrecoPadrao: estiloPreco })
+    remessa.filter((p) => p.estiloPreco).forEach((p) => salvarProduto({ id: p.id, estiloPreco: null }))
   }
-
-  const salvarProdutoGerador = () => {
-    if (!produtoEditandoGerador?.nome?.trim()) return toast('Informe o nome do produto.', 'erro')
-    if (!(Number(produtoEditandoGerador.precoNormal) > 0)) return toast('Informe um preço válido.', 'erro')
-    salvarProduto({
-      ...produtoEditandoGerador,
-      estoque: Math.max(0, Number(produtoEditandoGerador.estoque) || 0),
-      precoNormal: Number(produtoEditandoGerador.precoNormal),
-      precoPromo: produtoEditandoGerador.precoPromo ? Number(produtoEditandoGerador.precoPromo) : null,
-      naFila: true,
-    })
-    setProdutoEditandoGerador(null)
-    toast('Produto atualizado no jornal!')
+  const trocarEstiloPreco = (produto, estiloPreco, noJornalTodo) => {
+    if (noJornalTodo) estiloPrecoNoJornalTodo(estiloPreco)
+    else salvarProduto({ id: produto.id, estiloPreco })
+    toast(noJornalTodo ? `Preço "${estiloPrecoById(estiloPreco).nome}" no jornal todo.` : `${produto.nome}: preço "${estiloPrecoById(estiloPreco).nome}".`)
   }
-
-  const trocarImagemProdutoGerador = (arquivo) => {
+  const alternarEstiloNoJornalTodo = (produto, estilo, ligar) => {
+    if (ligar) estiloPrecoNoJornalTodo(estilo)
+    else salvarProduto({ id: produto.id, estiloPreco: estilo })
+    toast(ligar ? `Preço "${estiloPrecoById(estilo).nome}" no jornal todo.` : `O estilo do preço agora vale só para ${produto.nome}.`)
+  }
+  const salvarProdutoEditado = () => {
+    const normal = paraNumero(produtoEditando.precoNormal)
+    const promo = paraNumero(produtoEditando.precoPromo)
+    if (!produtoEditando?.nome?.trim()) return toast('Informe o nome do produto.', 'erro')
+    if (!(normal > 0)) return toast('Informe um preço válido.', 'erro')
+    if (promo && promo >= normal) return toast('O preço da oferta precisa ser menor que o normal.', 'erro')
+    salvarProduto({ ...produtoEditando, precoNormal: normal, precoPromo: promo || null })
+    setProdutoEditando(null)
+  }
+  const trocarImagem = (arquivo) => {
     if (!arquivo) return
     const leitor = new FileReader()
-    leitor.onload = () => setProdutoEditandoGerador((produto) => ({
+    leitor.onload = () => setProdutoEditando((produto) => ({
       ...produto,
       imagem: String(leitor.result || ''),
       imagemManual: true,
@@ -499,439 +511,339 @@ export default function Jornal() {
     leitor.readAsDataURL(arquivo)
   }
 
-  // ---- passo a passo do gerador ----
-  const passos = [
-    { id: 'jornal', titulo: 'Escolher o jornal', resumo: nomeJornal, ajuda: 'Escolha se vai mexer no Jornal geral, no Mercado Encarte ou no jornal de um setor.' },
-    { id: 'produtos', titulo: 'Editar produtos e preços', ajuda: `Bipe para adicionar. Toque em Editar para mudar preço, nome, foto ou setor. Desmarque para tirar do jornal ${nomeJornal}.`, resumo: plural(ativosDoModelo.length, 'produto', 'produtos') },
-    { id: 'visual', titulo: 'Mudar o visual', resumo: temaArte.nome, ajuda: ehSetor ? `Troque o template, o layout e o logo do jornal ${nomeJornal}. Para mudar o de outro setor, volte em Escolher o jornal.` : 'O template daqui vale para todos os setores. Para mudar só um, escolha o setor no passo 1 e volte aqui.' },
-    { id: 'publicar', titulo: 'Publicar e imprimir', ajuda: 'Confira, publique no site do cliente e imprima o jornal.', resumo: `${formatDataCurta(validadeDe)} a ${formatDataCurta(validadeAte)}` },
-  ]
-  const irPara = (i) => {
-    setPasso(i)
-    requestAnimationFrame(() => passosRef.current?.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }))
-  }
-  const irParaScanner = () => {
-    setAba('gerar')
-    irPara(1)
-    setTimeout(() => document.querySelector('#scanner-jornal input')?.focus(), 80)
-  }
-  const navegacao = (
-    <div className="mt-6 flex items-center justify-between gap-2 border-t border-ink-soft/10 pt-4">
-      {passo > 0
-        ? <Botao variante="contorno" onClick={() => irPara(passo - 1)}><Icon name="ArrowLeft" size={16} /> Voltar</Botao>
-        : <span />}
-      {passo < passos.length - 1 && (
-        <Botao variante="escuro" onClick={() => irPara(passo + 1)}>
-          Próximo: {passos[passo + 1].titulo} <Icon name="ArrowRight" size={16} />
-        </Botao>
+  const textoDestino = destino === 'geral'
+    ? (trocarTudo ? 'Começa do zero: tira do site os setores que não estão aqui. O jornal da estrela continua.' : 'Troca só os setores destes produtos. Os outros setores que já estão no site continuam.')
+    : ehMercado
+      ? 'Troca só o jornal da estrela. O geral e os setores continuam.'
+      : `Troca só ${nomeDestino}. Os outros setores continuam.`
+  const jornalVazio = itensJornal.length === 0
+
+  const previa = (paginas) => paginas.map((itens, indice) => (
+    <div key={indice} className="mx-auto w-full max-w-[680px] space-y-1.5">
+      {paginasJornal.length > 1 && (
+        <div className="flex items-center justify-between px-1 text-xs text-ink-soft">
+          <span className="font-semibold text-ink">Página {indice + 1} de {paginasJornal.length}</span>
+          <span>{plural(itensDaPagina(itens, layoutAtual).length, 'produto', 'produtos')}</span>
+        </div>
       )}
+      <div className="overflow-hidden rounded-xl shadow-[0_10px_30px_rgba(8,43,79,.14)] ring-1 ring-black/5">
+        <Escalado largura={tamanho.largura} altura={tamanho.altura}>
+          <PaginaEncarte tema={temaArte} pagina={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundo} layout={layoutAtual} numero={indice + 1} total={paginasJornal.length} onAbrir={abrirProdutoDaPrevia} escalaLogo={escalaLogo} />
+        </Escalado>
+      </div>
+    </div>
+  ))
+
+  const rodape = (
+    <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 flex items-center gap-2 rounded-2xl border border-ink-soft/15 bg-white p-2.5 shadow-[0_-6px_24px_rgba(8,43,79,.12)] md:bottom-4">
+      {passo > 0 && <Botao variante="contorno" className="min-h-12 px-3 sm:px-4" onClick={() => irPara(passo - 1)} aria-label="Voltar um passo"><Icon name="ArrowLeft" size={18} /> <span className="hidden sm:inline">Voltar</span></Botao>}
+      <Botao className="min-h-12 min-w-0 flex-1 text-base" onClick={avancar} disabled={!remessa.length}>
+        {passo === 0 && remessa.length ? `Continuar com ${plural(remessa.length, 'produto', 'produtos')}` : `Continuar: ${PASSOS[passo + 1]?.titulo || ''}`} <Icon name="ArrowRight" size={18} />
+      </Botao>
     </div>
   )
-  const vazioDoPainel = ehMercado
-    ? 'Nenhum produto na fila ainda. Bipe acima e ligue a estrela para ele entrar no Mercado Encarte.'
-    : ehSetor
-      ? `Nenhum produto de ${nomeJornal} na fila. Bipe um produto desse setor, ou corrija o setor de um produto no lápis.`
-      : 'Nenhum produto na fila ainda. Bipe o primeiro acima.'
-  const temProblema = bloqueiosPDF.length > 0
-  const statusRevisao = temProblema
-    ? plural(bloqueiosPDF.length, 'item impede a impressão', 'itens impedem a impressão')
-    : problemasPDF.length
-      ? `${plural(problemasPDF.length, 'aviso', 'avisos')}, impressão liberada`
-      : 'Tudo certo para publicar e imprimir'
 
   return (
-    <div className="space-y-5">
-      <Abas
-        rotulo="Seções do jornal"
-        valor={aba}
-        onChange={setAba}
-        itens={[
-          { id: 'gerar', rotulo: 'Montar jornal', rotuloCurto: 'Montar', icone: 'LayoutTemplate' },
-          { id: 'artes', rotulo: 'Artes para redes sociais', rotuloCurto: 'Artes', icone: 'Images' },
-          { id: 'historico', rotulo: 'Histórico', icone: 'History', badge: jornais.length },
-        ]}
-      />
-
-      {/* ============ MONTAR (passo a passo) ============ */}
-      {aba === 'gerar' && (
-        <div className="space-y-5">
-          <ol ref={passosRef} className="grid scroll-mt-4 grid-cols-2 gap-2 md:grid-cols-4" aria-label="Passos para montar o jornal">
-            {passos.map((p, i) => {
+    <div className="space-y-4">
+      {tela !== 'montar' ? (
+        <Botao variante="contorno" onClick={() => setTela('montar')}><Icon name="ArrowLeft" size={17} /> Voltar ao jornal</Botao>
+      ) : (
+        <>
+          <ol ref={passosRef} className="grid scroll-mt-20 grid-cols-4 gap-1.5 md:gap-2" aria-label="Passos para montar o jornal">
+            {PASSOS.map((p, i) => {
               const atual = passo === i
               const feito = i < passo
               return (
-                <li key={p.id} className="min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => irPara(i)}
-                    aria-current={atual ? 'step' : undefined}
-                    className={`flex h-full w-full min-w-0 flex-col items-start gap-1.5 rounded-xl border-2 px-3 py-3 text-left shadow-[0_2px_0_rgba(8,43,79,.18)] md:flex-row md:items-center md:gap-3 ${atual ? 'border-navy bg-navy text-white' : 'border-navy/30 bg-white text-ink hover:border-ink-soft/40'}`}
-                  >
-                    <span className={`num-tab flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${atual ? 'bg-offer text-navy' : feito ? 'bg-success text-white' : 'bg-cream-200 text-ink-soft'}`}>
-                      {feito ? <Icon name="Check" size={15} strokeWidth={2.5} /> : i + 1}
+                <li key={p.titulo} className="min-w-0">
+                  <button type="button" onClick={() => irPara(i)} disabled={!podeIr(i)} aria-current={atual ? 'step' : undefined}
+                    className={`flex h-full w-full min-w-0 flex-col items-center gap-1 rounded-xl border-2 px-1 py-2 text-center disabled:opacity-45 md:flex-row md:gap-3 md:px-3 md:text-left ${atual ? 'border-navy bg-navy text-white' : 'border-navy/25 bg-white text-ink'}`}>
+                    <span className={`num-tab flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold ${atual ? 'bg-offer text-navy' : feito ? 'bg-success text-white' : 'bg-cream-200 text-ink-soft'}`}>
+                      {feito ? <Icon name="Check" size={17} strokeWidth={2.75} /> : i + 1}
                     </span>
-                    <span className="block w-full min-w-0">
-                      <span className={`block text-base font-extrabold leading-tight ${atual ? 'text-white' : 'text-navy'}`}>{p.titulo}</span>
-                      <span className={`mt-0.5 block truncate text-sm font-semibold ${atual ? 'text-offer' : 'text-ink-soft'}`}>{p.resumo}</span>
-                    </span>
+                    <span className={`text-[13px] font-extrabold leading-tight md:text-base ${atual ? 'text-white' : 'text-navy'}`}>{p.titulo}</span>
                   </button>
                 </li>
               )
             })}
           </ol>
-          <p className="flex items-start gap-2 rounded-xl bg-offer px-4 py-3 text-base font-bold text-navy"><Icon name="Info" size={20} className="mt-0.5 shrink-0" /> {passos[passo].ajuda}</p>
+          <p className="px-1 text-base font-semibold text-ink">{PASSOS[passo].ajuda}</p>
+        </>
+      )}
 
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start">
-            <div className="min-w-0">
-              {/* 1. qual jornal */}
-              {passo === 0 && (
-                <Secao titulo="Qual jornal você vai montar?" descricao="Comece pelo Geral: o visual dele vale para todos os setores. Abra um setor só se quiser um visual diferente nele.">
-                  <div className="grid gap-2">
-                    <Escolha ativo={jornalSel === 'geral'} onClick={() => setJornalSel('geral')} icone="Store" titulo="Jornal geral" descricao="Todos os produtos da fila" extra={ativos.length} />
-                    <Escolha ativo={ehMercado} onClick={() => setJornalSel(MERCADO_ENCARTE.id)} icone="Star" iconeCor="var(--color-bengala)" titulo="Mercado Encarte" descricao="Só os produtos com estrela, dia a dia" extra={totalMercado} />
-                  </div>
-                  <Rotulo className="mt-5">Ou o jornal de um setor</Rotulo>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {SETORES.map((s) => {
-                      const n = contagemSetor(s.id)
-                      const ativo = jornalSel === s.id
-                      return (
-                        <button key={s.id} type="button" onClick={() => setJornalSel(s.id)} aria-pressed={ativo}
-                          className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2.5 text-left text-sm ${ativo ? 'border-navy bg-navy/[0.045] font-bold text-navy shadow-[inset_0_0_0_1px_var(--color-navy)]' : `border-ink-soft/20 bg-white font-semibold hover:border-ink-soft/45 ${n ? 'text-ink' : 'text-ink-soft'}`}`}>
-                          <ImagemSetor id={s.id} size={24} />
-                          <span className="min-w-0 flex-1 truncate">{s.nome}</span>
-                          {pausados.includes(s.id) && <Icon name="Wrench" size={14} className="shrink-0 text-critical" aria-label="Em ajuste no site" />}
-                          <span className={`num-tab shrink-0 text-xs ${n ? 'font-bold text-ink' : 'text-ink-soft'}`}>{n}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <p className="mt-3 text-xs text-ink-soft">No site do cliente, o Geral, o Mercado Encarte e cada setor com produto viram abas, cada uma com o seu template.</p>
-                  {ehSetor && !ehMercado && (
-                    <>
-                      <Rotulo className="mt-5">Jornal de {nomeJornal} no site</Rotulo>
-                      <ChaveAjuste
-                        noAr={!pausados.includes(jornalSel)}
-                        nome={nomeJornal}
-                        ocupado={mudandoAjuste === jornalSel}
-                        onChange={(noAr) => alternarAjuste(jornalSel, !noAr)}
-                      />
-                    </>
-                  )}
-                  {pausados.length > 0 && !(ehSetor && !ehMercado && pausados.length === 1 && pausados[0] === jornalSel) && (
-                    <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-ink-soft">
-                      <Icon name="Wrench" size={13} className="text-critical" /> Em ajuste no site:
-                      {pausados.map((id) => (
-                        <button key={id} type="button" onClick={() => setJornalSel(id)} className="rounded-full bg-critical/10 px-2 py-0.5 font-semibold text-critical hover:bg-critical/15">{setorById(id).nome}</button>
-                      ))}
-                    </p>
-                  )}
-                  <Rotulo className="mt-5">Aparece no site do cliente?</Rotulo>
-                  <div className="grid gap-1.5">
-                    <ChaveSite ligado={config.siteMostrarGeral !== false} titulo="Jornal geral" onChange={(v) => { store.salvarConfig({ siteMostrarGeral: v }); toast(v ? 'O Geral volta a aparecer no site depois de publicar.' : 'O Geral sai do site depois de publicar.', 'info') }} />
-                    <ChaveSite ligado={config.siteMostrarMercado !== false} titulo="Mercado Encarte" onChange={(v) => { store.salvarConfig({ siteMostrarMercado: v }); toast(v ? 'O Mercado Encarte volta a aparecer no site depois de publicar.' : 'O Mercado Encarte sai do site depois de publicar.', 'info') }} />
-                  </div>
-                  {navegacao}
-                </Secao>
-              )}
+      {/* ============ 1. BIPAR ============ */}
+      {tela === 'montar' && passo === 0 && (
+        <div className="mx-auto max-w-3xl space-y-4">
+          <Secao>
+            <ScannerJornal />
+          </Secao>
+          {remessa.length > 0 && (
+            <Secao
+              titulo={`${plural(remessa.length, 'produto', 'produtos')} neste jornal`}
+              acao={<button type="button" onClick={() => setConfirmarNovo(true)} className="min-h-10 px-1 text-sm font-bold text-critical hover:underline">Limpar lista</button>}
+            >
+              <ul className="divide-y divide-ink-soft/10">
+                {[...remessa].reverse().map((p) => (
+                  <li key={p.id} className="flex min-w-0 items-center gap-3 py-2">
+                    <ProdutoThumb produto={p} size={40} />
+                    <span className="min-w-0 flex-1 break-words text-base font-semibold leading-snug text-ink">{p.nome}</span>
+                    <button type="button" onClick={() => tirarDoJornal(p)} aria-label={`Tirar ${p.nome} do jornal`} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-critical/10 hover:text-critical"><Icon name="X" size={20} /></button>
+                  </li>
+                ))}
+              </ul>
+            </Secao>
+          )}
+          {remessa.length > 0 && rodape}
+          <p className="flex flex-wrap justify-center gap-x-5 gap-y-1 pt-2 text-sm">
+            <button type="button" onClick={() => setTela('historico')} className="inline-flex min-h-10 items-center gap-1.5 font-semibold text-navy hover:underline"><Icon name="History" size={16} /> Jornais salvos{jornais.length ? ` (${jornais.length})` : ''}</button>
+            <a href="#/encarte" target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1.5 font-semibold text-navy hover:underline"><Icon name="ExternalLink" size={16} /> Ver o site do cliente</a>
+          </p>
+        </div>
+      )}
 
-              {/* 2. produtos */}
-              {passo === 1 && (
-                <Secao titulo={`Produtos do jornal ${nomeJornal}`} descricao="Bipe, digite o código ou procure pelo nome. O que o sistema já conhece entra direto na fila.">
-                  {filaDoNovo.length > 0 && (
-                    <button type="button" onClick={() => setConfirmarNovo(true)}
-                      className="mb-3 flex w-full items-center gap-3 rounded-xl border border-dashed border-ink-soft/30 bg-white px-3 py-2.5 text-left hover:border-navy">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-navy/[0.07] text-navy"><Icon name="FilePlus2" size={19} /></span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-bold text-ink">Começar jornal novo</span>
-                        <span className="block text-xs text-ink-soft">Esvazia a fila {ehMercado ? 'das estrelas' : ehSetor ? `de ${nomeJornal}` : 'toda'} ({filaDoNovo.length}) para bipar só os produtos novos.</span>
-                      </span>
-                    </button>
-                  )}
-                  <ScannerJornal embutido />
-                  {filaDoPainel.length === 0 ? (
-                    <p className="mt-4 rounded-xl border border-dashed border-ink-soft/25 px-4 py-3 text-sm text-ink-soft">{vazioDoPainel}</p>
-                  ) : (
-                    <div className="mt-5 space-y-5">
-                      {(ehMercado || estreladosPainel.length > 0) && (
-                        <div>
-                          <Rotulo acao={<span className="num-tab text-sm text-ink-soft">{estreladosPainel.length}</span>}>
-                            <span className="inline-flex items-center gap-1.5"><Icon name="Star" size={15} fill="var(--color-offer)" className="text-bengala" /> Com estrela no Mercado Encarte</span>
-                          </Rotulo>
-                          {estreladosPainel.length
-                            ? <ul className="divide-y divide-ink-soft/10 border-y border-ink-soft/10">{estreladosPainel.map(linhaPainel)}</ul>
-                            : <p className="text-sm text-ink-soft">Nenhum produto com estrela ainda. Toque na estrela de um produto da fila.</p>}
-                        </div>
-                      )}
-                      <div>
-                        <Rotulo acao={<span className="num-tab text-sm text-ink-soft">{outrosPainel.length}</span>}>Na fila</Rotulo>
-                        {outrosPainel.length
-                          ? <ul className="divide-y divide-ink-soft/10 border-y border-ink-soft/10">{outrosPainel.map(linhaPainel)}</ul>
-                          : <p className="text-sm text-ink-soft">Todos os produtos daqui estão com estrela.</p>}
-                      </div>
-                      <p className="text-xs leading-relaxed text-ink-soft">Desmarque para tirar o produto só deste jornal. A estrela põe no Mercado Encarte de hoje. O lápis corrige nome, preço e setor. Selo e preço também mudam tocando no produto na prévia.</p>
-                    </div>
-                  )}
-                  {navegacao}
-                </Secao>
-              )}
-
-              {/* 3. visual */}
-              {passo === 2 && (
-                <Secao titulo={`Visual do jornal ${nomeJornal}`} descricao={ehMercado ? 'O Mercado Encarte é exclusivo: o template dele não muda os outros.' : ehSetor ? 'Trocar aqui muda só este setor. Layout e logo valem para todos.' : 'O template do Geral vale para todos os setores que não têm o seu. Layout e logo também valem para todos.'}>
-                  {ehSetor && !ehMercado && (
-                    <div className="mb-3 flex items-center gap-2 rounded-xl bg-cream-200 px-3 py-2 text-sm text-ink">
-                      <Icon name={temaProprio ? 'Palette' : 'Link'} size={16} className="shrink-0 text-navy" />
-                      <span className="min-w-0 flex-1">{temaProprio ? `${nomeJornal} tem template próprio.` : `Seguindo o template do Geral (${temaCampanhaById(temaDigital).nome}).`}</span>
-                      {temaProprio && <button type="button" onClick={() => seguirGeral(jornalSel)} className="min-h-9 shrink-0 font-semibold text-navy underline underline-offset-2">Voltar ao do Geral</button>}
-                    </div>
-                  )}
-                  {!ehSetor && setoresComTemaProprio.length > 0 && (
-                    <div className="mb-3 rounded-xl bg-cream-200 px-3 py-2 text-sm text-ink">
-                      <p>Com template próprio (não mudam junto):</p>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {setoresComTemaProprio.map((s) => (
-                          <button key={s.id} type="button" onClick={() => seguirGeral(s.id)} aria-label={`${s.nome}: voltar ao template do Geral`} title="Voltar ao template do Geral" className="inline-flex min-h-9 items-center gap-1 rounded-full border border-ink-soft/25 bg-white px-3 text-xs font-semibold">{s.nome} <Icon name="X" size={13} /></button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <Rotulo>Template</Rotulo>
-                  {ehSetor ? (
-                    <>
-                      <div className="grid grid-cols-2 gap-2">
-                        {temasDoSetor(jornalSel).map((t) => {
-                          const mini = caminhoArte(t, 'miniatura')
-                          const ativo = temaAtualId === t.id
-                          return (
-                            <button key={t.id} type="button" onClick={() => escolherTema(t.id)} aria-pressed={ativo} title={t.nome}
-                              className={`relative flex aspect-[4/3] flex-col overflow-hidden rounded-lg text-left ${ativo ? 'ring-[3px] ring-navy ring-offset-2' : 'ring-1 ring-black/10'}`}
-                              style={{ background: t.fundo }}>
-                              {mini ? <img src={mini} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-contain p-1" /> : (
-                                <span className="relative m-auto flex flex-col items-center px-1 text-center text-sm font-black uppercase italic leading-none text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,.4)' }}>
-                                  {t.icone ? <Icon name={t.icone} size={22} className="mb-1 opacity-80" /> : null}
-                                  {t.titulo}<br /><span style={{ color: t.corDestaque }}>{t.destaque}</span>
-                                </span>
-                              )}
-                              {ativo && <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-navy text-white"><Icon name="Check" size={14} strokeWidth={2.5} /></span>}
-                              <span className="relative mt-auto truncate bg-black/55 px-1.5 py-0.5 text-[11px] font-semibold text-white">{t.nome}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                      <details className="mt-3">
-                        <summary className="cursor-pointer text-sm font-semibold text-navy">Usar outro template neste setor</summary>
-                        <div className="mt-2"><SeletorTema compacto value={temaAtualId} onChange={escolherTema} /></div>
-                      </details>
-                    </>
-                  ) : (
-                    <SeletorTema compacto value={temaDigital} onChange={escolherTema} />
-                  )}
-
-                  <Rotulo className="mt-6">Layout</Rotulo>
-                  {ehMercado ? (
-                    <p className="text-sm text-ink-soft">O Mercado Encarte sai sempre como jornal da semana, com um bloco para cada dia.</p>
-                  ) : (
-                    <div className="grid gap-2">
-                      {[
-                        ['grade', 'LayoutGrid', 'Grade 3 × 3', 'Até 9 produtos por página'],
-                        ['destaque', 'LayoutPanelTop', '1 destaque + 7', 'O primeiro produto sai grande'],
-                        ['jornal', 'Newspaper', 'Jornal da semana', 'Folha A4 com muitos produtos juntos, separados só quando a data muda'],
-                      ].map(([id, icone, nome, desc]) => (
-                        <Escolha key={id} ativo={layoutDigital === id} onClick={() => setLayoutDigital(id)} icone={icone} titulo={nome} descricao={desc} />
-                      ))}
-                    </div>
-                  )}
-                  {ativosDoModelo.length > 18 && !ehFormatoJornal(layoutAtual) && (
-                    <div className="mt-3 flex items-center gap-3 rounded-xl bg-offer/20 p-3 text-sm">
-                      <Icon name="Newspaper" size={18} className="shrink-0 text-navy" />
-                      <span className="flex-1 font-semibold text-navy">São muitos produtos. O jornal da semana põe todos em blocos, como no impresso.</span>
-                      <Botao variante="escuro" className="min-h-9 shrink-0 px-3" onClick={() => setLayoutDigital('jornal')}>Usar</Botao>
-                    </div>
-                  )}
-
-                  <Rotulo className="mt-6" acao={<span className="num-tab text-sm font-semibold text-ink">{Math.round(escalaLogo * 100)}%</span>}>Tamanho do logo</Rotulo>
-                  <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => setEscalaLogo((v) => Math.max(0.4, Math.round((v - 0.1) * 10) / 10))} aria-label="Diminuir o logo" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-ink-soft/25 bg-white text-ink hover:bg-cream-200"><Icon name="Minus" size={16} /></button>
-                    <input type="range" min="0.4" max="1.3" step="0.05" value={escalaLogo} onChange={(e) => setEscalaLogo(Number(e.target.value))} className="w-full accent-navy" aria-label="Tamanho do logo" />
-                    <button type="button" onClick={() => setEscalaLogo((v) => Math.min(1.3, Math.round((v + 0.1) * 10) / 10))} aria-label="Aumentar o logo" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-ink-soft/25 bg-white text-ink hover:bg-cream-200"><Icon name="Plus" size={16} /></button>
-                  </div>
-
-                  <details className="mt-6 rounded-xl border border-ink-soft/15 px-3 py-2.5">
-                    <summary className="cursor-pointer text-sm font-semibold text-navy">Fundo próprio para o template {temaArte.nome} (opcional)</summary>
-                    <p className="mt-2 text-xs text-ink-soft">Arte de 1080 × 1350 sem produtos, sem logo e sem validade. Vale só para este template.</p>
-                    <div className="mt-2 flex items-center gap-2">
-                      {fundoDigital && <img src={fundoDigital} alt="Fundo do template" className="h-14 w-11 rounded object-cover ring-1 ring-black/10" />}
-                      <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-ink-soft/25 bg-white px-3 text-sm font-semibold text-ink hover:bg-cream-200">
-                        <Icon name="ImageUp" size={16} /> {fundoDigital ? 'Trocar fundo' : 'Enviar fundo'}
-                        <input type="file" accept="image/*" className="sr-only" onChange={(e) => { trocarFundo(e.target.files?.[0]); e.target.value = '' }} />
-                      </label>
-                      {fundoDigital && (
-                        <button type="button" className="min-h-10 px-2 text-sm font-semibold text-critical hover:underline" onClick={() => { salvarFundoTemplate(temaAtualId, null); setFundoDigital(null) }}>Remover</button>
-                      )}
-                    </div>
-                  </details>
-                  {navegacao}
-                </Secao>
-              )}
-
-              {/* 4. revisar e publicar */}
-              {passo === 3 && (
-                <Secao titulo="Revise e publique" descricao="Confira o período da oferta. Ao publicar, quem tem o link da tag NFC já vê a nova versão.">
-                  <Campo label="Título do jornal"><input className={inputCls} value={titulo} onChange={(e) => setTitulo(e.target.value)} /></Campo>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Campo label="Ofertas válidas de"><input type="date" className={inputCls} value={periodoDe} onChange={(e) => setPeriodoDe(e.target.value)} /></Campo>
-                    <Campo label="até"><input type="date" className={inputCls} value={periodoAte} min={periodoDe} onChange={(e) => setPeriodoAte(e.target.value)} /></Campo>
-                  </div>
-                  <p className="mt-1.5 text-xs text-ink-soft">O encarte mostra esse período. A validade de cada produto nunca aparece.</p>
-
-                  {itensJornal.length === 0 ? (
-                    <div className="mt-5 rounded-xl border border-dashed border-ink-soft/25 p-4 text-sm text-ink-soft">
-                      O jornal {nomeJornal} está sem produtos.
-                      <button type="button" onClick={irParaScanner} className="ml-1 font-semibold text-bengala hover:underline">Bipar produtos</button>
-                    </div>
-                  ) : (
-                    <div ref={revisaoRef} className={`mt-5 scroll-mt-4 rounded-xl border p-3 ${temProblema ? 'border-critical/30 bg-critical/5' : problemasPDF.length ? 'border-warning/40 bg-warning/10' : 'border-success/30 bg-success/5'}`}>
-                      <button type="button" onClick={() => setMostrarRevisao((v) => !v)} aria-expanded={mostrarRevisao} disabled={!problemasPDF.length} className="flex w-full items-center gap-2 text-left text-sm">
-                        <Icon name={temProblema ? 'TriangleAlert' : problemasPDF.length ? 'Info' : 'BadgeCheck'} size={18} className={`shrink-0 ${temProblema ? 'text-critical' : problemasPDF.length ? 'text-[#86590b]' : 'text-success'}`} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block font-semibold text-ink">{plural(itensJornal.length, 'produto', 'produtos')} em {plural(paginasJornal.length, 'página', 'páginas')}</span>
-                          <span className="block text-xs text-ink-soft">{statusRevisao}</span>
-                        </span>
-                        {problemasPDF.length > 0 && <Icon name={mostrarRevisao ? 'ChevronUp' : 'ChevronDown'} size={16} className="shrink-0 text-ink-soft" />}
-                      </button>
-                      {mostrarRevisao && problemasPDF.length > 0 && (
-                        <ul className="mt-2 space-y-1.5 border-t border-ink-soft/10 pt-2">
-                          {problemasPDF.map((problema, indice) => (
-                            <li key={`${problema.texto}-${indice}`} className={`flex items-start gap-2 text-xs ${problema.nivel === 'erro' ? 'text-critical' : 'text-ink'}`}>
-                              <Icon name={problema.nivel === 'erro' ? 'CircleX' : 'ImageOff'} size={13} className="mt-0.5 shrink-0" />
-                              <span>{problema.texto}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-
-                  {site.protegido && (
-                    <div className="mt-4">
-                      <Campo label="Senha de publicação">
-                        <input type="password" autoComplete="current-password" className={inputCls} value={senhaPublicacao}
-                          onChange={(e) => { setSenhaPublicacao(e.target.value); salvarSenhaPublicacao(e.target.value) }} />
-                      </Campo>
-                    </div>
-                  )}
-
-                  <div className="mt-5 grid gap-2">
-                    <Botao onClick={publicarDigital} disabled={publicando} className="min-h-12 w-full text-base">
-                      <Icon name={publicando ? 'LoaderCircle' : 'Send'} size={18} className={publicando ? 'animate-spin' : ''} /> {publicando ? 'Publicando…' : 'Publicar no site do cliente'}
-                    </Botao>
-                    <p className="text-center text-xs text-ink-soft">Publica todos de uma vez: {[config.siteMostrarGeral !== false && 'o Geral', config.siteMostrarMercado !== false && 'o Mercado Encarte', 'cada setor'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' e $1')}.</p>
-                    <div className="mt-1 grid grid-cols-2 gap-2">
-                      <Botao variante="contorno" onClick={exportar} disabled={exportando || !itensJornal.length}>
-                        <Icon name={exportando ? 'LoaderCircle' : 'Printer'} size={16} className={exportando ? 'animate-spin' : ''} /> {exportando ? 'Preparando…' : 'Imprimir jornal'}
-                      </Botao>
-                      <Botao variante="contorno" onClick={salvar}><Icon name="Save" size={16} /> Salvar cópia</Botao>
-                    </div>
-                    <a href="#/encarte" target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold text-navy hover:bg-cream-200">
-                      <Icon name="ExternalLink" size={15} /> Ver o encarte como o cliente vê
-                    </a>
-                  </div>
-
-                  {acabouDePublicar && fila.length > 0 && (
-                    <div className="mt-3 flex items-start gap-2 rounded-xl border border-success/30 bg-success/5 p-3 text-sm">
-                      <Icon name="BadgeCheck" size={18} className="mt-0.5 shrink-0 text-success" />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-ink">Jornal no ar</div>
-                        <div className="mt-0.5 text-xs text-ink-soft">O site fica com este jornal até a próxima publicação. Para montar o próximo do zero, esvazie a fila.</div>
-                        <button type="button" onClick={() => setConfirmarNovo(true)} className="mt-1.5 text-xs font-semibold text-navy hover:underline">Começar jornal novo</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {pdfPronto && (
-                    <div className="mt-3 flex items-start gap-2 rounded-xl border border-success/30 bg-success/5 p-3 text-sm">
-                      <Icon name="BadgeCheck" size={18} className="mt-0.5 shrink-0 text-success" />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-ink">Impressão aberta</div>
-                        <div className="mt-0.5 text-xs text-ink-soft">Escolha a impressora na caixa do navegador. Nada é baixado.</div>
-                        <button type="button" onClick={exportar} className="mt-1.5 text-xs font-semibold text-navy hover:underline">Imprimir de novo</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {ehAdmin && (
-                    <div className={`mt-4 rounded-xl px-3 py-2.5 text-xs ${site.erro ? 'bg-critical/10 text-critical' : 'bg-cream-200 text-ink'}`} role="status">
-                      {site.erro
-                        ? site.erro
-                        : site.online
-                          ? (
-                            <div className="flex items-center gap-2">
-                              <span className="min-w-0 flex-1">
-                                <span className="block font-semibold">Link da tag NFC</span>
-                                <span className="block break-all text-ink-soft">{linkEncarte}</span>
-                              </span>
-                              <button type="button" onClick={copiarLink} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-ink-soft/25 bg-white px-2.5 font-semibold text-ink">
-                                <Icon name={linkCopiado ? 'Check' : 'Copy'} size={14} /> {linkCopiado ? 'Copiado' : 'Copiar'}
-                              </button>
-                            </div>
-                          )
-                          : site.online === false
-                            ? 'Servidor do encarte não encontrado. Publique pelo PC do mercado para os clientes verem.'
-                            : 'Verificando o site…'}
-                      <div className="mt-1.5 text-ink-soft">
-                        {publicadoEm
-                          ? `Última publicação: ${new Date(publicadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.`
-                          : 'Ainda não publicado.'}
-                      </div>
-                    </div>
-                  )}
-
-                  {itensJornal.length > 0 && itensJornal.length < 3 && (
-                    <button type="button" onClick={() => navigate('/cartazes')} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-navy hover:bg-cream-200">
-                      <Icon name="Image" size={16} /> Poucos produtos? Faça um cartaz para cada um
-                    </button>
-                  )}
-                  {navegacao}
-                </Secao>
-              )}
-            </div>
-
-            {/* prévia do encarte novo (o mesmo do link da tag NFC e das artes) */}
-            <div className="min-w-0 space-y-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <h2 className="text-base font-bold text-navy">Prévia do jornal {nomeJornal}</h2>
-                {itensJornal.length > 0 && <span className="text-sm text-ink-soft">Toque num produto para trocar selo e preço</span>}
-              </div>
-              {!itensJornal.length ? (
-                <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-ink-soft/20 bg-white p-6 text-center">
-                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-cream-200 text-navy"><Icon name="ScanBarcode" size={26} /></span>
-                  <div className="mt-3 text-lg font-bold text-navy">O encarte aparece aqui</div>
-                  <div className="mt-1 max-w-xs text-sm text-ink-soft">Do jeito que o cliente vai ver. Bipe os produtos para começar.</div>
-                  <Botao className="mt-4" onClick={irParaScanner}><Icon name="ScanBarcode" size={17} /> Bipar produtos</Botao>
-                </div>
-              ) : paginasJornal.map((itens, indice) => (
-                <div key={indice} className="mx-auto w-full max-w-[680px] space-y-1.5">
-                  <div className="flex items-center justify-between px-1 text-xs text-ink-soft">
-                    <span className="font-semibold text-ink">Página {indice + 1} de {paginasJornal.length}</span>
-                    <span>{plural(itensDaPagina(itens, layoutAtual).length, 'produto', 'produtos')}</span>
-                  </div>
-                  <div className="overflow-hidden rounded-xl shadow-[0_10px_30px_rgba(8,43,79,.14)] ring-1 ring-black/5">
-                    <Escalado largura={tamanho.largura} altura={tamanho.altura}>
-                      <PaginaEncarte tema={temaArte} pagina={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutAtual} numero={indice + 1} total={paginasJornal.length} onAbrir={abrirProdutoDaPrevia} escalaLogo={escalaLogo} />
-                    </Escalado>
-                  </div>
-                </div>
+      {/* ============ 2. PREÇO E SELO ============ */}
+      {tela === 'montar' && passo === 1 && (
+        <div className="mx-auto max-w-4xl space-y-4">
+          <Secao>
+            {remessa.length > 1 && (
+              <label className="mb-3 flex flex-wrap items-center gap-2 border-b border-ink-soft/10 pb-3 text-sm font-bold text-ink">
+                Mesmo selo em todos:
+                <select className={`${inputCls.replace('w-full ', '')} min-h-11`} value="" onChange={(e) => e.target.value && seloEmTodos(e.target.value)}>
+                  <option value="">Escolher selo</option>
+                  {SELOS_OFERTA.map((s) => <option key={s.id} value={s.id}>{s.nenhum ? 'Sem selo' : s.texto}</option>)}
+                </select>
+              </label>
+            )}
+            <ul className="divide-y divide-ink-soft/10">
+              {remessa.map((p) => (
+                <LinhaPreco key={p.id} produto={p} onErro={marcarErro} onSalvar={salvarProduto} onSelo={(id) => trocarSelo(p, id)} onEditar={() => setProdutoEditando({ ...p })} onTirar={() => tirarDoJornal(p)} toast={toast} />
               ))}
-            </div>
+            </ul>
+          </Secao>
+          {rodape}
+        </div>
+      )}
+
+      {/* ============ 3. TEMPLATE E DESTINO ============ */}
+      {tela === 'montar' && passo === 2 && (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
+          <div className="min-w-0 space-y-4">
+            <Secao titulo="Escolha a campanha">
+              <SeletorTema todos value={temaId} onChange={setTemaId} />
+            </Secao>
+            <Secao titulo="Onde este jornal vai aparecer?" descricao={textoDestino}>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Escolha ativo={destino === 'geral'} onClick={() => setDestino('geral')} icone="Store" titulo="Jornal geral" descricao="O jornal principal do mercado" extra={remessa.length} />
+                <Escolha ativo={ehMercado} onClick={() => setDestino(MERCADO_ENCARTE.id)} icone="Star" iconeCor="var(--color-bengala)" titulo="Jornal da estrela" descricao="As ofertas especiais do dia" extra={remessa.length} />
+              </div>
+              {destino === 'geral' && (
+                <label className="mt-3 flex min-h-11 items-start gap-2 rounded-xl bg-cream-200/60 p-3 text-sm font-semibold text-ink">
+                  <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-navy)]" checked={trocarTudo} onChange={(e) => setTrocarTudo(e.target.checked)} />
+                  <span>Começar o jornal do zero <span className="block font-normal text-ink-soft">Tira do site os setores que não estão neste jornal.</span></span>
+                </label>
+              )}
+              <Rotulo className="mt-5">Ou só um setor</Rotulo>
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                {SETORES.map((s) => {
+                  const n = contagemSetor(s.id)
+                  const ativo = destino === s.id
+                  return (
+                    <button key={s.id} type="button" onClick={() => setDestino(s.id)} aria-pressed={ativo}
+                      className={`flex min-h-12 min-w-0 items-center gap-2 rounded-lg border-2 px-2.5 text-left text-sm ${ativo ? 'border-navy bg-navy/[0.045] font-bold text-navy' : `border-ink-soft/20 bg-white font-semibold hover:border-ink-soft/45 ${n ? 'text-ink' : 'text-ink-soft'}`}`}>
+                      <ImagemSetor id={s.id} size={24} />
+                      <span className="min-w-0 flex-1 truncate">{s.nome}</span>
+                      {n > 0 && <span className="num-tab shrink-0 text-xs font-bold text-ink">{n}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+              {foraDoSetor.length > 0 && (
+                <div className="mt-3 rounded-xl border-2 border-offer bg-offer/15 p-3 text-sm text-ink">
+                  <p className="font-bold">{plural(foraDoSetor.length, 'produto é', 'produtos são')} de outro setor e não {foraDoSetor.length === 1 ? 'entra' : 'entram'} neste jornal:</p>
+                  <p className="mt-0.5">{foraDoSetor.slice(0, 4).map((p) => `${p.nome} (${setorById(p.setor).nome})`).join(', ')}{foraDoSetor.length > 4 ? ` e mais ${foraDoSetor.length - 4}` : ''}.</p>
+                  <button type="button" onClick={() => foraDoSetor.forEach((p) => salvarProduto({ id: p.id, setor: destino }))} className="mt-1 min-h-10 font-bold text-navy underline underline-offset-2">Passar {foraDoSetor.length === 1 ? 'ele' : 'todos'} para {nomeDestino}</button>
+                </div>
+              )}
+              {ehMercado && (
+                <>
+                  <Rotulo className="mt-5">Em que dia vale?</Rotulo>
+                  <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
+                    {proximosDias.map((d, i) => (
+                      <button key={d} type="button" onClick={() => setDiaEstrela(d)} aria-pressed={diaEstrela === d}
+                        className={`min-h-11 rounded-lg border-2 px-1 text-xs font-bold ${diaEstrela === d ? 'border-bengala bg-bengala text-white' : 'border-ink-soft/20 bg-white text-ink'}`}>
+                        {i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : rotuloDia(d)}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </Secao>
+
+            <details className="card-bengala p-4">
+              <summary className="cursor-pointer text-base font-bold text-navy">Mais ajustes (opcional)</summary>
+              {destino === 'geral' && (
+                <>
+                  <Rotulo className="mt-4">Disposição dos produtos</Rotulo>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {[
+                      ['grade', 'LayoutGrid', 'Grade 3 × 3', 'Até 9 por página'],
+                      ['destaque', 'LayoutPanelTop', '1 destaque + 7', 'O primeiro sai grande'],
+                      ['jornal', 'Newspaper', 'Jornal da semana', 'Muitos por página'],
+                      ['ancorado', 'LayoutDashboard', 'Ancorado', 'Destaques com a big idea'],
+                    ].map(([id, icone, nome, desc]) => (
+                      <Escolha key={id} ativo={layout === id} onClick={() => setLayout(id)} icone={icone} titulo={nome} descricao={desc} />
+                    ))}
+                  </div>
+                  <Rotulo className="mt-5" acao={<span className="num-tab text-sm font-semibold text-ink">{Math.round(escalaLogo * 100)}%</span>}>Tamanho do logo</Rotulo>
+                  <input type="range" min="0.4" max="1.3" step="0.05" value={escalaLogo} onChange={(e) => setEscalaLogo(Number(e.target.value))} className="w-full accent-navy" aria-label="Tamanho do logo" />
+                </>
+              )}
+              <Rotulo className="mt-5">Fundo próprio para {temaArte.nome}</Rotulo>
+              <p className="text-xs text-ink-soft">Arte de 1080 × 1350 sem produtos, sem logo e sem validade.</p>
+              <div className="mt-2 flex items-center gap-2">
+                {fundo && <img src={fundo} alt="Fundo da campanha" className="h-14 w-11 rounded object-cover ring-1 ring-black/10" />}
+                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border-2 border-navy/35 bg-white px-3 text-sm font-bold text-navy hover:bg-cream">
+                  <Icon name="ImageUp" size={16} /> {fundo ? 'Trocar fundo' : 'Enviar fundo'}
+                  <input type="file" accept="image/*" className="sr-only" onChange={(e) => { trocarFundo(e.target.files?.[0]); e.target.value = '' }} />
+                </label>
+                {fundo && <button type="button" className="min-h-11 px-2 text-sm font-semibold text-critical hover:underline" onClick={() => { salvarFundoTemplate(temaId, null); setFundo(null) }}>Remover</button>}
+              </div>
+              <Rotulo className="mt-5">O que aparece no site do cliente</Rotulo>
+              <div className="grid gap-1.5">
+                <ChaveSite ligado={config.siteMostrarGeral !== false} titulo="Aba do jornal geral" onChange={(v) => store.salvarConfig({ siteMostrarGeral: v })} />
+                <ChaveSite ligado={config.siteMostrarMercado !== false} titulo="Aba do jornal da estrela" onChange={(v) => store.salvarConfig({ siteMostrarMercado: v })} />
+              </div>
+              {(ehSetor || pausados.length > 0) && (
+                <>
+                  <Rotulo className="mt-5">Desligar um setor do site para ajustar</Rotulo>
+                  <div className="grid gap-1.5">
+                    {[...new Set([...(ehSetor ? [destino] : []), ...pausados])].map((id) => (
+                      <ChaveAjuste key={id} noAr={!pausados.includes(id)} nome={setorById(id).nome} ocupado={mudandoAjuste === id} onChange={(noAr) => alternarAjuste(id, !noAr)} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </details>
+            {rodape}
+          </div>
+          <div className="min-w-0 space-y-2 lg:sticky lg:top-4">
+            <h2 className="text-base font-bold text-navy">Como vai ficar</h2>
+            {jornalVazio
+              ? <p className="rounded-xl border-2 border-dashed border-ink-soft/25 bg-white p-5 text-center text-sm text-ink-soft">Nenhum produto deste jornal é de {nomeDestino}.</p>
+              : previa(paginasJornal.slice(0, 1))}
+            {paginasJornal.length > 1 && <p className="text-center text-xs text-ink-soft">e mais {plural(paginasJornal.length - 1, 'página', 'páginas')} no próximo passo</p>}
+          </div>
+        </div>
+      )}
+
+      {/* ============ 4. PUBLICAR ============ */}
+      {tela === 'montar' && passo === 3 && (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start">
+          <div className="min-w-0 space-y-4">
+            {acabouDePublicar ? (
+              <Secao>
+                <div className="text-center">
+                  <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success text-white"><Icon name="Check" size={30} strokeWidth={2.75} /></span>
+                  <h2 className="mt-3 text-2xl font-extrabold text-navy">{nomeDestino} no ar</h2>
+                  <p className="mt-1 text-base font-medium text-ink">Quem abrir o site do cliente já vê.</p>
+                </div>
+                <div className="mt-5 grid gap-2">
+                  <Botao onClick={imprimir} disabled={exportando} className="min-h-12 w-full text-base"><Icon name={exportando ? 'LoaderCircle' : 'Printer'} size={18} className={exportando ? 'animate-spin' : ''} /> {exportando ? 'Preparando…' : impresso ? 'Imprimir de novo' : 'Imprimir jornal'}</Botao>
+                  <a href="#/encarte" target="_blank" rel="noreferrer" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border-2 border-navy/40 bg-white text-sm font-bold text-navy hover:bg-cream"><Icon name="ExternalLink" size={17} /> Ver como o cliente vê</a>
+                  <Botao variante="contorno" className="min-h-12" onClick={() => setTela('artes')}><Icon name="Images" size={17} /> Artes para redes sociais</Botao>
+                  <Botao variante="escuro" className="min-h-12" onClick={comecarOutro}><Icon name="FilePlus2" size={17} /> Começar outro jornal</Botao>
+                  <button type="button" onClick={() => setAcabouDePublicar(false)} className="min-h-10 text-sm font-semibold text-navy hover:underline">Corrigir e publicar de novo</button>
+                </div>
+              </Secao>
+            ) : (
+              <Secao>
+                <dl className="grid gap-2 text-base">
+                  <Resumo rotulo="Jornal" valor={nomeDestino} onMudar={() => irPara(2)} />
+                  <Resumo rotulo="Produtos" valor={plural(itensJornal.length, 'produto', 'produtos')} onMudar={() => irPara(1)} />
+                  <Resumo rotulo="Campanha" valor={temaArte.nome} onMudar={() => irPara(2)} />
+                </dl>
+                <p className="mt-2 text-sm text-ink-soft">{textoDestino}</p>
+
+                {ehMercado ? (
+                  <p className="mt-4 text-base font-bold text-ink">Vale só em {rotuloDia(diaEstrela)}.</p>
+                ) : (
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <Campo label="Ofertas de"><input type="date" className={`${inputCls} min-h-11`} value={periodoDe} onChange={(e) => setPeriodoDe(e.target.value)} /></Campo>
+                    <Campo label="até"><input type="date" className={`${inputCls} min-h-11`} value={periodoAte} min={periodoDe} onChange={(e) => setPeriodoAte(e.target.value)} /></Campo>
+                  </div>
+                )}
+
+                {problemas.length > 0 && (
+                  <div ref={revisaoRef} className={`mt-4 scroll-mt-4 rounded-xl border p-3 ${bloqueios.length ? 'border-critical/30 bg-critical/5' : 'border-warning/40 bg-warning/10'}`}>
+                    <button type="button" onClick={() => setMostrarRevisao((v) => !v)} aria-expanded={mostrarRevisao} className="flex w-full items-center gap-2 text-left text-sm font-semibold text-ink">
+                      <Icon name={bloqueios.length ? 'TriangleAlert' : 'Info'} size={18} className={`shrink-0 ${bloqueios.length ? 'text-critical' : 'text-[#86590b]'}`} />
+                      <span className="min-w-0 flex-1">{bloqueios.length ? plural(bloqueios.length, 'item impede publicar', 'itens impedem publicar') : plural(problemas.length, 'aviso de foto', 'avisos de foto')}</span>
+                      <Icon name={mostrarRevisao ? 'ChevronUp' : 'ChevronDown'} size={16} className="shrink-0 text-ink-soft" />
+                    </button>
+                    {mostrarRevisao && (
+                      <ul className="mt-2 space-y-1.5 border-t border-ink-soft/10 pt-2">
+                        {problemas.map((x, i) => <li key={`${x.texto}-${i}`} className={`text-xs ${x.nivel === 'erro' ? 'text-critical' : 'text-ink'}`}>{x.texto}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-4 rounded-xl border-2 border-offer bg-offer/15 p-3">
+                  <p className="flex items-start gap-2 text-sm font-bold text-ink"><Icon name="TriangleAlert" size={19} className="mt-0.5 shrink-0 text-[#86590b]" /> O ClawMarket não muda o preço do caixa. Altere também no sistema do mercado.</p>
+                  <button type="button" onClick={() => copiar('precos', listaDePrecos)} disabled={jornalVazio} className="mt-1.5 inline-flex min-h-10 items-center gap-1.5 text-sm font-bold text-navy underline underline-offset-2 disabled:opacity-50"><Icon name={copiado === 'precos' ? 'Check' : 'Copy'} size={15} /> {copiado === 'precos' ? 'Lista copiada' : `Copiar a lista de preços (${ofertas.length ? plural(ofertas.length, 'oferta', 'ofertas') : plural(itensJornal.length, 'produto', 'produtos')})`}</button>
+                  <label className="mt-1.5 flex min-h-12 cursor-pointer items-center gap-3 rounded-lg bg-white px-3 py-2 text-sm font-bold text-ink">
+                    <input type="checkbox" checked={caixaConferido} onChange={(e) => setCaixaConferido(e.target.checked)} className="h-6 w-6 shrink-0 accent-navy" />
+                    Conferi: estes preços já estão no caixa
+                  </label>
+                </div>
+
+                {site.protegido && (
+                  <div className="mt-4">
+                    <Campo label="Senha de publicação">
+                      <input type="password" autoComplete="current-password" className={inputCls} value={senhaPublicacao} onChange={(e) => { setSenhaPublicacao(e.target.value); salvarSenhaPublicacao(e.target.value) }} />
+                    </Campo>
+                  </div>
+                )}
+
+                <div className="mt-4 grid gap-2">
+                  <Botao onClick={publicar} disabled={publicando || jornalVazio || !caixaConferido} className="min-h-14 w-full text-lg">
+                    <Icon name={publicando ? 'LoaderCircle' : 'Send'} size={20} className={publicando ? 'animate-spin' : ''} /> {publicando ? 'Publicando…' : 'Publicar no site do cliente'}
+                  </Botao>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Botao variante="contorno" className="min-h-12" onClick={() => irPara(2)}><Icon name="ArrowLeft" size={17} /> Voltar</Botao>
+                    <Botao variante="contorno" className="min-h-12" onClick={imprimir} disabled={exportando || jornalVazio}><Icon name={exportando ? 'LoaderCircle' : 'Printer'} size={17} className={exportando ? 'animate-spin' : ''} /> {exportando ? 'Preparando…' : 'Só imprimir'}</Botao>
+                  </div>
+                </div>
+                {site.erro && <p className="mt-3 rounded-xl bg-critical/10 px-3 py-2.5 text-sm font-semibold text-critical" role="alert">{site.erro}</p>}
+              </Secao>
+            )}
+            {ehAdmin && site.online && !site.erro && (
+              <div className="rounded-xl bg-cream-200 px-3 py-2.5 text-xs text-ink">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1"><span className="block font-semibold">Link do jornal (QR code e tag)</span><span className="block break-all text-ink-soft">{linkEncarte}</span></span>
+                  <button type="button" onClick={() => copiar('link', linkEncarte)} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-ink-soft/25 bg-white px-2.5 font-semibold text-ink"><Icon name={copiado === 'link' ? 'Check' : 'Copy'} size={14} /> {copiado === 'link' ? 'Copiado' : 'Copiar'}</button>
+                </div>
+                {publicadoEm && <div className="mt-1.5 text-ink-soft">Última publicação: {new Date(publicadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}.</div>}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 space-y-4">
+            {jornalVazio
+              ? <p className="rounded-xl border-2 border-dashed border-ink-soft/25 bg-white p-5 text-center text-sm text-ink-soft">Nenhum produto deste jornal é de {nomeDestino}. Volte e escolha outro destino.</p>
+              : <><p className="text-sm font-semibold text-ink-soft">Toque num produto para ajustar foto, preço e selo.</p>{previa(paginasJornal)}</>}
+            {!ehMercado && itensJornal.length > 18 && !ehFormatoJornal(layoutAtual) && destino === 'geral' && (
+              <div className="flex items-center gap-3 rounded-xl bg-offer/20 p-3 text-sm">
+                <span className="flex-1 font-semibold text-navy">São muitos produtos. O jornal da semana põe todos em menos folhas.</span>
+                <Botao variante="escuro" className="min-h-10 shrink-0 px-3" onClick={() => setLayout('jornal')}>Usar</Botao>
+              </div>
+            )}
           </div>
 
-          {/* cópias em tamanho real, fora da tela, usadas para imprimir e salvar em PDF */}
-          {itensJornal.length > 0 && (
+          {/* cópias em tamanho real, fora da tela, usadas para imprimir */}
+          {!jornalVazio && (
             <div className="pointer-events-none fixed top-0" style={{ left: -20000 }} aria-hidden="true">
               {paginasJornal.map((itens, indice) => (
                 <div key={indice} ref={(el) => { pageRefs.current[indice] = el }} style={{ width: tamanho.largura, height: tamanho.altura }}>
-                  <PaginaEncarte tema={temaArte} pagina={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundoDigital} layout={layoutAtual} numero={indice + 1} total={paginasJornal.length} escalaLogo={escalaLogo} />
+                  <PaginaEncarte tema={temaArte} pagina={itens} encarte={encarteArte} loja={lojaAtual} fundo={fundo} layout={layoutAtual} numero={indice + 1} total={paginasJornal.length} escalaLogo={escalaLogo} />
                 </div>
               ))}
             </div>
@@ -940,41 +852,51 @@ export default function Jornal() {
       )}
 
       {/* ============ ARTES (Feed, Stories, TV, post) ============ */}
-      {aba === 'artes' && (
+      {tela === 'artes' && (
         <CentralArtes
           saidas={['feed', 'stories', 'tv', 'post']}
           subtitulo="Cartazes e etiquetas para imprimir ficam na aba Cartazes."
-          itens={itensParaArte()}
+          itens={itensArte}
           titulo={titulo}
-          encarte={{ periodoDe: validadeDe, periodoAte: validadeAte }}
+          encarte={encarteArte}
           loja={lojaAtual}
-          temaId={temaAtualId}
-          setTemaId={escolherTema}
+          temaId={temaId}
+          setTemaId={setTemaId}
           escalaLogo={escalaLogo}
-          layout={layoutDigital}
-          setLayout={setLayoutDigital}
-          fundo={fundoDigital}
+          layout={layout}
+          setLayout={setLayout}
+          fundo={fundo}
           toast={toast}
           onBipar={irParaScanner}
         />
       )}
 
       {/* ============ HISTÓRICO ============ */}
-      {aba === 'historico' && (
-        <Secao titulo="Jornais salvos" descricao="Cada um guarda os produtos, preços e imagens daquele dia.">
+      {tela === 'historico' && (
+        <Secao titulo="Jornais salvos" descricao="Ver: abre o jornal. Editar: volta ao gerador com esses produtos e preços. Desativar: o site mostra &quot;Ajustando ofertas&quot; nesse setor até você ativar de novo. Lixeira: apaga daqui.">
           {jornais.length === 0 ? (
-            <EmptyState icon="History" titulo="Nenhum jornal salvo" descricao="Ao imprimir ou salvar uma cópia no passo Publicar, o jornal aparece aqui." />
+            <EmptyState icon="History" titulo="Nenhum jornal salvo" descricao="Ao publicar ou imprimir, o jornal aparece aqui." />
           ) : (
             <ul className="divide-y divide-ink-soft/10">
               {jornais.map((jornal) => (
                 <li key={jornal.id} className="flex min-w-0 items-center gap-3 py-3">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cream-200 text-navy"><Icon name="Newspaper" size={19} /></span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-ink">{jornal.titulo}</span>
-                    <span className="block text-xs text-ink-soft">{plural(jornal.totalItens, 'produto', 'produtos')} · {plural(jornal.totalPaginas || 1, 'página', 'páginas')} · {new Date(jornal.criadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    <span className="block truncate text-base font-bold text-ink">{jornal.tipo === 'setor' && jornal.setor ? setorById(jornal.setor).nome : jornal.tipo === 'estrela' ? 'Jornal da estrela' : 'Jornal geral'}</span>
+                    <span className="block text-sm text-ink-soft">{plural(jornal.totalItens, 'produto', 'produtos')} · {new Date(jornal.criadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
                   </span>
-                  <Botao variante="contorno" className="shrink-0 px-3" onClick={() => abrirJornalSalvo(jornal)}><Icon name="Printer" size={15} /> <span className="hidden sm:inline">Imprimir</span></Botao>
-                  <button type="button" onClick={() => excluirJornal(jornal.id)} aria-label={`Excluir ${jornal.titulo}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-critical/10 hover:text-critical"><Icon name="Trash2" size={16} /></button>
+                  <Botao variante="contorno" className="shrink-0 px-3" onClick={() => setJornalVendo(jornal)} aria-label={`Ver ${jornal.titulo}`}><Icon name="Eye" size={15} /> <span className="hidden sm:inline">Ver</span></Botao>
+                  <Botao variante="contorno" className="shrink-0 px-3" onClick={() => editarJornal(jornal)} aria-label={`Editar ${jornal.titulo}`}><Icon name="Pencil" size={15} /> <span className="hidden sm:inline">Editar</span></Botao>
+                  {(() => {
+                    const setores = setoresDoJornal(jornal)
+                    const desativado = setores.length > 0 && setores.every((s) => pausados.includes(s))
+                    return (
+                      <Botao variante={desativado ? 'escuro' : 'contorno'} className="shrink-0 px-3" disabled={!setores.length || setores.some((s) => mudandoAjuste === s)} onClick={() => desativarJornal(jornal, !desativado)} aria-label={desativado ? 'Ativar no site' : 'Desativar no site'}>
+                        <Icon name={desativado ? 'Power' : 'PowerOff'} size={15} /> <span className="hidden sm:inline">{desativado ? 'Ativar' : 'Desativar'}</span>
+                      </Botao>
+                    )
+                  })()}
+                  <button type="button" onClick={() => setJornalApagar(jornal)} aria-label={`Apagar ${jornal.titulo}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-critical/10 hover:text-critical"><Icon name="Trash2" size={16} /></button>
                 </li>
               ))}
             </ul>
@@ -982,13 +904,12 @@ export default function Jornal() {
         </Secao>
       )}
 
-
       {historicoParaAbrir ? (
         <div className="pointer-events-none fixed top-0" style={{ left: -20000 }} aria-hidden="true">
           {paginasDoHistorico(historicoParaAbrir.jornal).map((itens, indice, todas) => (
             <div key={`${historicoParaAbrir.jornal.id}-${indice}`} ref={(elemento) => { historicoRefs.current[indice] = elemento }} style={{ width: tamanhoPagina(historicoParaAbrir.jornal.layoutArte).largura, height: tamanhoPagina(historicoParaAbrir.jornal.layoutArte).altura }}>
               <PaginaEncarte
-                tema={temaCampanhaById(historicoParaAbrir.jornal.temaArte || temaDigital)}
+                tema={temaCampanhaById(historicoParaAbrir.jornal.temaArte || temaId)}
                 pagina={itens}
                 encarte={{ periodoDe: historicoParaAbrir.jornal.validadeDe, periodoAte: historicoParaAbrir.jornal.validadeAte }}
                 loja={lojaAtual}
@@ -1004,25 +925,50 @@ export default function Jornal() {
       ) : null}
 
       <Modal
-        open={confirmarNovo}
-        onClose={() => setConfirmarNovo(false)}
-        titulo="Começar jornal novo?"
-        footer={<>
-          <Botao variante="contorno" onClick={() => setConfirmarNovo(false)}>Cancelar</Botao>
-          <Botao variante="escuro" onClick={comecarJornalNovo} disabled={!filaDoNovo.length}><Icon name="FilePlus2" size={16} /> Esvaziar e começar</Botao>
+        open={!!jornalVendo}
+        onClose={() => setJornalVendo(null)}
+        largura="max-w-3xl"
+        titulo={jornalVendo ? `${jornalVendo.tipo === 'setor' && jornalVendo.setor ? setorById(jornalVendo.setor).nome : jornalVendo.tipo === 'estrela' ? 'Jornal da estrela' : 'Jornal geral'} · ${new Date(jornalVendo.criadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}` : ''}
+        footer={jornalVendo && <>
+          <Botao variante="contorno" onClick={() => setJornalVendo(null)}>Fechar</Botao>
+          <Botao variante="escuro" onClick={() => { setHistoricoParaAbrir({ jornal: jornalVendo }) }}><Icon name="Printer" size={15} /> Imprimir</Botao>
         </>}
       >
-        <div className="space-y-2 text-sm text-ink">
-          <p>
-            {ehMercado
-              ? `${plural(filaDoNovo.length, 'produto com estrela sai', 'produtos com estrela saem')} da fila.`
-              : ehSetor
-                ? `${plural(filaDoNovo.length, 'produto', 'produtos')} de ${nomeJornal} ${filaDoNovo.length === 1 ? 'sai' : 'saem'} da fila. Os outros setores continuam como estão.`
-                : `${plural(filaDoNovo.length, 'produto sai', 'produtos saem')} da fila. A fila fica vazia para você bipar o jornal novo.`}
-          </p>
-          <p className="text-ink-soft">Nada é apagado: preço, setor e foto continuam salvos. Bipe ou procure pelo nome para pôr de volta.</p>
-          <p className="text-ink-soft">O site do cliente continua com o jornal publicado até você publicar de novo.</p>
-        </div>
+        {jornalVendo && (
+          <div className="space-y-4">
+            {paginasDoHistorico(jornalVendo).map((itens, indice, todas) => (
+              <div key={indice} className="overflow-hidden rounded-xl shadow ring-1 ring-black/5">
+                <Escalado largura={tamanhoPagina(jornalVendo.layoutArte).largura} altura={tamanhoPagina(jornalVendo.layoutArte).altura}>
+                  <PaginaEncarte tema={temaCampanhaById(jornalVendo.temaArte || temaId)} pagina={itens} encarte={{ periodoDe: jornalVendo.validadeDe, periodoAte: jornalVendo.validadeAte }} loja={lojaAtual} fundo={jornalVendo.fundoArte || null} layout={jornalVendo.layoutArte || 'grade'} escalaLogo={jornalVendo.escalaLogo} numero={indice + 1} total={todas.length} />
+                </Escalado>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!jornalApagar}
+        onClose={() => setJornalApagar(null)}
+        titulo="Apagar este jornal salvo?"
+        footer={<>
+          <Botao variante="contorno" onClick={() => setJornalApagar(null)}>Cancelar</Botao>
+          <Botao variante="escuro" onClick={() => { excluirJornal(jornalApagar.id); setJornalApagar(null); toast('Jornal apagado do histórico.', 'info') }}>Apagar</Botao>
+        </>}
+      >
+        <p className="text-ink">Ele sai só desta lista. Se as ofertas dele estiverem no site, continuam lá (use "Desativar" para tirar do ar).</p>
+      </Modal>
+
+      <Modal
+        open={confirmarNovo}
+        onClose={() => setConfirmarNovo(false)}
+        titulo="Limpar a lista?"
+        footer={<>
+          <Botao variante="contorno" onClick={() => setConfirmarNovo(false)}>Cancelar</Botao>
+          <Botao variante="escuro" onClick={comecarOutro}>Limpar e começar</Botao>
+        </>}
+      >
+        <p className="text-base text-ink">{plural(remessa.length, 'produto sai', 'produtos saem')} deste jornal. Continuam cadastrados, e o site do cliente não muda.</p>
       </Modal>
 
       <Modal
@@ -1038,14 +984,13 @@ export default function Jornal() {
               <div className="grid grid-cols-2 gap-2">
                 <Campo label="Preço normal (de)"><input type="number" inputMode="decimal" min="0.01" step="0.01" className={inputCls} value={precoEditando.normal} onChange={(e) => setPrecoEditando((p) => ({ ...p, normal: e.target.value }))} /></Campo>
                 <Campo label="Preço da oferta (por)"><input type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="sem oferta" className={inputCls} value={precoEditando.promo} onChange={(e) => setPrecoEditando((p) => ({ ...p, promo: e.target.value }))} /></Campo>
-                <SugestaoPreco className="col-span-2" precoNormal={precoEditando.normal} validade={(fila.find((f) => f.id === seloEditando.id) || seloEditando).validade} precoAtual={precoEditando.promo} onUsar={(v) => setPrecoEditando((p) => ({ ...p, promo: v }))} />
               </div>
               <p className="mt-1 text-xs text-ink-soft">Deixe o preço da oferta vazio para mostrar só o preço normal.</p>
             </div>
             <div>
               <p className="mb-2 text-sm font-semibold text-ink">Ajustar na arte</p>
               <EditorCelula
-                produto={{ ...comEstiloPadrao(fila.find((f) => f.id === seloEditando.id) || seloEditando), precoJornal: Number(String(precoEditando.promo).replace(',', '.')) || Number(String(precoEditando.normal).replace(',', '.')) || precoJornal(seloEditando) }}
+                produto={{ ...comEstiloPadrao(produtoAtual(seloEditando)), precoJornal: Number(String(precoEditando.promo).replace(',', '.')) || Number(String(precoEditando.normal).replace(',', '.')) || precoNoJornal(seloEditando) }}
                 tema={temaArte}
                 ajuste={ajusteEditando}
                 onChange={setAjusteEditando}
@@ -1067,34 +1012,13 @@ export default function Jornal() {
               </button>
             </div>
             {(() => {
-              const atual = fila.find((f) => f.id === seloEditando.id) || seloEditando
-              const dia = noMercadoEncarte(atual) ? atual.encarteMercadoDia : null
-              return (
-                <div>
-                  <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink"><Icon name="Star" size={16} fill={dia ? 'var(--color-offer)' : 'none'} className="text-bengala" /> Dia da oferta no Mercado Encarte</p>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {proximosDias.map((d, i) => (
-                      <button key={d} type="button" onClick={() => diaDoMercado(atual, d)} aria-pressed={dia === d}
-                        className={`min-h-10 rounded-lg border px-1 text-xs font-semibold ${dia === d ? 'border-bengala bg-bengala text-white' : 'border-ink-soft/20 bg-white text-ink hover:border-ink-soft/45'}`}>
-                        {i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : rotuloDia(d)}
-                      </button>
-                    ))}
-                    <button type="button" onClick={() => diaDoMercado(atual, null)} disabled={!dia}
-                      className="min-h-10 rounded-lg border border-ink-soft/20 bg-white px-1 text-xs font-semibold text-ink-soft disabled:opacity-40">
-                      Fora
-                    </button>
-                  </div>
-                </div>
-              )
-            })()}
-            {(() => {
-              const atual = fila.find((f) => f.id === seloEditando.id) || seloEditando
+              const atual = produtoAtual(seloEditando)
               const estilo = atual.estiloPreco || estiloPrecoPadrao || 'oval'
               const noJornalTodo = !atual.estiloPreco && Boolean(estiloPrecoPadrao)
               return (
                 <div>
                   <p className="mb-2 text-sm font-semibold text-ink">Estilo do preço</p>
-                  <p className="mb-2 text-xs text-ink-soft">Aparece em todos os layouts do jornal, no Mercado Encarte e nas artes. Muda na hora.</p>
+                  <p className="mb-2 text-xs text-ink-soft">Aparece no jornal e nas artes. Muda na hora.</p>
                   <SeletorEstiloPreco value={estilo} tema={temaArte} onChange={(id) => trocarEstiloPreco(atual, id, noJornalTodo)} />
                   <button
                     type="button"
@@ -1118,13 +1042,13 @@ export default function Jornal() {
               <p className="mb-2 text-sm font-semibold text-ink">Selo</p>
               <p className="mb-2 text-xs text-ink-soft">O selo aparece neste produto no encarte, nas artes e nos cartazes. Muda na hora.</p>
               <SeletorSelo
-                value={(fila.find((f) => f.id === seloEditando.id) || seloEditando).seloOferta}
+                value={(produtoAtual(seloEditando)).seloOferta}
                 onChange={(id) => trocarSelo(seloEditando, id)}
               />
               <BotaoAplicarTodos
-                total={ativosDoModelo.length}
-                onClick={() => seloEmTodos((fila.find((f) => f.id === seloEditando.id) || seloEditando).seloOferta)}
-                descricao={`Os ${ativosDoModelo.length} produtos deste jornal passam a usar este selo. Depois dá para trocar um por um.`}
+                total={remessa.length}
+                onClick={() => seloEmTodos((produtoAtual(seloEditando)).seloOferta)}
+                descricao={`Os ${remessa.length} produtos deste jornal passam a usar este selo. Depois dá para trocar um por um.`}
               >
                 Aplicar este selo a todos
               </BotaoAplicarTodos>
@@ -1134,41 +1058,37 @@ export default function Jornal() {
       </Modal>
 
       <Modal
-        open={Boolean(produtoEditandoGerador)}
-        onClose={() => setProdutoEditandoGerador(null)}
+        open={Boolean(produtoEditando)}
+        onClose={() => setProdutoEditando(null)}
         titulo="Corrigir produto"
         footer={<>
-          <button type="button" className="mr-auto inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-critical hover:bg-critical/10" onClick={() => { removerDaFila(produtoEditandoGerador.id); toast(`${produtoEditandoGerador.nome} saiu da fila do jornal.`, 'info'); setProdutoEditandoGerador(null) }}><Icon name="Trash2" size={15} /> Tirar da fila</button>
-          <Botao variante="contorno" onClick={() => setProdutoEditandoGerador(null)}>Cancelar</Botao>
-          <Botao onClick={salvarProdutoGerador}>Salvar</Botao>
+          <Botao variante="contorno" onClick={() => setProdutoEditando(null)}>Cancelar</Botao>
+          <Botao onClick={salvarProdutoEditado}>Salvar</Botao>
         </>}
       >
-        {produtoEditandoGerador ? (
+        {produtoEditando ? (
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2 flex items-center gap-3">
-              <ProdutoThumb produto={produtoEditandoGerador} size={58} />
+              <ProdutoThumb produto={produtoEditando} size={58} />
               <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-ink-soft/25 bg-white px-3 text-sm font-semibold text-ink hover:bg-cream-200">
                 <Icon name="ImagePlus" size={16} /> Trocar imagem
                 <input
                   type="file"
                   accept="image/*"
                   className="sr-only"
-                  onChange={(evento) => trocarImagemProdutoGerador(evento.target.files?.[0])}
+                  onChange={(evento) => trocarImagem(evento.target.files?.[0])}
                 />
               </label>
             </div>
-            <FotoGoogle className="col-span-2" produto={produtoEditandoGerador} toast={toast} salvaNaHora onFoto={(foto) => { salvarProduto({ id: produtoEditandoGerador.id, ...foto }); setProdutoEditandoGerador((p) => (p ? { ...p, ...foto } : p)) }} />
-            <div className="col-span-2"><Campo label="Nome"><input className={inputCls} value={produtoEditandoGerador.nome || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, nome: e.target.value }))} /></Campo></div>
-            <Campo label="Marca"><input className={inputCls} value={produtoEditandoGerador.marca || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, marca: e.target.value }))} /></Campo>
-            <Campo label="Gramagem"><input className={inputCls} value={produtoEditandoGerador.gramagem || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, gramagem: e.target.value }))} /></Campo>
-            <div className="col-span-2"><Campo label="Validade (uso interno, não aparece no encarte)"><input type="date" className={inputCls} value={produtoEditandoGerador.validade || ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, validade: e.target.value }))} /></Campo></div>
-            <div className="col-span-2"><Campo label="Setor (em qual jornal ele entra)"><SeletorSetor value={produtoEditandoGerador.setor} onChange={(setor) => setProdutoEditandoGerador((p) => ({ ...p, setor }))} /></Campo></div>
-            <Campo label="Selo da oferta"><SeletorSelo value={produtoEditandoGerador.seloOferta} onChange={(seloOferta) => setProdutoEditandoGerador((p) => ({ ...p, seloOferta }))} /></Campo>
-            <Campo label="Vendido por"><SeletorUnidade value={produtoEditandoGerador.unidade} setor={produtoEditandoGerador.setor} onChange={(unidade) => setProdutoEditandoGerador((p) => ({ ...p, unidade }))} /></Campo>
-            <Campo label="Quantidade"><input type="number" min="0" className={inputCls} value={produtoEditandoGerador.estoque ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, estoque: e.target.value }))} /></Campo>
-            <Campo label="Preço normal"><input type="number" min="0.01" step="0.01" className={inputCls} value={produtoEditandoGerador.precoNormal ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, precoNormal: e.target.value }))} /></Campo>
-            <Campo label="Preço de oferta"><input type="number" min="0.01" step="0.01" className={inputCls} value={produtoEditandoGerador.precoPromo ?? ''} onChange={(e) => setProdutoEditandoGerador((p) => ({ ...p, precoPromo: e.target.value }))} /></Campo>
-            <SugestaoPreco className="col-span-2" precoNormal={produtoEditandoGerador.precoNormal} validade={produtoEditandoGerador.validade} precoAtual={produtoEditandoGerador.precoPromo} onUsar={(v) => setProdutoEditandoGerador((p) => ({ ...p, precoPromo: v }))} />
+            <FotoGoogle className="col-span-2" produto={produtoEditando} toast={toast} salvaNaHora onFoto={(foto) => { salvarProduto({ id: produtoEditando.id, ...foto }); setProdutoEditando((p) => (p ? { ...p, ...foto } : p)) }} />
+            <div className="col-span-2"><Campo label="Nome"><input className={inputCls} value={produtoEditando.nome || ''} onChange={(e) => setProdutoEditando((p) => ({ ...p, nome: e.target.value }))} /></Campo></div>
+            <Campo label="Marca"><input className={inputCls} value={produtoEditando.marca || ''} onChange={(e) => setProdutoEditando((p) => ({ ...p, marca: e.target.value }))} /></Campo>
+            <Campo label="Gramagem"><input className={inputCls} value={produtoEditando.gramagem || ''} onChange={(e) => setProdutoEditando((p) => ({ ...p, gramagem: e.target.value }))} /></Campo>
+            <div className="col-span-2"><Campo label="Setor (em qual jornal ele entra)"><SeletorSetor value={produtoEditando.setor} onChange={(setor) => setProdutoEditando((p) => ({ ...p, setor }))} /></Campo></div>
+            <Campo label="Selo da oferta"><SeletorSelo value={produtoEditando.seloOferta} onChange={(seloOferta) => setProdutoEditando((p) => ({ ...p, seloOferta }))} /></Campo>
+            <Campo label="Vendido por"><SeletorUnidade value={produtoEditando.unidade} setor={produtoEditando.setor} onChange={(unidade) => setProdutoEditando((p) => ({ ...p, unidade }))} /></Campo>
+            <Campo label="Preço normal"><input type="number" min="0.01" step="0.01" className={inputCls} value={produtoEditando.precoNormal ?? ''} onChange={(e) => setProdutoEditando((p) => ({ ...p, precoNormal: e.target.value }))} /></Campo>
+            <Campo label="Preço de oferta"><input type="number" min="0.01" step="0.01" className={inputCls} value={produtoEditando.precoPromo ?? ''} onChange={(e) => setProdutoEditando((p) => ({ ...p, precoPromo: e.target.value }))} /></Campo>
           </div>
         ) : null}
       </Modal>
@@ -1176,7 +1096,61 @@ export default function Jornal() {
   )
 }
 
-// ---- célula de vencimento (grande ideia) — estilo encarte escuro ----
+function Resumo({ rotulo, valor, onMudar }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 rounded-lg bg-cream-200 px-3 py-2">
+      <dt className="w-20 shrink-0 text-sm font-semibold text-ink-soft">{rotulo}</dt>
+      <dd className="min-w-0 flex-1 truncate font-bold text-ink">{valor}</dd>
+      <button type="button" onClick={onMudar} className="min-h-10 shrink-0 text-sm font-bold text-navy underline underline-offset-2">Mudar</button>
+    </div>
+  )
+}
+
+// Uma linha do passo 2: preço normal, preço da oferta e selo. Grava ao sair do campo.
+function LinhaPreco({ produto, onSalvar, onSelo, onEditar, onTirar, onErro, toast }) {
+  const texto = (v) => (v === null || v === undefined || v === '' ? '' : String(v).replace('.', ','))
+  const [normal, setNormal] = useState(() => texto(produto.precoNormal))
+  const [promo, setPromo] = useState(() => texto(produto.precoPromo))
+  // Mudou por fora (edição completa, outro aparelho): acompanha.
+  useEffect(() => { setNormal(texto(produto.precoNormal)) }, [produto.precoNormal])
+  useEffect(() => { setPromo(texto(produto.precoPromo)) }, [produto.precoPromo])
+  const vNormal = paraNumero(normal)
+  const vPromo = paraNumero(promo)
+  const promoAlta = Boolean(vPromo) && Boolean(vNormal) && vPromo >= vNormal
+  // Campo com erro segura o Continuar: o que está escrito precisa ser o que vai sair.
+  const erro = promoAlta ? 'A oferta precisa ser menor que o preço normal.' : !vNormal ? 'Falta o preço normal.' : null
+  useEffect(() => { onErro(produto.id, erro); return () => onErro(produto.id, null) }, [erro, produto.id, onErro])
+  const gravar = () => {
+    if (promoAlta) return toast('O preço da oferta precisa ser menor que o normal.', 'erro')
+    if ((vNormal || null) === (paraNumero(produto.precoNormal) || null) && (vPromo || null) === (paraNumero(produto.precoPromo) || null)) return undefined
+    return onSalvar({ id: produto.id, precoNormal: vNormal || null, precoPromo: vPromo || null })
+  }
+  const campo = `${inputCls} num-tab min-h-12 text-lg font-bold`
+  const aoTeclar = (e) => { if (e.key === 'Enter') e.currentTarget.blur() }
+  return (
+    <li className="py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <ProdutoThumb produto={produto} size={48} />
+        <span className="min-w-0 flex-1 break-words text-base font-bold leading-snug text-ink">{produto.nome}</span>
+        <button type="button" onClick={onEditar} aria-label={`Editar ${produto.nome}`} title="Editar nome, foto e setor" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border-2 border-navy/35 bg-white text-navy hover:bg-cream"><Icon name="Pencil" size={18} /></button>
+        <button type="button" onClick={onTirar} aria-label={`Tirar ${produto.nome} do jornal`} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-critical/10 hover:text-critical"><Icon name="X" size={20} /></button>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_1.2fr]">
+        <Campo label="Preço normal"><input inputMode="decimal" className={`${campo} ${!vNormal ? 'border-critical' : ''}`} value={normal} placeholder="0,00" onChange={(e) => setNormal(e.target.value)} onBlur={gravar} onKeyDown={aoTeclar} /></Campo>
+        <Campo label="Preço da oferta"><input inputMode="decimal" className={`${campo} ${promoAlta ? 'border-critical' : vPromo ? 'border-success text-success' : ''}`} value={promo} placeholder="sem oferta" onChange={(e) => setPromo(e.target.value)} onBlur={gravar} onKeyDown={aoTeclar} /></Campo>
+        <div className="col-span-2 sm:col-span-1">
+          <Campo label="Selo">
+            <select className={`${inputCls} min-h-12 text-base`} value={produto.seloOferta || 'nenhum'} onChange={(e) => onSelo(e.target.value)}>
+              {SELOS_OFERTA.map((s) => <option key={s.id} value={s.id}>{s.nenhum ? 'Sem selo' : s.texto}</option>)}
+            </select>
+          </Campo>
+        </div>
+      </div>
+      {erro && <p className="mt-1 text-sm font-semibold text-critical">{erro}</p>}
+    </li>
+  )
+}
+
 function SeletorSetor({ value, onChange }) {
   return (
     <select value={value || 'mercearia'} onChange={(e) => onChange(e.target.value)} className={inputCls}>
