@@ -220,9 +220,17 @@ export default function FolhearEncarte() {
     ...(encarte?.mostrarGeral !== false && daSemana.length ? [{ id: 'todas', nome: 'Todas', n: daSemana.length }] : []),
     ...SETORES.map((s) => ({ id: s.id, nome: s.nome, n: daSemana.filter((p) => p.setor === s.id).length, ajuste: pausadosSet.has(s.id) && (encarte?.itens || []).some((p) => p.setor === s.id) })).filter((a) => a.n || a.ajuste),
   ]
-  const [abaEscolhida, setAba] = useState(null)
+  const [abaEscolhida, setAbaEstado] = useState(null)
+  const direcao = useRef(1)
+  const ordemAbas = useRef([])
   const aba = abas.some((a) => a.id === abaEscolhida) ? abaEscolhida : abas.find((a) => a.id === 'todas')?.id || abas[0]?.id
   const ehHoje = aba === MERCADO_ENCARTE.id
+  ordemAbas.current = abas.map((a) => a.id)
+  const setAba = (id) => {
+    const de = ordemAbas.current.indexOf(aba), para = ordemAbas.current.indexOf(id)
+    direcao.current = para >= de ? 1 : -1
+    setAbaEstado(id)
+  }
   const emAjuste = abas.find((a) => a.id === aba)?.ajuste || (!abas.some((a) => !a.ajuste) && pausadosSet.size > 0)
   const itens = ehHoje ? doDia : aba === 'todas' ? daSemana : daSemana.filter((p) => p.setor === aba)
   const layout = ehHoje ? 'jornal' : LAYOUTS_VALIDOS.includes(encarte?.layout) ? encarte.layout : 'grade'
@@ -415,6 +423,10 @@ export default function FolhearEncarte() {
           @keyframes cm-tomba { 0%, 100% { rotate: 0deg } 50% { rotate: -5deg } }
           .cm-carrinho-item { animation: cm-rola 2.6s ease-in-out infinite }
           @keyframes cm-rola { 0%, 100% { transform: translateX(0) } 50% { transform: translateX(3px) } }
+          .cm-troca-d { animation: cm-troca-d .42s cubic-bezier(.2,.8,.2,1) both }
+          .cm-troca-e { animation: cm-troca-e .42s cubic-bezier(.2,.8,.2,1) both }
+          @keyframes cm-troca-d { from { opacity: 0; transform: perspective(1400px) translateX(56px) rotateY(-9deg) scale(.97) } }
+          @keyframes cm-troca-e { from { opacity: 0; transform: perspective(1400px) translateX(-56px) rotateY(9deg) scale(.97) } }
           .cm-nota-pula { animation: cm-nota-pula .45s cubic-bezier(.3,1.6,.5,1) }
           @keyframes cm-nota-pula { 0% { transform: scale(1) } 35% { transform: scale(1.05) } 100% { transform: scale(1) } }
           .cm-previa-fundo { animation: cm-aparece .2s ease-out both }
@@ -423,7 +435,7 @@ export default function FolhearEncarte() {
           @keyframes cm-previa { from { opacity: 0; transform: translateY(24px) scale(.96) } }
           .cm-voo { position: fixed; z-index: 70; width: 84px; height: 84px; pointer-events: none; border-radius: 16px; background: #fff; padding: 6px; box-shadow: 0 10px 24px rgba(0,0,0,.35); offset-rotate: 0deg; animation: cm-voo .7s cubic-bezier(.55,0,.75,.4) forwards }
           @keyframes cm-voo { 0% { offset-distance: 0%; transform: scale(1) } 100% { offset-distance: 100%; transform: scale(.25); opacity: .6 } }
-          @media (prefers-reduced-motion: reduce) { .cm-carrinho g, .cm-carrinho-item, .cm-nota-sai, .cm-nota-linha, .cm-nota-pula, .cm-previa, .cm-previa-fundo, .cm-voo { animation: none } }
+          @media (prefers-reduced-motion: reduce) { .cm-troca-d, .cm-troca-e { animation: cm-aparece .2s both } .cm-carrinho g, .cm-carrinho-item, .cm-nota-sai, .cm-nota-linha, .cm-nota-pula, .cm-previa, .cm-previa-fundo, .cm-voo { animation: none } }
         `}</style>
         {/* a campanha ao fundo, escurecida, para o jornal saltar */}
         <div className="pointer-events-none absolute inset-0 bg-black/55" />
@@ -436,11 +448,12 @@ export default function FolhearEncarte() {
             <div className="flex h-11 items-end gap-1.5 overflow-x-auto px-0.5 transition-[width] duration-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ width: larguraAberta }}>
               {abas.map((a) => (
                 <button key={a.id} type="button" onClick={(e) => { setAba(a.id); e.currentTarget.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }) }} aria-pressed={aba === a.id}
-                  className={`shrink-0 whitespace-nowrap rounded-t-2xl border border-b-0 px-3.5 text-[13px] font-bold backdrop-blur-xl backdrop-saturate-150 transition-[background-color,height,color] duration-200 ${aba === a.id ? 'h-10 border-white/70 bg-white/80 text-[#111] shadow-[inset_0_1px_0_rgba(255,255,255,.9)]' : 'h-9 border-white/25 bg-white/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.35)] hover:bg-white/25'}`}>
+                  className={`shrink-0 whitespace-nowrap rounded-t-2xl border border-b-0 px-3.5 text-[13px] font-bold backdrop-blur-xl backdrop-saturate-150 transition-[background-color,height,color,transform] duration-200 ease-out active:scale-[.96] ${aba === a.id ? 'h-10 border-white/70 bg-white/80 text-[#111] shadow-[inset_0_1px_0_rgba(255,255,255,.9)]' : 'h-9 border-white/25 bg-white/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.35)] hover:bg-white/25'}`}>
                   {a.id === MERCADO_ENCARTE.id && <span aria-hidden="true" className="mr-1 text-[#d81e29]">★</span>}{a.nome} {a.ajuste ? <Icon name="Wrench" size={13} className={`inline ${aba === a.id ? 'text-[#b3261e]' : 'text-white/80'}`} aria-label="ajustando" /> : <span className={aba === a.id ? 'text-[#555]' : 'text-white/75'}>{a.n}</span>}
                 </button>
               ))}
             </div>
+            <div key={aba} className={direcao.current > 0 ? 'cm-troca-d' : 'cm-troca-e'}>
             {emAjuste ? (
               <AjustandoOfertas largura={larguraAberta} altura={H} setor={SETORES.find((s) => s.id === aba)} outras={abas.filter((a) => !a.ajuste)} onEscolher={setAba} />
             ) : (
@@ -487,6 +500,7 @@ export default function FolhearEncarte() {
               {atualizado && <span className="pointer-events-none absolute right-2 top-2 z-20 rounded-full bg-[#ffd23f] px-2.5 py-1 text-[12px] font-bold text-[#222]">Atualizado agora</span>}
             </div>
             )}
+            </div>
             {/* a nota presa embaixo do jornal */}
             <Nota compras={compras} loja={loja} aberta={notaAberta} setAberta={setNotaAberta} ultimo={ultimo} largura={larguraAberta} barraRef={notaRef} pulo={notaPulo} />
           </div>
