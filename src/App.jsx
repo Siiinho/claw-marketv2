@@ -19,6 +19,7 @@ const Usuarios = lazy(() => import('./pages/Usuarios'))
 const Config = lazy(() => import('./pages/Config'))
 const EncarteDigital = lazy(() => import('./pages/EncarteDigital'))
 const Mercado = lazy(() => import('./pages/Mercado'))
+const Visitas = lazy(() => import('./pages/Visitas'))
 const JornalPapel = lazy(() => import('./pages/FolhearEncarte'))
 const WhatsappOfertas = lazy(() => import('./pages/WhatsappOfertas'))
 
@@ -102,6 +103,7 @@ export default function App() {
             <Route path="usuarios" element={<Protegida chave="usuarios"><Usuarios /></Protegida>} />
             <Route path="config" element={<Protegida chave="config"><Config /></Protegida>} />
             <Route path="mercado" element={<Protegida chave="mercado"><Mercado /></Protegida>} />
+            <Route path="visitas" element={<Protegida chave="visitas"><Visitas /></Protegida>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

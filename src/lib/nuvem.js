@@ -199,6 +199,24 @@ export async function enviarFotosCatalogoNuvem(codigos, aoProgresso = () => {}, 
   return estado
 }
 
+// ---------- visitas do site do cliente ----------
+// Conta uma abertura por vez que a página abre, e um visitante na primeira abertura do dia no aparelho.
+const hojeSP = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+export async function registrarVisita(pagina) {
+  if (!nuvemAtiva()) return
+  const chave = `clawmarket:visita:${pagina}:${hojeSP()}`
+  let novo = true
+  try { novo = !localStorage.getItem(chave); localStorage.setItem(chave, '1') } catch (_) { /* sem memória: conta como novo */ }
+  try { await cliente().rpc('cm_registrar_visita', { p_pagina: pagina, p_novo: novo }) } catch (_) { /* sem internet: não conta */ }
+}
+export async function lerVisitasNuvem(dias = 30) {
+  if (!nuvemAtiva()) return null
+  const desde = new Date(Date.now() - dias * 86400000).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
+  const { data, error } = await cliente().from('cm_visitas').select('dia,pagina,visitantes,aberturas').gte('dia', desde).order('dia')
+  if (error) throw new Error('Não deu para ler as visitas agora.')
+  return data || []
+}
+
 // ---------- encarte publicado (o cliente lê sem login) ----------
 export async function publicarEncarteNuvem(encarte) {
   await gravarNuvem([{ colecao: 'encarte', id: 'publicado', dados: encarte, excluido: false }])

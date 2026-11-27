@@ -110,6 +110,7 @@ async function limparEncarte(corpo) {
     fundo: corpo?.fundo ? await guardarImagem(corpo.fundo) : null,
     temasSetor: Object.fromEntries(Object.entries(corpo?.temasSetor || {}).filter(([k, v]) => idValido(k) && idValido(v)).slice(0, 40)),
     temasV: corpo?.temasV === 2 ? 2 : 1,
+    layoutsSetor: Object.fromEntries(Object.entries(corpo?.layoutsSetor || {}).filter(([k, v]) => idValido(k) && ['grade', 'destaque', 'jornal', 'ancorado'].includes(v)).slice(0, 40)),
     periodosSetor: Object.fromEntries(Object.entries(corpo?.periodosSetor || {}).filter(([k]) => idValido(k)).slice(0, 40)
       .map(([k, v]) => [k, { de: texto(v?.de, 10), ate: texto(v?.ate, 10) }])),
     escalaLogo: Math.min(1.3, Math.max(0.4, Number(corpo?.escalaLogo) || 1)),
