@@ -1,8 +1,9 @@
 import MarcaClawMarket from '../components/MarcaClawMarket'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/StoreContext'
 import { Icon, Botao } from '../components/ui'
+import { enderecoDoNome, enderecoValido, enderecoLivre } from '../lib/nuvem'
 
 const DESTAQUES = [
   { icone: 'TrendingDown', titulo: 'Venda antes de vencer', desc: 'a validade avisa e vira oferta' },
@@ -16,6 +17,17 @@ export default function Login() {
   const [modo, setModo] = useState('entrar') // entrar | mercado | equipe
   const [mercadoNome, setMercadoNome] = useState('')
   const [convite, setConvite] = useState('')
+  // endereço exclusivo do jornal, sai do nome do mercado (dá para trocar)
+  const [endereco, setEndereco] = useState('')
+  const [enderecoMexido, setEnderecoMexido] = useState(false)
+  const [livre, setLivre] = useState(null)
+  const enderecoFinal = enderecoMexido ? endereco : enderecoDoNome(mercadoNome)
+  useEffect(() => {
+    if (modo !== 'mercado' || !enderecoFinal) { setLivre(null); return undefined }
+    let ativo = true
+    const t = setTimeout(() => enderecoLivre(enderecoFinal).then((v) => { if (ativo) setLivre(v) }), 350)
+    return () => { ativo = false; clearTimeout(t) }
+  }, [enderecoFinal, modo])
   const [identificador, setIdentificador] = useState('')
   const [senha, setSenha] = useState('')
   const [nome, setNome] = useState('')
@@ -47,7 +59,8 @@ export default function Login() {
     setEnviando(true)
     setErro('')
     try {
-      const r = await registrar(modo === 'mercado' ? { nome, senha, mercadoNome } : { nome, senha, convite })
+      if (modo === 'mercado' && (!enderecoValido(enderecoFinal) || livre === false)) { setErro('Escolha outro endereço para o jornal.'); return }
+      const r = await registrar(modo === 'mercado' ? { nome, senha, mercadoNome, mercadoEndereco: enderecoFinal } : { nome, senha, convite })
       if (r.ok) {
         toast(modo === 'mercado' ? `${mercadoNome.trim()} cadastrado! Agora coloque a logo e as lojas.` : `Conta criada. Bem-vindo, ${nome}!`)
         navigate(modo === 'mercado' ? '/mercado' : '/')
@@ -128,10 +141,24 @@ export default function Login() {
           ) : (
             <form onSubmit={criar} className="space-y-4">
               {modo === 'mercado' ? (
-                <div>
-                  <label htmlFor="criar-mercado" className="mb-1 block text-sm font-medium">Nome do mercado</label>
-                  <input id="criar-mercado" value={mercadoNome} onChange={(e) => setMercadoNome(e.target.value)} placeholder="Ex.: Supermercado Bom Preço" autoComplete="organization" className={CLS} />
-                </div>
+                <>
+                  <div>
+                    <label htmlFor="criar-mercado" className="mb-1 block text-sm font-medium">Nome do mercado</label>
+                    <input id="criar-mercado" value={mercadoNome} onChange={(e) => setMercadoNome(e.target.value)} placeholder="Ex.: Supermercado Bom Preço" autoComplete="organization" className={CLS} />
+                  </div>
+                  <div>
+                    <label htmlFor="criar-endereco" className="mb-1 block text-sm font-medium">Endereço exclusivo do seu jornal</label>
+                    <div className="flex items-stretch overflow-hidden rounded-lg border border-ink-soft/20 bg-white focus-within:border-bengala focus-within:ring-2 focus-within:ring-bengala/20">
+                      <span className="flex items-center bg-cream-200 px-2 text-xs text-ink-soft">…vercel.app/#/</span>
+                      <input id="criar-endereco" value={enderecoFinal} onChange={(e) => { setEnderecoMexido(true); setEndereco(e.target.value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-{2,}/g, '-').replace(/^-/, '').slice(0, 40)) }} placeholder="seu-mercado" autoCapitalize="none" className="min-w-0 flex-1 px-2 py-2.5 text-sm outline-none" />
+                    </div>
+                    {enderecoFinal && (
+                      <p className={`mt-1 text-xs font-semibold ${!enderecoValido(enderecoFinal) || livre === false ? 'text-critical' : livre ? 'text-success' : 'text-ink-soft'}`}>
+                        {!enderecoValido(enderecoFinal) ? 'Use letras, números e hífen (mínimo 2).' : livre === false ? 'Esse endereço já é de outro mercado. Escolha outro.' : livre ? 'Endereço livre! Os clientes abrem o jornal por ele.' : 'Conferindo…'}
+                      </p>
+                    )}
+                  </div>
+                </>
               ) : (
                 <div>
                   <label htmlFor="criar-convite" className="mb-1 block text-sm font-medium">Código do mercado</label>

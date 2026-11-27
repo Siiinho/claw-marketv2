@@ -155,3 +155,6 @@ grant execute on function public.cm_registrar_visita(text, boolean) to anon, aut
 -- visitas; cm_novo_usuario cria mercado (mercado_nome) ou entra na equipe (convite);
 -- cm_convite_mercado(código) para o login; cm_registrar_visita(pagina, novo, mercado).
 -- O Bengala guarda ids como sempre; outros mercados guardam "<mercado>~<id>" (ver src/lib/nuvem.js).
+
+-- 27/11/2026: migração multi_mercado_endereco: endereço exclusivo escolhido no cadastro (mercado_endereco),
+-- cm_endereco_livre(endereco) para o login conferir, nomes reservados (telas do app).

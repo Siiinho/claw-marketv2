@@ -261,7 +261,7 @@ export function StoreProvider({ children }) {
   // Cadastro: nome e senha. Toda conta nova começa como repositor; o admin muda a função
   // na tela Usuários.
   const registrar = useCallback(
-    async ({ nome, senha, mercadoNome, convite }) => {
+    async ({ nome, senha, mercadoNome, mercadoEndereco, convite }) => {
       const nomeT = (nome || '').trim()
       if (!nomeT || !senha) return { ok: false, erro: 'Informe nome e senha.' }
       if (mercadoNome !== undefined && String(mercadoNome).trim().length < 3) return { ok: false, erro: 'Escreva o nome do mercado.' }
@@ -269,7 +269,7 @@ export function StoreProvider({ children }) {
       if (nomeT.toLowerCase() === 'admin' || nomeT.toLowerCase().startsWith('admin ')) return { ok: false, erro: 'Esse nome é reservado. Escolha outro.' }
       if (senha.length < 4) return { ok: false, erro: 'A senha precisa de pelo menos 4 caracteres.' }
       if (nuvem) {
-        const r = await criarContaNuvem({ nome: nomeT, senha, mercadoNome, convite })
+        const r = await criarContaNuvem({ nome: nomeT, senha, mercadoNome, mercadoEndereco, convite })
         if (r.ok) setUsuario(r.usuario)
         return r
       }

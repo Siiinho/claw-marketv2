@@ -33,6 +33,13 @@ function Carregando() {
   )
 }
 
+// Abre direto no jornal (sem a abertura do app): #/encarte, #/whatsapp, #/m/x/... e #/<endereço do mercado>
+const TELAS_DO_APP = new Set(['', 'login', 'produtos', 'ofertas', 'precificacao', 'cartazes', 'jornal', 'relatorios', 'sustentabilidade', 'scanner', 'usuarios', 'config', 'mercado', 'visitas', 'encarte-lista'])
+function ehSiteDoCliente(hash) {
+  const primeiro = String(hash || '').replace(/^#\/?/, '').split(/[/?]/)[0]
+  return !TELAS_DO_APP.has(primeiro)
+}
+
 // Site do cliente de outro mercado: #/m/<mercado>/encarte (o Bengala segue em #/encarte).
 function DoMercado({ children }) {
   const { mercado } = useParams()
@@ -88,7 +95,7 @@ function TrocarSenhaObrigatoria() {
 export default function App() {
   const { usuario, carregandoSessao, config } = useStore()
   // abertura animada só ao entrar no app (o site do cliente abre direto no jornal)
-  const [comAbertura] = useState(() => typeof window === 'undefined' || !/^#\/(m\/[^/]+\/)?(encarte|folhear|whatsapp)/.test(window.location.hash))
+  const [comAbertura] = useState(() => typeof window === 'undefined' || !ehSiteDoCliente(window.location.hash))
   return (
     <MarcaContexto.Provider value={marcaPublica(config?.mercado)}>
       {comAbertura && <AberturaApp pronto={!carregandoSessao} />}
@@ -121,6 +128,9 @@ export default function App() {
             <Route path="mercado" element={<Protegida chave="mercado"><Mercado /></Protegida>} />
             <Route path="visitas" element={<Protegida chave="visitas"><Visitas /></Protegida>} />
           </Route>
+          {/* endereço exclusivo de cada mercado: #/bom-preco e #/bom-preco/whatsapp */}
+          <Route path="/:mercado" element={<DoMercado><JornalPapel /></DoMercado>} />
+          <Route path="/:mercado/whatsapp" element={<DoMercado><WhatsappOfertas /></DoMercado>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

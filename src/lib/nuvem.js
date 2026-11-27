@@ -27,9 +27,26 @@ const semPrefixo = (id, m = mercadoLogin) => {
   const p = prefixo(m)
   return p && String(id).startsWith(p) ? String(id).slice(p.length) : id
 }
-// Endereço público de uma página do mercado (jornal, WhatsApp...).
+// Endereço público de uma página do mercado: o jornal fica no endereço exclusivo dele
+// (#/bom-preco) e o WhatsApp em #/bom-preco/whatsapp. O Bengala segue em #/encarte e #/whatsapp.
 export function caminhoDoMercado(pagina, m = mercadoAtual()) {
-  return m && m !== MERCADO_PADRAO ? `#/m/${m}/${pagina}` : `#/${pagina}`
+  if (!m || m === MERCADO_PADRAO) return `#/${pagina}`
+  return pagina === 'encarte' || pagina === 'folhear' ? `#/${m}` : `#/${m}/${pagina}`
+}
+
+// Endereço a partir do nome ("Mercado Bom Preço" -> "mercado-bom-preco"), igual à nuvem.
+export const enderecoDoNome = (nome) => String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32)
+const RESERVADOS = new Set(['encarte', 'encarte-lista', 'folhear', 'whatsapp', 'login', 'm', 'produtos', 'ofertas', 'precificacao',
+  'cartazes', 'jornal', 'relatorios', 'sustentabilidade', 'scanner', 'usuarios', 'config', 'mercado', 'visitas', 'api', 'admin',
+  'assets', 'clawmarket', 'app', 'site', 'www', 'teste'])
+export const enderecoValido = (e) => SLUG.test(e || '') && !RESERVADOS.has(e)
+// O endereço está livre? (null = não deu para conferir agora)
+export async function enderecoLivre(e) {
+  if (!enderecoValido(e)) return false
+  if (!nuvemAtiva()) return null
+  const { data, error } = await cliente().rpc('cm_endereco_livre', { p_endereco: e })
+  return error ? null : Boolean(data)
 }
 const DOMINIO = 'usuarios.clawmarket.app'
 
@@ -91,9 +108,9 @@ export async function entrarNuvem(usuario, senha) {
 }
 
 // Conta nova: com `mercadoNome` cria um mercado (a pessoa é a dona); com `convite` entra na equipe.
-export async function criarContaNuvem({ nome, senha, mercadoNome, convite }) {
+export async function criarContaNuvem({ nome, senha, mercadoNome, mercadoEndereco, convite }) {
   const usuario = normalizarUsuario(nome)
-  const extras = mercadoNome ? { mercado_nome: String(mercadoNome).trim() } : convite ? { convite: String(convite).trim().toLowerCase() } : {}
+  const extras = mercadoNome ? { mercado_nome: String(mercadoNome).trim(), ...(mercadoEndereco ? { mercado_endereco: mercadoEndereco } : {}) } : convite ? { convite: String(convite).trim().toLowerCase() } : {}
   const { data, error } = await cliente().auth.signUp({
     email: emailDoUsuario(usuario),
     password: senhaNuvem(senha),
