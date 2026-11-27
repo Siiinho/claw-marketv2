@@ -137,7 +137,7 @@ export function CelulaProduto({ produto, tema, onAbrir, estilo, indice = 0 }) {
       onClick={() => onAbrir?.(produto)}
       aria-label={`Ver oferta: ${produto.nome}`}
       className="cm-celula absolute overflow-hidden text-left focus:outline-none focus-visible:ring-8 focus-visible:ring-white"
-      style={{ ...estilo, borderRadius: raio, background: soltas ? 'rgba(0,0,0,.2)' : tema.celula || '#ffffff', border: soltas ? `3px solid ${tema.corDestaque}` : undefined, '--cm-i': indice }}
+      style={{ ...estilo, borderRadius: raio, background: soltas ? 'radial-gradient(ellipse at 50% 58%, rgba(255,255,255,.62) 0%, rgba(255,255,255,.22) 45%, rgba(0,0,0,.12) 100%)' : tema.celula || '#ffffff', border: soltas ? `3px solid ${tema.corDestaque}` : undefined, '--cm-i': indice }}
     >
       <Camada nome="nome" produto={produto} estilo={estilo} origem="50% 0%">
       <div

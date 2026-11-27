@@ -178,7 +178,7 @@ function Ancorado({ produto, tema, onAbrir, largura, altura, indice }) {
   return (
     <button type="button" onClick={() => onAbrir?.(produto)} aria-label={`Ver oferta em destaque: ${produto.nome}`}
       className="cm-celula relative overflow-hidden text-left focus:outline-none focus-visible:ring-4 focus-visible:ring-black/30"
-      style={{ width: largura, height: altura, borderRadius: 16, background: soltas ? 'rgba(0,0,0,.18)' : '#fff8e6', border: `3px solid ${tema.corDestaque}`, '--cm-i': indice }}>
+      style={{ width: largura, height: altura, borderRadius: 16, background: soltas ? 'radial-gradient(ellipse at 50% 58%, rgba(255,255,255,.62) 0%, rgba(255,255,255,.22) 45%, rgba(0,0,0,.12) 100%)' : '#fff8e6', border: `3px solid ${tema.corDestaque}`, '--cm-i': indice }}>
       {/* a big idea da campanha em cada ancorado, como o "Especial Semana Black" do impresso */}
       {arte
         ? <img src={arte} alt="" className="absolute object-contain" style={{ left: 4, top: 2, height: 78, width: 104, zIndex: 2 }} />

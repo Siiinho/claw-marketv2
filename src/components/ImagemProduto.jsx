@@ -16,8 +16,10 @@ export default function ImagemProduto({ src, ...props }) {
     semFundo(src).then((r) => { if (ativo) setLimpa(r) })
     return () => { ativo = false }
   }, [tirar, src])
-  // enquanto prepara, mostra a original (sem piscar vazio)
-  return <img src={(tirar && limpa) || src} {...props} />
+  // enquanto prepara, mostra a original (sem piscar vazio). Recortada, ganha sombra para saltar do fundo.
+  const recortada = tirar && limpa && limpa !== src
+  const style = recortada ? { ...props.style, filter: 'drop-shadow(0 5px 6px rgba(0,0,0,.45)) saturate(1.08) contrast(1.03)' } : props.style
+  return <img src={(tirar && limpa) || src} {...props} style={style} />
 }
 
 // Marca de caneta em volta do produto que o cliente pôs na lista.

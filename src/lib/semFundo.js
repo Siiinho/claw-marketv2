@@ -1,9 +1,10 @@
 // Tira o fundo branco da foto do produto (packshot em fundo branco) para ela "sentar" no fundo da
-// campanha. Preenche a partir das bordas tudo o que é quase branco; o branco de dentro do produto
-// (rótulo, embalagem) fica, porque não encosta na borda. Roda no aparelho, uma vez por foto.
+// campanha. Parte das bordas e só avança por pixels quase iguais ao branco do fundo E parecidos com
+// o vizinho: assim para no contorno do produto, mesmo quando a embalagem também é branca
+// (leite, sabão, tampa). Na dúvida, a foto fica como está. Roda no aparelho, uma vez por foto.
 const cache = new Map()
 
-const LADO = 480 // tamanho máximo trabalhado: leve no celular e nítido na página
+const LADO = 900 // tamanho máximo trabalhado: nítido na página e ainda leve no celular
 
 function carregar(src) {
   return new Promise((resolve, reject) => {
@@ -16,6 +17,56 @@ function carregar(src) {
   })
 }
 
+export function tirarFundo(d, w, h) {
+  const n = w * h
+  const px = (i) => [d[i * 4], d[i * 4 + 1], d[i * 4 + 2], d[i * 4 + 3]]
+  // cor do fundo: a média dos pixels claros da borda
+  let r0 = 0, g0 = 0, b0 = 0, k = 0, borda = 0
+  const bordaIdx = []
+  for (let x = 0; x < w; x++) bordaIdx.push(x, (h - 1) * w + x)
+  for (let y = 0; y < h; y++) bordaIdx.push(y * w, y * w + w - 1)
+  for (const i of bordaIdx) {
+    borda++
+    const [r, g, b, a] = px(i)
+    if (a < 20 || (Math.min(r, g, b) > 228 && Math.max(r, g, b) - Math.min(r, g, b) < 16)) { r0 += a < 20 ? 255 : r; g0 += a < 20 ? 255 : g; b0 += a < 20 ? 255 : b; k++ }
+  }
+  // só mexe se a borda for mesmo de fundo branco: foto com cenário fica como está
+  if (k / borda < 0.75) return false
+  r0 /= k; g0 /= k; b0 /= k
+  const distFundo = (i) => (d[i * 4 + 3] < 20 ? 0 : Math.max(Math.abs(d[i * 4] - r0), Math.abs(d[i * 4 + 1] - g0), Math.abs(d[i * 4 + 2] - b0)))
+  const ehFundo = (i) => distFundo(i) <= 14
+  const parecido = (i, j) => Math.abs(d[i * 4] - d[j * 4]) + Math.abs(d[i * 4 + 1] - d[j * 4 + 1]) + Math.abs(d[i * 4 + 2] - d[j * 4 + 2]) <= 9
+
+  const fora = new Uint8Array(n)
+  const fila = new Int32Array(n)
+  let ini = 0, fim = 0
+  for (const i of bordaIdx) if (!fora[i] && ehFundo(i)) { fora[i] = 1; fila[fim++] = i }
+  const vai = (de, para) => { if (!fora[para] && ehFundo(para) && parecido(de, para)) { fora[para] = 1; fila[fim++] = para } }
+  while (ini < fim) {
+    const i = fila[ini++], x = i % w
+    if (x > 0) vai(i, i - 1)
+    if (x < w - 1) vai(i, i + 1)
+    if (i >= w) vai(i, i - w)
+    if (i < n - w) vai(i, i + w)
+  }
+  // sobrou quase nada (ou nada saiu): melhor não arriscar
+  let saiu = 0
+  for (let i = 0; i < n; i++) saiu += fora[i]
+  if (saiu < n * 0.04 || saiu > n * 0.93) return false
+
+  // contorno suave só no que é quase fundo; o produto continua inteiro e opaco
+  for (let i = 0; i < n; i++) {
+    if (fora[i]) { d[i * 4 + 3] = 0; continue }
+    const x = i % w
+    const vizinho = (x > 0 && fora[i - 1]) || (x < w - 1 && fora[i + 1]) || (i >= w && fora[i - w]) || (i < n - w && fora[i + w])
+    if (vizinho) {
+      const dist = distFundo(i)
+      if (dist < 30) d[i * 4 + 3] = Math.round(d[i * 4 + 3] * (0.45 + 0.55 * (dist / 30)))
+    }
+  }
+  return true
+}
+
 async function processar(src) {
   const img = await carregar(src)
   const k = Math.min(1, LADO / Math.max(img.naturalWidth, img.naturalHeight))
@@ -24,41 +75,11 @@ async function processar(src) {
   const c = document.createElement('canvas')
   c.width = w; c.height = h
   const g = c.getContext('2d', { willReadFrequently: true })
+  g.imageSmoothingQuality = 'high'
   g.drawImage(img, 0, 0, w, h)
   let dados
   try { dados = g.getImageData(0, 0, w, h) } catch (_) { return src } // foto de outro site sem permissão: fica como está
-  const d = dados.data
-  const n = w * h
-  // fundo: claro e sem cor (ou já transparente)
-  const claro = (i) => d[i * 4 + 3] < 20 || (Math.min(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]) > 232 && Math.max(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]) - Math.min(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]) < 18)
-  // só tira se a borda for mesmo branca: foto com cenário não é mexida
-  let bordaClara = 0, borda = 0
-  for (let x = 0; x < w; x += 2) { borda += 2; bordaClara += claro(x) + claro((h - 1) * w + x) }
-  for (let y = 0; y < h; y += 2) { borda += 2; bordaClara += claro(y * w) + claro(y * w + w - 1) }
-  if (bordaClara / borda < 0.7) return src
-  const fora = new Uint8Array(n)
-  const fila = new Int32Array(n)
-  let ini = 0, fim = 0
-  const entra = (i) => { if (!fora[i] && claro(i)) { fora[i] = 1; fila[fim++] = i } }
-  for (let x = 0; x < w; x++) { entra(x); entra((h - 1) * w + x) }
-  for (let y = 0; y < h; y++) { entra(y * w); entra(y * w + w - 1) }
-  while (ini < fim) {
-    const i = fila[ini++], x = i % w
-    if (x > 0) entra(i - 1)
-    if (x < w - 1) entra(i + 1)
-    if (i >= w) entra(i - w)
-    if (i < n - w) entra(i + w)
-  }
-  // borda suave: pixel do produto encostado no fundo fica meio transparente conforme o quanto é claro
-  for (let i = 0; i < n; i++) {
-    if (fora[i]) { d[i * 4 + 3] = 0; continue }
-    const x = i % w
-    const vizinho = (x > 0 && fora[i - 1]) || (x < w - 1 && fora[i + 1]) || (i >= w && fora[i - w]) || (i < n - w && fora[i + w])
-    if (vizinho) {
-      const l = (d[i * 4] + d[i * 4 + 1] + d[i * 4 + 2]) / 3
-      d[i * 4 + 3] = Math.round(d[i * 4 + 3] * Math.min(1, Math.max(0.35, (255 - l) / 60)))
-    }
-  }
+  if (!tirarFundo(dados.data, w, h)) return src
   g.putImageData(dados, 0, 0)
   return c.toDataURL('image/png')
 }
