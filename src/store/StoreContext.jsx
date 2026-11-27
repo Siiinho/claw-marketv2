@@ -42,6 +42,7 @@ export const NAV = [
   { key: 'esg', label: 'Sustentabilidade', path: '/sustentabilidade', icone: 'Leaf' },
   { key: 'scanner', label: 'Conferir validade', path: '/scanner', icone: 'ScanBarcode' },
   { key: 'usuarios', label: 'Usuários', path: '/usuarios', icone: 'Users' },
+  { key: 'visitas', label: 'Visitas', path: '/visitas', icone: 'Users' },
   { key: 'mercado', label: 'Meu mercado', path: '/mercado', icone: 'Store' },
   { key: 'config', label: 'Configurações', path: '/config', icone: 'Settings' },
 ]
@@ -50,7 +51,7 @@ export const PERMISSOES = {
   // Administrador: acesso total (inclui Precificação, que envolve custo, Relatórios, Usuários, Config)
   admin: NAV.map((n) => n.key),
   // Gerente: monta ofertas/cartazes/jornal e adiciona produtos à fila — SEM precificação por custo
-  gerente: ['dashboard', 'produtos', 'ofertas', 'cartazes', 'jornal', 'scanner'],
+  gerente: ['dashboard', 'produtos', 'ofertas', 'cartazes', 'jornal', 'scanner', 'visitas'],
   // Repositor: operação de chão de loja
   repositor: ['dashboard', 'scanner'],
 }

@@ -18,6 +18,7 @@ const SUBTITULOS = {
   usuarios: 'Equipe e permissões',
   config: 'Estabelecimento e automação',
   mercado: 'Logo, lojas, pagamentos e o modelo do encarte',
+  visitas: 'Quantas pessoas abriram o jornal hoje',
 }
 
 // Abas da faixa superior (desktop); o resto vai para "Mais".

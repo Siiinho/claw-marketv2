@@ -121,3 +121,30 @@ drop policy if exists "produtos: logados trocam fotos" on storage.objects;
 create policy "produtos: logados trocam fotos" on storage.objects for update to authenticated using (bucket_id = 'produtos') with check (bucket_id = 'produtos');
 drop policy if exists "produtos: logados veem fotos" on storage.objects;
 create policy "produtos: logados veem fotos" on storage.objects for select to authenticated using (bucket_id = 'produtos');
+
+-- 27/11/2026: visitas do site do cliente por dia (o site chama cm_registrar_visita sem login)
+create table if not exists public.cm_visitas (
+  dia date not null,
+  pagina text not null,
+  visitantes integer not null default 0,
+  aberturas integer not null default 0,
+  primary key (dia, pagina)
+);
+alter table public.cm_visitas enable row level security;
+create policy "visitas: logados leem" on public.cm_visitas for select to authenticated using (true);
+create or replace function public.cm_registrar_visita(p_pagina text, p_novo boolean)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  v_pagina text := left(coalesce(nullif(p_pagina, ''), 'encarte'), 30);
+  v_dia date := (now() at time zone 'America/Sao_Paulo')::date;
+begin
+  if v_pagina !~ '^[a-z-]+$' then return; end if;
+  insert into public.cm_visitas (dia, pagina, visitantes, aberturas)
+  values (v_dia, v_pagina, case when p_novo then 1 else 0 end, 1)
+  on conflict (dia, pagina) do update
+    set aberturas = cm_visitas.aberturas + 1,
+        visitantes = cm_visitas.visitantes + case when p_novo then 1 else 0 end;
+end;
+$$;
+revoke all on function public.cm_registrar_visita(text, boolean) from public;
+grant execute on function public.cm_registrar_visita(text, boolean) to anon, authenticated;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../components/ui'
 import { SETORES, MERCADO_ENCARTE, formatBRL, noMercadoEncarte, dataISOmaisDias, plural, paraNumero } from '../lib/utils'
 import { carregarEncartePublicado, assinarEncarte } from '../lib/encartePublico'
+import { registrarVisita } from '../lib/nuvem'
 import { temaCampanhaById, temasDoSetor } from '../lib/temasCampanha'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina } from '../components/JornalMercado'
 import { ContextoEncarte } from '../components/ImagemProduto'
@@ -46,7 +47,7 @@ function Folha({ children, k, largura, altura, lado = 'direita' }) {
 }
 
 // ---------- setor desativado pela loja ----------
-function AjustandoOfertas({ largura, altura, setor, outras, onEscolher }) {
+function AjustandoOfertas({ largura, altura, setor, outras, onEscolher, titulo = 'Ajustando ofertas' }) {
   return (
     <div role="status" className="flex flex-col items-center justify-center rounded-b-xl bg-white px-6 text-center text-[#111]" style={{ width: largura, height: altura }}>
       <svg viewBox="-12 -22 144 124" className="cm-carrinho h-32 w-36" aria-hidden="true">
@@ -59,7 +60,7 @@ function AjustandoOfertas({ largura, altura, setor, outras, onEscolher }) {
         <rect x="104" y="80" width="9" height="12" rx="2" fill="#ffd23f" className="cm-carrinho-item" style={{ animationDelay: '.15s' }} />
         <line x1="6" y1="96" x2="116" y2="96" stroke="#d1d5db" strokeWidth="3" strokeLinecap="round" />
       </svg>
-      <p className="mt-4 text-[26px] font-black leading-tight">Ajustando ofertas</p>
+      <p className="mt-4 text-[26px] font-black leading-tight">{titulo}</p>
       <p className="mt-2 max-w-[300px] text-[15px] leading-snug text-[#555]">
         {setor ? <>Estamos arrumando as ofertas de <strong className="text-[#111]">{setor.nome}</strong>.</> : 'Estamos arrumando as ofertas.'} Esta página muda sozinha quando elas voltarem.
       </p>
@@ -184,13 +185,14 @@ function Nota({ compras, loja, aberta, setAberta, ultimo, largura, barraRef, pul
 export default function FolhearEncarte() {
   const [encarte, setEncarte] = useState(null)
   const [atualizado, setAtualizado] = useState(false)
+  useEffect(() => { registrarVisita('jornal') }, [])
   const compras = useListaCompras()
   useEffect(() => {
     let ativo = true
     let versao = null
     const carregar = async () => {
       const novo = await carregarEncartePublicado()
-      if (!ativo || !novo?.itens?.length || novo.versao === versao) return
+      if (!ativo || !novo || novo.versao === versao) return
       if (versao !== null) { setAtualizado(true); setTimeout(() => ativo && setAtualizado(false), 5000) }
       versao = novo.versao
       setEncarte(novo)
@@ -231,7 +233,8 @@ export default function FolhearEncarte() {
     direcao.current = para >= de ? 1 : -1
     setAbaEstado(id)
   }
-  const emAjuste = abas.find((a) => a.id === aba)?.ajuste || (!abas.some((a) => !a.ajuste) && pausadosSet.size > 0)
+  const semOfertas = Boolean(encarte) && !abas.length
+  const emAjuste = semOfertas || abas.find((a) => a.id === aba)?.ajuste || (!abas.some((a) => !a.ajuste) && pausadosSet.size > 0)
   const itens = ehHoje ? doDia : aba === 'todas' ? daSemana : daSemana.filter((p) => p.setor === aba)
   const layout = ehHoje ? 'jornal' : LAYOUTS_VALIDOS.includes(encarte?.layout) ? encarte.layout : 'grade'
   const temaGeral = temaCampanhaById(encarte?.tema)
@@ -455,7 +458,7 @@ export default function FolhearEncarte() {
             </div>
             <div key={aba} className={direcao.current > 0 ? 'cm-troca-d' : 'cm-troca-e'}>
             {emAjuste ? (
-              <AjustandoOfertas largura={larguraAberta} altura={H} setor={SETORES.find((s) => s.id === aba)} outras={abas.filter((a) => !a.ajuste)} onEscolher={setAba} />
+              <AjustandoOfertas largura={larguraAberta} altura={H} setor={semOfertas ? null : SETORES.find((s) => s.id === aba)} titulo={semOfertas ? 'Novas ofertas chegando' : 'Ajustando ofertas'} outras={abas.filter((a) => !a.ajuste)} onEscolher={setAba} />
             ) : (
             <div
               ref={palcoRef}

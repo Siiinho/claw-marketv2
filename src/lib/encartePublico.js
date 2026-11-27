@@ -213,6 +213,8 @@ export async function carregarEncartePublicado() {
   if (nuvemAtiva()) {
     const daNuvem = await lerEncarteNuvem()
     if (temOfertas(daNuvem)) return daNuvem
+    // a loja tirou tudo do site de propósito (leitura deu certo e tem versão): vale o vazio
+    if (daNuvem && daNuvem.versao) return daNuvem
     reserva = daNuvem || reserva
   }
   const doSite = await lerDoSite()

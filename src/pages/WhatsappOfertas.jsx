@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { carregarEncartePublicado, assinarEncarte } from '../lib/encartePublico'
+import { registrarVisita } from '../lib/nuvem'
 import { MarcaContexto, ehBengala, linkWhatsapp, BENGALA_PADRAO } from '../lib/marca'
 import logoBengala from '../assets/logo-bengala-transparente.png'
 
@@ -27,6 +28,7 @@ function Balao({ marca }) {
 export default function WhatsappOfertas() {
   const [encarte, setEncarte] = useState(null)
   const [carregou, setCarregou] = useState(false)
+  useEffect(() => { registrarVisita('whatsapp') }, [])
   useEffect(() => {
     let ativo = true
     const carregar = async () => {
