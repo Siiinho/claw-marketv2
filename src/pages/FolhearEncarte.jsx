@@ -49,8 +49,8 @@ function Folha({ children, k, largura, altura, lado = 'direita' }) {
 function AjustandoOfertas({ largura, altura, setor, outras, onEscolher }) {
   return (
     <div role="status" className="flex flex-col items-center justify-center rounded-b-xl bg-white px-6 text-center text-[#111]" style={{ width: largura, height: altura }}>
-      <svg viewBox="0 0 120 100" className="cm-carrinho h-28 w-32" aria-hidden="true">
-        <g transform="rotate(-24 60 70)">
+      <svg viewBox="-12 -22 144 124" className="cm-carrinho h-32 w-36" aria-hidden="true">
+        <g transform="rotate(-20 60 80)">
           <path d="M14 22h14l12 44h48l10-32H34" fill="none" stroke="#1f2937" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
           <circle cx="46" cy="80" r="7" fill="#1f2937" />
           <circle cx="82" cy="80" r="7" fill="#1f2937" />
