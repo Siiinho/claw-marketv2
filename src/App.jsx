@@ -2,7 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useStore, podeVer } from './store/StoreContext'
 import { MarcaContexto, marcaPublica } from './lib/marca'
-import TelaAbertura from './components/TelaAbertura'
+import AberturaApp from './components/AberturaApp'
 import { Icon, Toasts } from './components/ui'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -78,16 +78,19 @@ function TrocarSenhaObrigatoria() {
 
 export default function App() {
   const { usuario, carregandoSessao, config } = useStore()
+  // abertura animada só ao entrar no app (o site do cliente abre direto no jornal)
+  const [comAbertura] = useState(() => typeof window === 'undefined' || !/^#\/(encarte|folhear|whatsapp)/.test(window.location.hash))
   return (
     <MarcaContexto.Provider value={marcaPublica(config?.mercado)}>
+      {comAbertura && <AberturaApp pronto={!carregandoSessao} />}
       <Suspense fallback={<Carregando />}>
         <Routes>
           {/* público: o link da tag NFC abre aqui, sem login */}
-          <Route path="/encarte" element={<Suspense fallback={<TelaAbertura />}><JornalPapel /></Suspense>} />
+          <Route path="/encarte" element={<JornalPapel />} />
           {/* a versão em lista, para comparar */}
           <Route path="/encarte-lista" element={<EncarteDigital />} />
           {/* protótipo: o mesmo encarte com cara de jornal impresso */}
-          <Route path="/folhear" element={<Suspense fallback={<TelaAbertura />}><JornalPapel /></Suspense>} />
+          <Route path="/folhear" element={<JornalPapel />} />
           {/* público: o QR verde do rodapé abre aqui (escolher a loja e entrar no grupo de ofertas) */}
           <Route path="/whatsapp" element={<WhatsappOfertas />} />
           <Route path="/login" element={carregandoSessao ? <Carregando /> : usuario ? <Navigate to="/" replace /> : <Login />} />
