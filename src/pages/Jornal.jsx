@@ -367,6 +367,50 @@ export default function Jornal() {
     }
   }
 
+  // Setores de um jornal salvo: o do setor, ou os dos produtos (geral e estrela).
+  const setoresDoJornal = (jornal) => (jornal.tipo === 'setor' && jornal.setor ? [jornal.setor] : [...new Set((jornal.produtos || []).map((p) => p.setor).filter(Boolean))])
+  // Desativar: liga o "Ajustando ofertas" dos setores do jornal no site, na hora. Ativar desliga.
+  const desativarJornal = async (jornal, desativar) => {
+    const setores = setoresDoJornal(jornal)
+    const novos = desativar ? [...new Set([...pausados, ...setores])] : pausados.filter((id) => !setores.includes(id))
+    store.salvarConfig({ setoresPausados: novos })
+    setMudandoAjuste(setores[0])
+    try {
+      await atualizarPausadosNoSite(novos)
+      toast(desativar ? 'Desativado: o site mostra "Ajustando ofertas" nesse setor.' : 'Ativado: as ofertas voltaram ao site.', desativar ? 'info' : 'sucesso')
+    } catch (erro) {
+      toast(`${erro.message} Vale na próxima publicação.`, 'erro')
+    } finally {
+      setMudandoAjuste(null)
+    }
+  }
+  // Editar: volta ao gerador com os produtos, preços, campanha e período daquele jornal.
+  const editarJornal = (jornal) => {
+    remessa.forEach((p) => salvarProduto({ id: p.id, remessaPor: null, remessaEm: null }))
+    const base = Date.now()
+    const existentes = new Set(produtos.map((p) => p.id))
+    const lista = (jornal.produtos || []).filter((p) => existentes.has(p.id))
+    lista.forEach((p, i) => salvarProduto({
+      id: p.id,
+      remessaPor: usuario?.id,
+      remessaEm: new Date(base + i).toISOString(),
+      precoPromo: p.precoPromo ?? (p.precoJornalCalculado != null && Number(p.precoJornalCalculado) < Number(p.precoNormal) ? p.precoJornalCalculado : null),
+      seloOferta: p.seloOferta || null,
+    }))
+    destinoTocado.current = true
+    setDestinoEstado(jornal.tipo === 'setor' && jornal.setor ? jornal.setor : jornal.tipo === 'estrela' ? MERCADO_ENCARTE.id : 'geral')
+    if (jornal.temaArte) setTemaId(jornal.temaArte)
+    if (jornal.validadeDe) { setPeriodoDe(jornal.validadeDe); setDiaEstrela(jornal.validadeDe) }
+    if (jornal.validadeAte) setPeriodoAte(jornal.validadeAte)
+    if (jornal.layoutArte) setLayout(jornal.layoutArte)
+    if (jornal.escalaLogo) setEscalaLogo(jornal.escalaLogo)
+    setAcabouDePublicar(false)
+    setTela('montar')
+    irPara(1)
+    const faltam = (jornal.produtos || []).length - lista.length
+    toast(faltam > 0 ? `Jornal aberto para editar. ${plural(faltam, 'produto não existe', 'produtos não existem')} mais no cadastro.` : 'Jornal aberto para editar. Mude o que precisar e publique de novo.')
+  }
+
   // Tira do site as ofertas de um jornal salvo (o resto do site continua). O jornal fica no histórico.
   const retirarDoSite = async (jornal) => {
     setRetirando(jornal.id)
@@ -829,7 +873,7 @@ export default function Jornal() {
 
       {/* ============ HISTÓRICO ============ */}
       {tela === 'historico' && (
-        <Secao titulo="Jornais salvos" descricao="Ver: abre o jornal daquele dia. Retirar do site: tira essas ofertas do site do cliente (fica salvo aqui). Lixeira: apaga daqui.">
+        <Secao titulo="Jornais salvos" descricao="Ver: abre o jornal. Editar: volta ao gerador com esses produtos e preços. Desativar: o site mostra &quot;Ajustando ofertas&quot; nesse setor até você ativar de novo. Lixeira: apaga daqui.">
           {jornais.length === 0 ? (
             <EmptyState icon="History" titulo="Nenhum jornal salvo" descricao="Ao publicar ou imprimir, o jornal aparece aqui." />
           ) : (
@@ -842,7 +886,16 @@ export default function Jornal() {
                     <span className="block text-sm text-ink-soft">{plural(jornal.totalItens, 'produto', 'produtos')} · {new Date(jornal.criadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>
                   </span>
                   <Botao variante="contorno" className="shrink-0 px-3" onClick={() => setJornalVendo(jornal)} aria-label={`Ver ${jornal.titulo}`}><Icon name="Eye" size={15} /> <span className="hidden sm:inline">Ver</span></Botao>
-                  <Botao variante="contorno" className="shrink-0 px-3" disabled={retirando === jornal.id} onClick={() => retirarDoSite(jornal)} aria-label="Retirar estas ofertas do site"><Icon name="EyeOff" size={15} /> <span className="hidden sm:inline">{retirando === jornal.id ? 'Retirando…' : 'Retirar do site'}</span></Botao>
+                  <Botao variante="contorno" className="shrink-0 px-3" onClick={() => editarJornal(jornal)} aria-label={`Editar ${jornal.titulo}`}><Icon name="Pencil" size={15} /> <span className="hidden sm:inline">Editar</span></Botao>
+                  {(() => {
+                    const setores = setoresDoJornal(jornal)
+                    const desativado = setores.length > 0 && setores.every((s) => pausados.includes(s))
+                    return (
+                      <Botao variante={desativado ? 'escuro' : 'contorno'} className="shrink-0 px-3" disabled={!setores.length || setores.some((s) => mudandoAjuste === s)} onClick={() => desativarJornal(jornal, !desativado)} aria-label={desativado ? 'Ativar no site' : 'Desativar no site'}>
+                        <Icon name={desativado ? 'Power' : 'PowerOff'} size={15} /> <span className="hidden sm:inline">{desativado ? 'Ativar' : 'Desativar'}</span>
+                      </Botao>
+                    )
+                  })()}
                   <button type="button" onClick={() => setJornalApagar(jornal)} aria-label={`Apagar ${jornal.titulo}`} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-soft hover:bg-critical/10 hover:text-critical"><Icon name="Trash2" size={16} /></button>
                 </li>
               ))}
@@ -903,7 +956,7 @@ export default function Jornal() {
           <Botao variante="escuro" onClick={() => { excluirJornal(jornalApagar.id); setJornalApagar(null); toast('Jornal apagado do histórico.', 'info') }}>Apagar</Botao>
         </>}
       >
-        <p className="text-ink">Ele sai só desta lista. Se as ofertas dele estiverem no site, continuam lá (use "Retirar do site" para tirar).</p>
+        <p className="text-ink">Ele sai só desta lista. Se as ofertas dele estiverem no site, continuam lá (use "Desativar" para tirar do ar).</p>
       </Modal>
 
       <Modal

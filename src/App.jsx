@@ -81,7 +81,9 @@ export default function App() {
       <Suspense fallback={<Carregando />}>
         <Routes>
           {/* público: o link da tag NFC abre aqui, sem login */}
-          <Route path="/encarte" element={<EncarteDigital />} />
+          <Route path="/encarte" element={<JornalPapel />} />
+          {/* a versão em lista, para comparar */}
+          <Route path="/encarte-lista" element={<EncarteDigital />} />
           {/* protótipo: o mesmo encarte com cara de jornal impresso */}
           <Route path="/folhear" element={<JornalPapel />} />
           {/* público: o QR verde do rodapé abre aqui (escolher a loja e entrar no grupo de ofertas) */}

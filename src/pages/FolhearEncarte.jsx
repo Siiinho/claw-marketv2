@@ -45,6 +45,35 @@ function Folha({ children, k, largura, altura, lado = 'direita' }) {
   )
 }
 
+// ---------- setor desativado pela loja ----------
+function AjustandoOfertas({ largura, altura, setor, outras, onEscolher }) {
+  return (
+    <div role="status" className="flex flex-col items-center justify-center rounded-b-xl bg-white px-6 text-center text-[#111]" style={{ width: largura, height: altura }}>
+      <svg viewBox="0 0 120 100" className="cm-carrinho h-28 w-32" aria-hidden="true">
+        <g transform="rotate(-24 60 70)">
+          <path d="M14 22h14l12 44h48l10-32H34" fill="none" stroke="#1f2937" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="46" cy="80" r="7" fill="#1f2937" />
+          <circle cx="82" cy="80" r="7" fill="#1f2937" />
+        </g>
+        <circle cx="96" cy="88" r="5" fill="#d81e29" className="cm-carrinho-item" />
+        <rect x="104" y="80" width="9" height="12" rx="2" fill="#ffd23f" className="cm-carrinho-item" style={{ animationDelay: '.15s' }} />
+        <line x1="6" y1="96" x2="116" y2="96" stroke="#d1d5db" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+      <p className="mt-4 text-[26px] font-black leading-tight">Ajustando ofertas</p>
+      <p className="mt-2 max-w-[300px] text-[15px] leading-snug text-[#555]">
+        {setor ? <>Estamos arrumando as ofertas de <strong className="text-[#111]">{setor.nome}</strong>.</> : 'Estamos arrumando as ofertas.'} Esta página muda sozinha quando elas voltarem.
+      </p>
+      {outras.length > 0 && (
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {outras.slice(0, 5).map((a) => (
+            <button key={a.id} type="button" onClick={() => onEscolher(a.id)} className="min-h-11 rounded-full bg-[#f1f3f5] px-4 text-[14px] font-bold text-[#111] active:scale-[.97]">{a.nome}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---------- prévia do produto (antes de anotar) ----------
 function PreviaProduto({ produto: p, naNota, onAnotar, onFechar }) {
   const preco = paraNumero(p.precoJornal) || paraNumero(p.precoNormal)
@@ -183,16 +212,18 @@ export default function FolhearEncarte() {
       .filter((p) => !pausados.has(p.setor) && (!p.soMercado || noMercadoEncarte(p, hoje)))
       .map((p) => (noMercadoEncarte(p, hoje) ? p : { ...p, encarteMercadoDia: null }))
   }, [encarte, hoje])
+  const pausadosSet = useMemo(() => new Set(encarte?.pausados || []), [encarte])
   const doDia = todos.filter((p) => p.encarteMercadoDia && encarte?.mostrarMercado !== false)
   const daSemana = todos.filter((p) => !p.soMercado)
   const abas = [
     ...(doDia.length ? [{ id: MERCADO_ENCARTE.id, nome: 'Ofertas de hoje', n: doDia.length }] : []),
     ...(encarte?.mostrarGeral !== false && daSemana.length ? [{ id: 'todas', nome: 'Todas', n: daSemana.length }] : []),
-    ...SETORES.map((s) => ({ id: s.id, nome: s.nome, n: daSemana.filter((p) => p.setor === s.id).length })).filter((a) => a.n),
+    ...SETORES.map((s) => ({ id: s.id, nome: s.nome, n: daSemana.filter((p) => p.setor === s.id).length, ajuste: pausadosSet.has(s.id) && (encarte?.itens || []).some((p) => p.setor === s.id) })).filter((a) => a.n || a.ajuste),
   ]
   const [abaEscolhida, setAba] = useState(null)
   const aba = abas.some((a) => a.id === abaEscolhida) ? abaEscolhida : abas.find((a) => a.id === 'todas')?.id || abas[0]?.id
   const ehHoje = aba === MERCADO_ENCARTE.id
+  const emAjuste = abas.find((a) => a.id === aba)?.ajuste || (!abas.some((a) => !a.ajuste) && pausadosSet.size > 0)
   const itens = ehHoje ? doDia : aba === 'todas' ? daSemana : daSemana.filter((p) => p.setor === aba)
   const layout = ehHoje ? 'jornal' : LAYOUTS_VALIDOS.includes(encarte?.layout) ? encarte.layout : 'grade'
   const temaGeral = temaCampanhaById(encarte?.tema)
@@ -380,6 +411,10 @@ export default function FolhearEncarte() {
           @keyframes cm-nota-sai { from { transform: translateY(40px) scaleY(.6); opacity: 0 } to { transform: none; opacity: 1 } }
           .cm-nota-linha { animation: cm-nota-linha .7s ease-out both }
           @keyframes cm-nota-linha { from { background: #fff3b0; clip-path: inset(0 0 100% 0) } to { background: transparent; clip-path: inset(0) } }
+          .cm-carrinho g { transform-box: fill-box; transform-origin: 30% 90%; animation: cm-tomba 2.6s ease-in-out infinite }
+          @keyframes cm-tomba { 0%, 100% { rotate: 0deg } 50% { rotate: -5deg } }
+          .cm-carrinho-item { animation: cm-rola 2.6s ease-in-out infinite }
+          @keyframes cm-rola { 0%, 100% { transform: translateX(0) } 50% { transform: translateX(3px) } }
           .cm-nota-pula { animation: cm-nota-pula .45s cubic-bezier(.3,1.6,.5,1) }
           @keyframes cm-nota-pula { 0% { transform: scale(1) } 35% { transform: scale(1.05) } 100% { transform: scale(1) } }
           .cm-previa-fundo { animation: cm-aparece .2s ease-out both }
@@ -388,7 +423,7 @@ export default function FolhearEncarte() {
           @keyframes cm-previa { from { opacity: 0; transform: translateY(24px) scale(.96) } }
           .cm-voo { position: fixed; z-index: 70; width: 84px; height: 84px; pointer-events: none; border-radius: 16px; background: #fff; padding: 6px; box-shadow: 0 10px 24px rgba(0,0,0,.35); offset-rotate: 0deg; animation: cm-voo .7s cubic-bezier(.55,0,.75,.4) forwards }
           @keyframes cm-voo { 0% { offset-distance: 0%; transform: scale(1) } 100% { offset-distance: 100%; transform: scale(.25); opacity: .6 } }
-          @media (prefers-reduced-motion: reduce) { .cm-nota-sai, .cm-nota-linha, .cm-nota-pula, .cm-previa, .cm-previa-fundo, .cm-voo { animation: none } }
+          @media (prefers-reduced-motion: reduce) { .cm-carrinho g, .cm-carrinho-item, .cm-nota-sai, .cm-nota-linha, .cm-nota-pula, .cm-previa, .cm-previa-fundo, .cm-voo { animation: none } }
         `}</style>
         {/* a campanha ao fundo, escurecida, para o jornal saltar */}
         <div className="pointer-events-none absolute inset-0 bg-black/55" />
@@ -402,10 +437,13 @@ export default function FolhearEncarte() {
               {abas.map((a) => (
                 <button key={a.id} type="button" onClick={(e) => { setAba(a.id); e.currentTarget.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }) }} aria-pressed={aba === a.id}
                   className={`shrink-0 whitespace-nowrap rounded-t-2xl border border-b-0 px-3.5 text-[13px] font-bold backdrop-blur-xl backdrop-saturate-150 transition-[background-color,height,color] duration-200 ${aba === a.id ? 'h-10 border-white/70 bg-white/80 text-[#111] shadow-[inset_0_1px_0_rgba(255,255,255,.9)]' : 'h-9 border-white/25 bg-white/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.35)] hover:bg-white/25'}`}>
-                  {a.id === MERCADO_ENCARTE.id && <span aria-hidden="true" className="mr-1 text-[#d81e29]">★</span>}{a.nome} <span className={aba === a.id ? 'text-[#555]' : 'text-white/75'}>{a.n}</span>
+                  {a.id === MERCADO_ENCARTE.id && <span aria-hidden="true" className="mr-1 text-[#d81e29]">★</span>}{a.nome} {a.ajuste ? <Icon name="Wrench" size={13} className={`inline ${aba === a.id ? 'text-[#b3261e]' : 'text-white/80'}`} aria-label="ajustando" /> : <span className={aba === a.id ? 'text-[#555]' : 'text-white/75'}>{a.n}</span>}
                 </button>
               ))}
             </div>
+            {emAjuste ? (
+              <AjustandoOfertas largura={larguraAberta} altura={H} setor={SETORES.find((s) => s.id === aba)} outras={abas.filter((a) => !a.ajuste)} onEscolher={setAba} />
+            ) : (
             <div
               ref={palcoRef}
               onPointerDownCapture={(e) => { toque.current = { x: e.clientX, y: e.clientY } }}
@@ -448,6 +486,7 @@ export default function FolhearEncarte() {
               {n > 1 && <span style={{ right: soDireita ? 8 : soEsquerda ? W + 8 : 8 }} className="pointer-events-none absolute bottom-2 z-20 rounded-full bg-black/60 px-2 py-0.5 text-[12px] font-bold text-white">{doisAbertos ? `${numeroAtual}–${numeroAtual + 1}` : numeroAtual} / {n}</span>}
               {atualizado && <span className="pointer-events-none absolute right-2 top-2 z-20 rounded-full bg-[#ffd23f] px-2.5 py-1 text-[12px] font-bold text-[#222]">Atualizado agora</span>}
             </div>
+            )}
             {/* a nota presa embaixo do jornal */}
             <Nota compras={compras} loja={loja} aberta={notaAberta} setAberta={setNotaAberta} ultimo={ultimo} largura={larguraAberta} barraRef={notaRef} pulo={notaPulo} />
           </div>
