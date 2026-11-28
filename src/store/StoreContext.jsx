@@ -58,6 +58,8 @@ export const PERMISSOES = {
 
 export const CARGOS = { admin: 'Administrador', gerente: 'Gerente', repositor: 'Repositor' }
 
+// JSON com as chaves em ordem: a nuvem (jsonb) devolve as chaves em outra ordem.
+const jsonOrdenado = (v) => JSON.stringify(v, (_, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x))
 export const podeVer = (papel, key) => (PERMISSOES[papel] || []).includes(key)
 export const podeEditar = (papel) => papel === 'admin' || papel === 'gerente'
 
@@ -329,6 +331,13 @@ export function StoreProvider({ children }) {
     try { setContas(await listarPerfisNuvem()) } catch (_) { /* fica a lista atual */ }
   }, [nuvem, usuario?.id])
   const espelho = useRef(new Map()) // `${colecao}:${id}` -> JSON do que a nuvem já tem
+  // O que este aparelho gravou há pouco, por item: o eco de uma gravação antiga pode chegar depois de
+  // uma mais nova e não pode desfazer a mais nova (ex.: dois passos marcados em seguida).
+  const enviadosHaPouco = useRef(new Map())
+  const lembrarEnviado = (chave, dados) => {
+    const lista = enviadosHaPouco.current.get(chave) || []
+    enviadosHaPouco.current.set(chave, [...lista.slice(-4), jsonOrdenado(dados)])
+  }
   const pronta = useRef(false)
 
   // Ao abrir o app, retoma a sessão salva do Supabase.
@@ -394,6 +403,7 @@ export function StoreProvider({ children }) {
           const chave = `${l.colecao}:${l.id}`
           const json = l.excluido ? null : JSON.stringify(l.dados)
           if (espelho.current.get(chave) === json) return // eco da própria gravação
+          if (!l.excluido && enviadosHaPouco.current.get(chave)?.includes(jsonOrdenado(l.dados))) return // eco atrasado de uma gravação já substituída
           espelho.current.set(chave, json)
           const aplicar = (set) => set((lista) => {
             const sem = lista.filter((x) => x.id !== l.id)
@@ -487,7 +497,7 @@ export function StoreProvider({ children }) {
         const chave = `${colecao}:${id}`
         atuais.add(chave)
         const json = JSON.stringify(dados)
-        if (mapa.get(chave) !== json) { linhas.push({ colecao, id, dados, excluido: false }); mapa.set(chave, json) }
+        if (mapa.get(chave) !== json) { linhas.push({ colecao, id, dados, excluido: false }); mapa.set(chave, json); lembrarEnviado(chave, dados) }
       }
       const listas = { produtos: produtos.map(produtoParaNuvem), ofertas, jornais, lotes, auditoria }
       for (const colecao of COLECOES_LISTA) for (const item of listas[colecao]) if (item?.id) conferir(colecao, item.id, item)
@@ -803,11 +813,20 @@ export function StoreProvider({ children }) {
 
   const fila = useMemo(() => produtosVisiveis.filter((p) => p.naFila), [produtosVisiveis])
 
+  // Outro mercado não herda as lojas do Bengala: usa a 1ª loja do cadastro dele (mesmo id interno,
+  // para os produtos já gravados continuarem na loja certa).
+  const lojasDoMercado = useMemo(() => {
+    if ((usuario?.mercadoId || 'bengala') === 'bengala') return LOJAS
+    const m = config.mercado || {}
+    const c = (m.lojas || []).find((l) => l.nome || l.endereco) || {}
+    return [{ id: LOJAS[0].id, nome: c.nome || m.nome || usuario?.mercadoNome || 'Minha loja', endereco: c.endereco || '', cidade: c.cidade || '', telefone: c.telefone || '', whatsapp: m.whatsappOfertas || c.whatsapp || '' }]
+  }, [usuario?.mercadoId, usuario?.mercadoNome, config.mercado])
+
   const value = {
     usuario,
     produtos: produtosVisiveis,
     todosProdutos: produtos,
-    lojas: LOJAS,
+    lojas: lojasDoMercado,
     lojaAtiva,
     setLojaAtiva,
     ofertas,

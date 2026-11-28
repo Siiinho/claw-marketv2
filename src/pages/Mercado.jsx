@@ -31,8 +31,10 @@ function logoParaDataURL(file, max = 640) {
   })
 }
 
-const inicial = (config) => {
-  const m = config?.mercado || {}
+const inicial = (config, nomeDaConta = '') => {
+  const m = { ...(config?.mercado || {}) }
+  // mercado novo: o nome digitado no cadastro já vem preenchido
+  if (!m.nome && nomeDaConta) m.nome = nomeDaConta
   const bengala = /bengala/i.test(m.nome || config?.nomeMercado || '') || !(m.nome || config?.nomeMercado)
   const p = bengala ? BENGALA_PADRAO : {}
   // mercado novo começa com uma loja em branco; o Bengala, com as lojas dele
@@ -108,12 +110,20 @@ function Marcar({ grupo, f, setF }) {
 }
 
 export default function Mercado() {
-  const { config, salvarConfig, toast } = useStore()
-  const [f, setFEstado] = useState(() => inicial(config))
+  const { config, salvarConfig, toast, usuario, nuvemStatus } = useStore()
+  // enquanto a nuvem conecta, salvar seria apagado quando os dados dela chegam: espera (o que foi digitado fica)
+  const conectando = nuvemStatus === 'conectando'
+  const nomeDaConta = usuario?.mercadoId && usuario.mercadoId !== 'bengala' ? usuario.mercadoNome || '' : ''
+  const [f, setFEstado] = useState(() => inicial(config, nomeDaConta))
   // a nuvem chega depois de abrir a tela: enquanto ninguém mexeu, o formulário acompanha
   const mexeu = useRef(false)
   const setF = (v) => { mexeu.current = true; setFEstado(v) }
-  useEffect(() => { if (!mexeu.current) setFEstado(inicial(config)) }, [config.mercado, config.nomeMercado])
+  useEffect(() => {
+    const novo = inicial(config, nomeDaConta)
+    // se a pessoa já mexeu, não apaga o que ela fez: só completa o nome que ainda estava vazio
+    if (!mexeu.current) setFEstado(novo)
+    else if (novo.nome) setFEstado((v) => (v.nome.trim() ? v : { ...v, nome: novo.nome }))
+  }, [config.mercado, config.nomeMercado, nomeDaConta]) // eslint-disable-line react-hooks/exhaustive-deps
   const [aba, setAba] = useState('dados')
   const set = (campo, valor) => setF((v) => ({ ...v, [campo]: valor }))
   const setLoja = (i, campo, valor) => setF((v) => ({ ...v, lojas: v.lojas.map((l, k) => (k === i ? { ...l, [campo]: valor } : l)) }))
@@ -139,6 +149,7 @@ export default function Mercado() {
   }
 
   const salvar = () => {
+    if (conectando) return
     if (!f.nome.trim()) { toast('Coloque o nome do mercado.', 'erro'); return }
     salvarConfig({ mercado: { ...f, nome: f.nome.trim() }, nomeMercado: f.nome.trim() })
     toast('Cadastro do mercado salvo! Ele vai junto no próximo jornal publicado.')
@@ -306,7 +317,7 @@ export default function Mercado() {
       )}
 
       <div className="z-20 flex justify-end md:sticky md:bottom-4">
-        <Botao onClick={salvar} className="w-full shadow-lg md:w-auto"><Icon name="Save" size={16} /> Salvar cadastro</Botao>
+        <Botao onClick={salvar} disabled={conectando} className="w-full shadow-lg md:w-auto"><Icon name={conectando ? 'Loader2' : 'Save'} size={16} className={conectando ? 'animate-spin' : ''} /> {conectando ? 'Conectando à nuvem…' : 'Salvar cadastro'}</Botao>
       </div>
     </div>
   )
