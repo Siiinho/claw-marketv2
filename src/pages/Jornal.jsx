@@ -10,6 +10,7 @@ import {
 import { publicarEncarte, lerEncartePublicado, lerEncarteNoAr, lerFundoTemplate, salvarFundoTemplate, prepararFundoTemplate, enviarEncarteAoSite, atualizarPausadosNoSite, statusSiteEncarte, linkDoEncarte, lerSenhaPublicacao, salvarSenhaPublicacao } from '../lib/encartePublico'
 import { remessaDe, precoNoJornal, itensDoDestino, montarPublicacao } from '../lib/remessa'
 import { marcaPublica } from '../lib/marca'
+import { caminhoDoMercado, mercadoDoLogin } from '../lib/nuvem'
 import SeletorTema from '../components/SeletorTema'
 import SeletorSelo, { BotaoAplicarTodos } from '../components/SeletorSelo'
 import PrecoArte, { ESTILOS_PRECO, estiloPrecoById } from '../components/PrecoArte'
@@ -50,12 +51,13 @@ const TITULO_BENGALA = 'Jornal de Ofertas - Bengala Supermercado'
 
 // Escolhas do jornal que está sendo montado, guardadas neste aparelho para não se perderem ao
 // recarregar. Os produtos não ficam aqui: ficam na remessa (ver lib/remessa.js).
-const CHAVE_RASCUNHO = 'clawmarket:jornal-rascunho:v2'
+const CHAVE_RASCUNHO_BASE = 'clawmarket:jornal-rascunho:v2'
+const chaveRascunho = () => (mercadoDoLogin() === 'bengala' ? CHAVE_RASCUNHO_BASE : `${CHAVE_RASCUNHO_BASE}:${mercadoDoLogin()}`)
 function lerRascunho() {
-  try { return JSON.parse(localStorage.getItem(CHAVE_RASCUNHO) || '{}') || {} } catch (_) { return {} }
+  try { return JSON.parse(localStorage.getItem(chaveRascunho()) || '{}') || {} } catch (_) { return {} }
 }
 function salvarRascunho(dados) {
-  try { localStorage.setItem(CHAVE_RASCUNHO, JSON.stringify(dados)) } catch (_) { /* sem espaço: segue sem guardar */ }
+  try { localStorage.setItem(chaveRascunho(), JSON.stringify(dados)) } catch (_) { /* sem espaço: segue sem guardar */ }
 }
 const destinoValido = (id) => (id === 'geral' || id === MERCADO_ENCARTE.id || SETORES.some((s) => s.id === id) ? id : 'geral')
 // Data guardada de um jornal antigo não volta: o período começa hoje.
@@ -99,6 +101,8 @@ export default function Jornal() {
   const [temaId, setTemaId] = useState(() => rascunho.tema || publicado.tema || 'ofertao')
   const TITULO_PADRAO = config.mercado?.nome ? `Jornal de Ofertas - ${config.mercado.nome}` : TITULO_BENGALA
   const [titulo, setTitulo] = useState(() => (rascunho.titulo && !(config.mercado?.nome && rascunho.titulo === TITULO_BENGALA) ? rascunho.titulo : TITULO_PADRAO))
+  // o nome do mercado chega da nuvem depois: o título padrão do Bengala vira o deste mercado
+  useEffect(() => { if (TITULO_PADRAO !== TITULO_BENGALA) setTitulo((t) => (t === TITULO_BENGALA ? TITULO_PADRAO : t)) }, [TITULO_PADRAO])
   const [periodoDe, setPeriodoDe] = useState(() => dataValida(rascunho.periodoDe, dataISOmaisDias(0)))
   const [periodoAte, setPeriodoAte] = useState(() => dataValida(rascunho.periodoAte, dataISOmaisDias(6)))
   const [diaEstrela, setDiaEstrela] = useState(() => dataValida(rascunho.diaEstrela, dataISOmaisDias(0)))
@@ -648,7 +652,7 @@ export default function Jornal() {
           {remessa.length > 0 && rodape}
           <p className="flex flex-wrap justify-center gap-x-5 gap-y-1 pt-2 text-sm">
             <button type="button" onClick={() => setTela('historico')} className="inline-flex min-h-10 items-center gap-1.5 font-semibold text-navy hover:underline"><Icon name="History" size={16} /> Jornais salvos{jornais.length ? ` (${jornais.length})` : ''}</button>
-            <a href="#/encarte" target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1.5 font-semibold text-navy hover:underline"><Icon name="ExternalLink" size={16} /> Ver o site do cliente</a>
+            <a href={caminhoDoMercado('encarte')} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1.5 font-semibold text-navy hover:underline"><Icon name="ExternalLink" size={16} /> Ver o site do cliente</a>
           </p>
         </div>
       )}
@@ -801,7 +805,7 @@ export default function Jornal() {
                 </div>
                 <div className="mt-5 grid gap-2">
                   <Botao onClick={imprimir} disabled={exportando} className="min-h-12 w-full text-base"><Icon name={exportando ? 'LoaderCircle' : 'Printer'} size={18} className={exportando ? 'animate-spin' : ''} /> {exportando ? 'Preparando…' : impresso ? 'Imprimir de novo' : 'Imprimir jornal'}</Botao>
-                  <a href="#/encarte" target="_blank" rel="noreferrer" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border-2 border-navy/40 bg-white text-sm font-bold text-navy hover:bg-cream"><Icon name="ExternalLink" size={17} /> Ver como o cliente vê</a>
+                  <a href={caminhoDoMercado('encarte')} target="_blank" rel="noreferrer" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border-2 border-navy/40 bg-white text-sm font-bold text-navy hover:bg-cream"><Icon name="ExternalLink" size={17} /> Ver como o cliente vê</a>
                   <Botao variante="contorno" className="min-h-12" onClick={() => setTela('historico')}><Icon name="History" size={17} /> Ver jornais salvos ({jornais.length})</Botao>
                   <Botao variante="contorno" className="min-h-12" onClick={() => setTela('artes')}><Icon name="Images" size={17} /> Artes para redes sociais</Botao>
                   <Botao variante="escuro" className="min-h-12" onClick={comecarOutro}><Icon name="FilePlus2" size={17} /> Começar outro jornal</Botao>

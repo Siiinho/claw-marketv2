@@ -12,7 +12,7 @@
 // Regra de negócio: a validade do produto NUNCA sai daqui. Só passam os campos
 // que o cliente pode ver.
 import { restaurarImagensSalvas } from './produtoApi'
-import { nuvemAtiva, publicarEncarteNuvem, lerEncarteNuvem, assinarNuvem } from './nuvem'
+import { nuvemAtiva, publicarEncarteNuvem, lerEncarteNuvem, assinarNuvem, mercadoAtual, MERCADO_PADRAO, caminhoDoMercado } from './nuvem'
 
 // Fotos que só existem no PC da loja (/api/...) viram imagem embutida e menor antes de ir para a
 // nuvem, para abrir em qualquer celular.
@@ -34,7 +34,10 @@ async function fotoPortatil(src) {
   }
 }
 
-const CHAVE = 'clawmarket:encarte-publicado:v1'
+const CHAVE_BENGALA = 'clawmarket:encarte-publicado:v1'
+// cópia neste aparelho, separada por mercado (o Bengala mantém a chave de sempre)
+const chaveLocal = () => (mercadoAtual() === MERCADO_PADRAO ? CHAVE_BENGALA : `${CHAVE_BENGALA}:${mercadoAtual()}`)
+const ehBengala = () => mercadoAtual() === MERCADO_PADRAO
 const CANAL = 'clawmarket-encarte'
 
 const CAMPOS_PUBLICOS = [
@@ -86,11 +89,11 @@ export function publicarEncarte({ titulo, mercado, periodoDe, periodoAte, tema, 
     itens: (itens || []).map(soPublico),
   }
   try {
-    localStorage.setItem(CHAVE, JSON.stringify(encarte))
+    localStorage.setItem(chaveLocal(), JSON.stringify(encarte))
   } catch (_) {
     // sem espaço: publica sem as fotos embutidas
     encarte.itens = encarte.itens.map((i) => (String(i.imagem || '').startsWith('data:') ? { ...i, imagem: null } : i))
-    localStorage.setItem(CHAVE, JSON.stringify(encarte))
+    localStorage.setItem(chaveLocal(), JSON.stringify(encarte))
   }
   try {
     const canal = new BroadcastChannel(CANAL)
@@ -131,7 +134,7 @@ export function linkDoEncarte(enderecos = []) {
   const { protocol, hostname, port, pathname } = window.location
   const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname)
   const host = local && enderecos[0] ? `${enderecos[0]}${port ? `:${port}` : ''}` : window.location.host
-  return `${protocol}//${host}${pathname}#/encarte`
+  return `${protocol}//${host}${pathname}${caminhoDoMercado('encarte')}`
 }
 
 // Manda o encarte (com as fotos) para o servidor. Devolve { versao, publicadoEm, itens }.
@@ -161,9 +164,11 @@ export async function enviarEncarteAoSite({ titulo, mercado, periodoDe, periodoA
       throw Object.assign(new Error('Não foi possível publicar na nuvem. Confira a internet e tente de novo.'), { codigo: 'erro' })
     }
     // O servidor do PC, se estiver no ar, recebe também (rede da loja); sem ele, tudo bem.
-    try { await enviarAoServidor(corpo) } catch (_) {}
+    // Ele é do Bengala: outro mercado nunca escreve nele.
+    if (ehBengala()) { try { await enviarAoServidor(corpo) } catch (_) {} }
     return { versao: encarte.versao, publicadoEm: encarte.publicadoEm, itens: encarte.itens.length, origem: 'nuvem' }
   }
+  if (!ehBengala()) throw Object.assign(new Error('Sem conexão com a nuvem. Confira a internet e tente de novo.'), { codigo: 'erro' })
   return enviarAoServidor(corpo)
 }
 
@@ -199,7 +204,7 @@ async function lerDoSite() {
 
 export function lerEncartePublicado() {
   try {
-    return JSON.parse(localStorage.getItem(CHAVE) || 'null')
+    return JSON.parse(localStorage.getItem(chaveLocal()) || 'null')
   } catch (_) {
     return null
   }
@@ -214,6 +219,8 @@ export async function carregarEncartePublicado() {
   if (nuvemAtiva()) {
     const daNuvem = await lerEncarteNuvem()
     if (temOfertas(daNuvem)) return daNuvem
+    // outro mercado: só vale a nuvem (o servidor do PC e a cópia do aparelho são do Bengala)
+    if (mercadoAtual() !== MERCADO_PADRAO) return daNuvem || null
     // a loja tirou tudo do site de propósito (leitura deu certo e tem versão): vale o vazio
     if (daNuvem && daNuvem.versao) return daNuvem
     reserva = daNuvem || reserva
@@ -236,6 +243,8 @@ export async function lerEncarteNoAr() {
     const daNuvem = await lerEncarteNuvem()
     if (daNuvem === undefined) throw new Error('Não deu para conferir o que está no site agora. Veja a internet e tente de novo.')
     if (daNuvem) return daNuvem
+    // outro mercado: o servidor do PC e a cópia deste aparelho são do Bengala, não valem
+    if (mercadoAtual() !== MERCADO_PADRAO) return null
   }
   return (await lerDoSite()) || lerEncartePublicado() || null
 }
@@ -244,7 +253,7 @@ export async function lerEncarteNoAr() {
 // No celular do cliente o aviso vem do servidor (Server-Sent Events). Se a conexão
 // cair de vez, confere a cada 30 s. Neste aparelho também ouve o localStorage.
 export function assinarEncarte(aoMudar) {
-  const naChave = (evento) => { if (evento.key === CHAVE) aoMudar() }
+  const naChave = (evento) => { if (evento.key === chaveLocal()) aoMudar() }
   const aoVoltar = () => { if (document.visibilityState === 'visible') aoMudar() }
   window.addEventListener('storage', naChave)
   document.addEventListener('visibilitychange', aoVoltar)
@@ -328,15 +337,17 @@ export async function atualizarPausadosNoSite(pausados) {
   if (nuvemAtiva()) {
     try { await publicarEncarteNuvem(encarte); gravou = true } catch (_) { /* tenta o PC */ }
   }
-  try {
-    const { versao: _v, publicadoEm: _p, ...corpo } = encarte
-    await enviarAoServidor(corpo)
-    gravou = true
-  } catch (_) { /* sem servidor do PC: tudo bem se a nuvem gravou */ }
+  if (ehBengala()) {
+    try {
+      const { versao: _v, publicadoEm: _p, ...corpo } = encarte
+      await enviarAoServidor(corpo)
+      gravou = true
+    } catch (_) { /* sem servidor do PC: tudo bem se a nuvem gravou */ }
+  }
   try {
     const local = lerEncartePublicado()
     if (local) {
-      localStorage.setItem(CHAVE, JSON.stringify({ ...local, pausados: lista, versao: encarte.versao }))
+      localStorage.setItem(chaveLocal(), JSON.stringify({ ...local, pausados: lista, versao: encarte.versao }))
       gravou = true
       try { const canal = new BroadcastChannel(CANAL); canal.postMessage(encarte.versao); canal.close() } catch (_) {}
     }

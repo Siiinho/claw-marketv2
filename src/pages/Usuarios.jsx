@@ -24,6 +24,17 @@ export default function Usuarios() {
         {nuvemStatus === 'desligada' && 'Nuvem desligada: os logins e os dados ficam só neste aparelho (iguais para todos os logins dele).'}
         </span>
       </div>
+      {souAdmin && usuario.convite && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border-2 border-dashed border-navy/30 bg-white p-4">
+          <Icon name="KeyRound" size={22} className="text-navy" />
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-ink">Código da equipe {usuario.mercadoNome ? `do ${usuario.mercadoNome}` : ''}</p>
+            <p className="text-sm text-ink-soft">Quem trabalha no mercado entra em "Sou da equipe" com este código.</p>
+          </div>
+          <span className="num-tab rounded-lg bg-cream-200 px-3 py-1.5 text-2xl font-black tracking-[0.25em] text-navy">{usuario.convite}</span>
+          <button type="button" className="inline-flex min-h-10 items-center gap-1 rounded-lg border-2 border-navy/30 px-3 text-sm font-bold text-navy" onClick={() => { navigator.clipboard?.writeText(usuario.convite); toast('Código copiado!') }}><Icon name="Copy" size={15} /> Copiar</button>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {contas.map((u) => {
           const cp = COR_PAPEL[u.papel] || COR_PAPEL.repositor

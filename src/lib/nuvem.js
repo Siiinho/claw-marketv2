@@ -9,6 +9,45 @@ const cliente = () => (typeof window !== 'undefined' && window.__clawmarketSupab
 export const nuvemAtiva = () => Boolean(cliente()) && (supabaseAtivo || Boolean(typeof window !== 'undefined' && window.__clawmarketSupabase))
 
 const TABELA = 'cm_itens'
+
+// ---------- vários mercados ----------
+// Cada login é de um mercado (cm_perfis.mercado_id) e a nuvem só deixa ver e gravar o dele.
+// O Bengala (primeiro cliente) guarda os ids como sempre; os outros mercados guardam
+// "<mercado>~<id>", assim o mesmo "config/loja" ou "encarte/publicado" existe para cada um.
+export const MERCADO_PADRAO = 'bengala'
+const SLUG = /^[a-z0-9][a-z0-9-]{1,39}$/
+let mercadoLogin = MERCADO_PADRAO
+let mercadoSite = null // site do cliente aberto por #/m/<mercado>/...
+export const mercadoDoLogin = () => mercadoLogin
+export const mercadoAtual = () => mercadoSite || mercadoLogin
+export function definirMercadoSite(slug) { mercadoSite = slug && SLUG.test(slug) ? slug : null }
+const prefixo = (m) => (m && m !== MERCADO_PADRAO ? `${m}~` : '')
+const comPrefixo = (id, m = mercadoLogin) => `${prefixo(m)}${id}`
+const semPrefixo = (id, m = mercadoLogin) => {
+  const p = prefixo(m)
+  return p && String(id).startsWith(p) ? String(id).slice(p.length) : id
+}
+// Endereço público de uma página do mercado: o jornal fica no endereço exclusivo dele
+// (#/bom-preco) e o WhatsApp em #/bom-preco/whatsapp. O Bengala segue em #/encarte e #/whatsapp.
+export function caminhoDoMercado(pagina, m = mercadoAtual()) {
+  if (!m || m === MERCADO_PADRAO) return `#/${pagina}`
+  return pagina === 'encarte' || pagina === 'folhear' ? `#/${m}` : `#/${m}/${pagina}`
+}
+
+// Endereço a partir do nome ("Mercado Bom Preço" -> "mercado-bom-preco"), igual à nuvem.
+export const enderecoDoNome = (nome) => String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32)
+const RESERVADOS = new Set(['encarte', 'encarte-lista', 'folhear', 'whatsapp', 'login', 'm', 'produtos', 'ofertas', 'precificacao',
+  'cartazes', 'jornal', 'relatorios', 'sustentabilidade', 'scanner', 'usuarios', 'config', 'mercado', 'visitas', 'api', 'admin',
+  'assets', 'clawmarket', 'app', 'site', 'www', 'teste'])
+export const enderecoValido = (e) => SLUG.test(e || '') && !RESERVADOS.has(e)
+// O endereço está livre? (null = não deu para conferir agora)
+export async function enderecoLivre(e) {
+  if (!enderecoValido(e)) return false
+  if (!nuvemAtiva()) return null
+  const { data, error } = await cliente().rpc('cm_endereco_livre', { p_endereco: e })
+  return error ? null : Boolean(data)
+}
 const DOMINIO = 'usuarios.clawmarket.app'
 
 // O Supabase entra por e-mail: o nome de usuário vira um e-mail interno (ninguém recebe nada).
@@ -26,6 +65,7 @@ const senhaNuvem = (senha) => `cm-${senha}`
 
 const perfilParaUsuario = (p) => p && ({
   id: p.id,
+  mercadoId: p.mercado_id || MERCADO_PADRAO,
   nome: p.nome || p.usuario,
   usuario: p.usuario,
   papel: p.papel,
@@ -37,7 +77,12 @@ const perfilParaUsuario = (p) => p && ({
 async function lerPerfil(id) {
   for (let tentativa = 0; tentativa < 5; tentativa += 1) {
     const { data } = await cliente().from('cm_perfis').select('*').eq('id', id).maybeSingle()
-    if (data) return perfilParaUsuario(data)
+    if (data) {
+      const perfil = perfilParaUsuario(data)
+      mercadoLogin = perfil.mercadoId
+      const { data: m } = await cliente().from('cm_mercados').select('id,nome,convite').eq('id', perfil.mercadoId).maybeSingle()
+      return { ...perfil, mercadoNome: m?.nome || null, convite: m?.convite || null }
+    }
     await new Promise((r) => setTimeout(r, 300)) // o perfil é criado por gatilho logo após o cadastro
   }
   return null
@@ -62,15 +107,20 @@ export async function entrarNuvem(usuario, senha) {
   return lerPerfil(data.user.id)
 }
 
-export async function criarContaNuvem({ nome, senha }) {
+// Conta nova: com `mercadoNome` cria um mercado (a pessoa é a dona); com `convite` entra na equipe.
+export async function criarContaNuvem({ nome, senha, mercadoNome, mercadoEndereco, convite }) {
   const usuario = normalizarUsuario(nome)
+  const extras = mercadoNome ? { mercado_nome: String(mercadoNome).trim(), ...(mercadoEndereco ? { mercado_endereco: mercadoEndereco } : {}) } : convite ? { convite: String(convite).trim().toLowerCase() } : {}
   const { data, error } = await cliente().auth.signUp({
     email: emailDoUsuario(usuario),
     password: senhaNuvem(senha),
-    options: { data: { usuario, nome: String(nome).trim() } },
+    options: { data: { usuario, nome: String(nome).trim(), ...extras } },
   })
   if (error) {
-    const msg = /registered|exists|duplicate|saving new user/i.test(error.message || '') ? 'Já existe um usuário com esse nome.' : 'Não foi possível criar a conta agora.'
+    const texto = error.message || ''
+    const msg = /registered|exists|duplicate|already/i.test(texto) ? 'Já existe um usuário com esse nome. Escolha outro.'
+      : /saving new user|database error/i.test(texto) && convite ? 'Código do mercado não encontrado.'
+      : 'Não foi possível criar a conta agora.'
     return { ok: false, erro: msg }
   }
   if (!data?.session) return { ok: false, erro: 'Conta criada, mas o Supabase pediu confirmação de e-mail. Desligue "Confirm email" no Supabase.' }
@@ -79,6 +129,15 @@ export async function criarContaNuvem({ nome, senha }) {
 
 export async function sairNuvem() {
   await cliente().auth.signOut()
+  mercadoLogin = MERCADO_PADRAO
+}
+
+// Código para entrar na equipe: devolve o nome do mercado (ou null se não existir).
+export async function nomeDoConvite(codigo) {
+  const c = String(codigo || '').trim().toLowerCase()
+  if (!c || !nuvemAtiva()) return null
+  const { data, error } = await cliente().rpc('cm_convite_mercado', { p_convite: c })
+  return error ? null : data || null
 }
 
 export async function trocarSenhaNuvem(nova) {
@@ -105,7 +164,7 @@ export async function baixarTudoNuvem() {
   for (let de = 0; ; de += 1000) {
     const { data, error } = await cliente().from(TABELA).select('colecao,id,dados,excluido').range(de, de + 999)
     if (error) throw error
-    linhas.push(...(data || []))
+    linhas.push(...(data || []).map((l) => ({ ...l, id: semPrefixo(l.id) })))
     if (!data || data.length < 1000) break
   }
   return linhas
@@ -113,7 +172,7 @@ export async function baixarTudoNuvem() {
 
 export async function gravarNuvem(linhas) {
   for (let i = 0; i < linhas.length; i += 200) {
-    const { error } = await cliente().from(TABELA).upsert(linhas.slice(i, i + 200))
+    const { error } = await cliente().from(TABELA).upsert(linhas.slice(i, i + 200).map((l) => ({ ...l, id: comPrefixo(l.id) })))
     if (error) throw error
   }
 }
@@ -123,7 +182,7 @@ export function assinarNuvem(aoMudar, filtroColecao) {
   const canal = cliente()
     .channel(`cm-${filtroColecao || 'tudo'}-${Math.random().toString(36).slice(2)}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: TABELA, ...(filtroColecao ? { filter: `colecao=eq.${filtroColecao}` } : {}) }, (m) => {
-      if (m.new && m.new.colecao) aoMudar(m.new)
+      if (m.new && m.new.colecao) aoMudar({ ...m.new, id: semPrefixo(m.new.id) })
     })
     .subscribe()
   return () => { try { cliente().removeChannel(canal) } catch (_) {} }
@@ -204,10 +263,10 @@ export async function enviarFotosCatalogoNuvem(codigos, aoProgresso = () => {}, 
 const hojeSP = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
 export async function registrarVisita(pagina) {
   if (!nuvemAtiva()) return
-  const chave = `clawmarket:visita:${pagina}:${hojeSP()}`
+  const chave = `clawmarket:visita:${mercadoAtual()}:${pagina}:${hojeSP()}`
   let novo = true
   try { novo = !localStorage.getItem(chave); localStorage.setItem(chave, '1') } catch (_) { /* sem memória: conta como novo */ }
-  try { await cliente().rpc('cm_registrar_visita', { p_pagina: pagina, p_novo: novo }) } catch (_) { /* sem internet: não conta */ }
+  try { await cliente().rpc('cm_registrar_visita', { p_pagina: pagina, p_novo: novo, p_mercado: mercadoAtual() }) } catch (_) { /* sem internet: não conta */ }
 }
 export async function lerVisitasNuvem(dias = 30) {
   if (!nuvemAtiva()) return null
@@ -223,7 +282,7 @@ export async function publicarEncarteNuvem(encarte) {
 }
 
 export async function lerEncarteNuvem() {
-  const { data, error } = await cliente().from(TABELA).select('dados').eq('colecao', 'encarte').eq('id', 'publicado').maybeSingle()
+  const { data, error } = await cliente().from(TABELA).select('dados').eq('colecao', 'encarte').eq('id', comPrefixo('publicado', mercadoAtual())).maybeSingle()
   if (error) return undefined
   return data?.dados ? { ...data.dados, origem: 'nuvem' } : null
 }
