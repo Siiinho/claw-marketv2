@@ -2,8 +2,9 @@ import * as Lucide from 'lucide-react'
 import { useEffect } from 'react'
 import { useStore } from '../store/StoreContext'
 import { partesPreco, statusValidade, labelDias, setorById, ilustracaoSetor } from '../lib/utils'
-import { useMarca, LogoOuNome } from '../lib/marca'
+import { useMarca, LogoOuNome, ehBengala } from '../lib/marca'
 import logoBengala from '../assets/logo.png'
+import { mercadoAtual, MERCADO_PADRAO } from '../lib/nuvem'
 
 // ---- ícone dinâmico (lucide) — traço 1.75 p/ um visual mais fino e elegante ----
 export function Icon({ name, strokeWidth = 1.75, ...props }) {
@@ -86,9 +87,11 @@ export function ImagemAba({ id, size = 24, className = '', style }) {
   const marca = useMarca()
   const nome = ICONE_ABA[id] || id
   // "Meu mercado" usa a própria logo do mercado como ícone
-  if (id === 'mercado') {
+  // (outro mercado ainda sem logo fica com o ícone da loja, nunca a logo do Bengala)
+  if (id === 'mercado' && (marca?.logo || (ehBengala(marca) && mercadoAtual() === MERCADO_PADRAO))) {
     return <img src={marca?.logo || logoBengala} alt="" aria-hidden="true" draggable={false} className={`shrink-0 select-none rounded-md bg-white object-contain p-px ${className}`} style={{ width: size, height: size, ...style }} />
   }
+  if (id === 'mercado') return <Lucide.Store aria-hidden="true" size={size} strokeWidth={1.75} className={`shrink-0 text-navy ${className}`} style={style} />
   return (
     <img
       src={`${import.meta.env.BASE_URL}abas/${nome}.webp`}

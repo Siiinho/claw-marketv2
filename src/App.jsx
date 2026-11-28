@@ -4,6 +4,7 @@ import { definirMercadoSite } from './lib/nuvem'
 import { useStore, podeVer } from './store/StoreContext'
 import { MarcaContexto, marcaPublica } from './lib/marca'
 import AberturaApp from './components/AberturaApp'
+import TelaAbertura from './components/TelaAbertura'
 import { Icon, Toasts } from './components/ui'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -102,15 +103,15 @@ export default function App() {
       <Suspense fallback={<Carregando />}>
         <Routes>
           {/* público: o link da tag NFC abre aqui, sem login */}
-          <Route path="/encarte" element={<JornalPapel />} />
+          <Route path="/encarte" element={<Suspense fallback={<TelaAbertura />}><JornalPapel /></Suspense>} />
           {/* a versão em lista, para comparar */}
           <Route path="/encarte-lista" element={<EncarteDigital />} />
           {/* protótipo: o mesmo encarte com cara de jornal impresso */}
-          <Route path="/folhear" element={<JornalPapel />} />
+          <Route path="/folhear" element={<Suspense fallback={<TelaAbertura />}><JornalPapel /></Suspense>} />
           {/* público: o QR verde do rodapé abre aqui (escolher a loja e entrar no grupo de ofertas) */}
           <Route path="/whatsapp" element={<WhatsappOfertas />} />
-          <Route path="/m/:mercado/encarte" element={<DoMercado><JornalPapel /></DoMercado>} />
-          <Route path="/m/:mercado/folhear" element={<DoMercado><JornalPapel /></DoMercado>} />
+          <Route path="/m/:mercado/encarte" element={<DoMercado><Suspense fallback={<TelaAbertura />}><JornalPapel /></Suspense></DoMercado>} />
+          <Route path="/m/:mercado/folhear" element={<DoMercado><Suspense fallback={<TelaAbertura />}><JornalPapel /></Suspense></DoMercado>} />
           <Route path="/m/:mercado/whatsapp" element={<DoMercado><WhatsappOfertas /></DoMercado>} />
           <Route path="/login" element={carregandoSessao ? <Carregando /> : usuario ? <Navigate to="/" replace /> : <Login />} />
           <Route element={<Protegida><Layout /></Protegida>}>
@@ -129,7 +130,7 @@ export default function App() {
             <Route path="visitas" element={<Protegida chave="visitas"><Visitas /></Protegida>} />
           </Route>
           {/* endereço exclusivo de cada mercado: #/bom-preco e #/bom-preco/whatsapp */}
-          <Route path="/:mercado" element={<DoMercado><JornalPapel /></DoMercado>} />
+          <Route path="/:mercado" element={<DoMercado><Suspense fallback={<TelaAbertura />}><JornalPapel /></Suspense></DoMercado>} />
           <Route path="/:mercado/whatsapp" element={<DoMercado><WhatsappOfertas /></DoMercado>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

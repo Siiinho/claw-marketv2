@@ -4,6 +4,7 @@ import { useStore, podeVer } from '../store/StoreContext'
 import { Icon, StatusBadge, ProdutoThumb } from '../components/ui'
 import { setorById, diasParaVencer, dataISOmaisDias, parseData, plural, labelDias } from '../lib/utils'
 import { remessaDe } from '../lib/remessa'
+import PrimeiroAcesso, { mostraPrimeiroAcesso } from '../components/PrimeiroAcesso'
 
 const DIA_CURTO = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
 
@@ -15,7 +16,7 @@ function saudacao() {
 }
 
 export default function Dashboard() {
-  const { produtos, usuario, lojas, lojaAtiva } = useStore()
+  const { produtos, usuario, lojas, lojaAtiva, config, nuvemStatus } = useStore()
   const remessa = remessaDe(produtos, usuario?.id)
   const navigate = useNavigate()
   const pode = (k) => podeVer(usuario.papel, k)
@@ -61,6 +62,10 @@ export default function Dashboard() {
           {resumo}
         </p>
       </header>
+
+      {/* mercado novo: os passos para deixar o jornal no ar */}
+      {/* espera a nuvem chegar: sem isso o guia piscava "0 de 5" e marcar um passo podia se perder */}
+      {nuvemStatus !== 'conectando' && mostraPrimeiroAcesso(usuario, config) && <PrimeiroAcesso />}
 
       {/* as duas ferramentas, cada uma com a sua função */}
       <div className="grid gap-3 md:grid-cols-2">

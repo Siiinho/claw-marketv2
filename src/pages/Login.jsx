@@ -63,7 +63,7 @@ export default function Login() {
       const r = await registrar(modo === 'mercado' ? { nome, senha, mercadoNome, mercadoEndereco: enderecoFinal } : { nome, senha, convite })
       if (r.ok) {
         toast(modo === 'mercado' ? `${mercadoNome.trim()} cadastrado! Agora coloque a logo e as lojas.` : `Conta criada. Bem-vindo, ${nome}!`)
-        navigate(modo === 'mercado' ? '/mercado' : '/')
+        navigate('/') // o dono de mercado novo cai no Início, com os primeiros passos
       } else setErro(r.erro)
     } catch (_) {
       setErro('Sem conexão com o servidor. Tente de novo.')
