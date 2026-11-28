@@ -3,6 +3,7 @@ import { Icon } from '../components/ui'
 import { SETORES, MERCADO_ENCARTE, formatBRL, noMercadoEncarte, dataISOmaisDias, plural, paraNumero } from '../lib/utils'
 import { carregarEncartePublicado, assinarEncarte } from '../lib/encartePublico'
 import { registrarVisita } from '../lib/nuvem'
+import TelaAbertura, { guardarMarcaAbertura } from '../components/TelaAbertura'
 import { temaCampanhaById, temasDoSetor } from '../lib/temasCampanha'
 import { PaginaEncarte, paginarEncarte, tamanhoPagina } from '../components/JornalMercado'
 import { ContextoEncarte } from '../components/ImagemProduto'
@@ -185,6 +186,7 @@ function Nota({ compras, loja, aberta, setAberta, ultimo, largura, barraRef, pul
 export default function FolhearEncarte() {
   const [encarte, setEncarte] = useState(null)
   const [atualizado, setAtualizado] = useState(false)
+  useEffect(() => { if (encarte) guardarMarcaAbertura(encarte.marca || null) }, [encarte])
   useEffect(() => { if (encarte) document.title = `Ofertas · ${encarte.marca?.nome || 'Bengala Supermercado'}` }, [encarte])
   useEffect(() => { registrarVisita('jornal') }, [])
   const compras = useListaCompras()
@@ -446,7 +448,7 @@ export default function FolhearEncarte() {
         <div className="pointer-events-none absolute inset-0 bg-black/55" />
 
         {!encarte ? (
-          <p className="absolute inset-0 flex items-center justify-center text-lg font-semibold">Abrindo o jornal de hoje…</p>
+          <TelaAbertura />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
             {/* abas presas no topo do jornal: layout (protótipo) e a página */}
