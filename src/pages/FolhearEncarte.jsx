@@ -186,6 +186,8 @@ function Nota({ compras, loja, aberta, setAberta, ultimo, largura, barraRef, pul
 export default function FolhearEncarte() {
   const [encarte, setEncarte] = useState(null)
   const [atualizado, setAtualizado] = useState(false)
+  // terminou de procurar e o mercado ainda não publicou nenhum jornal (sem isso a abertura ficava para sempre)
+  const [semJornal, setSemJornal] = useState(false)
   useEffect(() => { if (encarte) guardarMarcaAbertura(encarte.marca || null) }, [encarte])
   useEffect(() => { if (encarte) document.title = `Ofertas · ${encarte.marca?.nome || 'Bengala Supermercado'}` }, [encarte])
   useEffect(() => { registrarVisita('jornal') }, [])
@@ -194,8 +196,11 @@ export default function FolhearEncarte() {
     let ativo = true
     let versao = null
     const carregar = async () => {
-      const novo = await carregarEncartePublicado()
-      if (!ativo || !novo || novo.versao === versao) return
+      const novo = await carregarEncartePublicado().catch(() => null)
+      if (!ativo) return
+      if (!novo) { if (versao === null) setSemJornal(true); return }
+      setSemJornal(false)
+      if (novo.versao === versao) return
       if (versao !== null) { setAtualizado(true); setTimeout(() => ativo && setAtualizado(false), 5000) }
       versao = novo.versao
       setEncarte(novo)
@@ -447,7 +452,13 @@ export default function FolhearEncarte() {
         {/* a campanha ao fundo, escurecida, para o jornal saltar */}
         <div className="pointer-events-none absolute inset-0 bg-black/55" />
 
-        {!encarte ? (
+        {!encarte && semJornal ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 px-8 text-center" role="status">
+            <Icon name="Newspaper" className="h-12 w-12 text-amber-300" />
+            <p className="text-xl font-extrabold">O jornal de ofertas ainda não saiu</p>
+            <p className="max-w-xs text-base text-white/80">Assim que o mercado publicar, as ofertas aparecem aqui sozinhas. Pode deixar esta página aberta.</p>
+          </div>
+        ) : !encarte ? (
           <TelaAbertura />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
